@@ -2216,6 +2216,15 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Rebased onto main first: the work moved to a branch from `origin/main` (`53b1626`). Main already had D45 to D53, so the two site decisions are D54 and D55.
 - Proof, on the Mac mini, from this branch with main's `CHANGELOG.md` and `docs/bench`: `tsc --noEmit` clean, `pnpm build` passes, `node scripts/check.mjs` ends `problems 0`. In `out/`: `changelog/index.html` has `<h2 id="0-1-3">0.1.3</h2>` first and "latest version is 0.1.3"; `index.html` has `softwareVersion":"0.1.3`, "iPhone 13 Pro Max", "Auto-Lock to Never" and the three facts; `docs/install/index.html` has "phonedriver 0.1.3" and no 0.1.2. Captured the new facts and the limits at 1440x900 dark and light and at 390x844: no horizontal overflow, no page errors; looked at each. `sections.cjs` again at 1440x900 and 390x844: the only console message is the 404 page's own status.
 - Not done: no deploy, so the live changelog page still shows 0.1.2 until the next one. `TODAY` in `site/lib/site.ts` is unchanged, because it also dates the benchmark data.
+
+## 2026-11-13: the new site is live, checked in WebKit and Firefox
+
+- Asked: deploy, look at it in Safari and on a real phone, and put the new card on the repository's social preview.
+- Deployed the build that was checked for `cd4a310` (built on the Mac mini, `problems 0`): `vercel deploy --prod` of `out`. Live: `/`, `/changelog/`, `/docs/install/`, `/docs/iphone/` answer 200 and `/nope/` 404; the changelog says "latest version is 0.1.3"; the home page has the figure's canvas, "iPhone 13 Pro Max" and "30-second hand-over"; `www` redirects with 308.
+- Social preview: uploaded `.github/assets/social-preview.png` in the repository's settings through the browser. After a reload the settings page shows the new image, and the file GitHub serves is the same 69,883 bytes; looked at it.
+- Browsers, on the Mac mini against the live site, Playwright 1.65 (`xb.cjs`): WebKit (Safari 27.2's engine) at 1440x900 and as an iPhone 15, Firefox 159 at 1440x900. WebGL is on in all three, no page errors, no horizontal overflow, and every figure's canvas is sized once scrolled to. The only console lines are the 404 page's own status and WebKit's notes about three preloaded style sheets. Looked at the hero, the read, the approval palm and the last stop in each.
+- Not done: Safari itself and a real phone. The mini's screen was locked, so the Safari window I opened there could not be seen. `phonedriver open https://phonedriver.dev/` on the iPhone and on the HONOR X8 both answered `The device is locked`, and phonedriver does not unlock a phone.
+
 ## 2026-11-13: keep-awake (D56), the banner race, and the guards on a physical iPhone
 
 - Testbed (iOS) gained `Notify in 8 s` and `Place order · $12.00`; installed on the iPhone 13 Pro Max with `testbed.py device-install`.
