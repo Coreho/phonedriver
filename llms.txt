@@ -2,7 +2,7 @@
 
 > phonedriver is an open-source MCP server and CLI that lets AI agents like Claude Code see and control Android and iOS phones.
 
-phonedriver returns the screen as numbered text and, after each tap, type or swipe, only the lines that changed. It is one Rust binary under AGPL-3.0-only. It sends no telemetry. Speed figures are measured on an Android emulator; no physical Android phone has been measured.
+phonedriver returns the screen as numbered text and, after each tap, type or swipe, only the lines that changed. It is one Rust binary under AGPL-3.0-only. It sends no telemetry. Speed figures are measured on an Android 17 emulator, and two operations were also measured on a HONOR X8 phone. The website has the same pages as Markdown: https://phonedriver.dev/llms.txt
 
 ## Start here
 
