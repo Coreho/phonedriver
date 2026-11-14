@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Fragment } from "react";
 import { Crumbs, Html, JsonLd, OnPage } from "@/components/Bits";
-import { COMPARE, page } from "@/lib/content";
+import { COMPARE, faqLd, page } from "@/lib/content";
 import { meta } from "@/lib/meta";
 import { AUTHOR, PUBLISHED, PUBLISHER, REPO, ttl, url } from "@/lib/site";
 
@@ -32,13 +32,14 @@ export default async function Compare({ params }: Props) {
             description: p.meta.description,
             url: url(p.path),
             inLanguage: "en",
-            datePublished: PUBLISHED,
+            datePublished: p.meta.date ?? PUBLISHED,
             dateModified: p.meta.updated ?? PUBLISHED,
             author: AUTHOR,
             publisher: PUBLISHER,
             about: [{ "@id": url("/#software") }],
             image: url(`/og/compare-${slug}.png`),
           },
+          ...(p.faq.length ? [faqLd(p.faq)] : []),
         ]}
       />
       <div className="wrap">
@@ -57,7 +58,7 @@ export default async function Compare({ params }: Props) {
                   <Link href={`/compare/${s}/`}>{l}</Link>
                 </Fragment>
               ))}
-              . Something wrong or out of date? <a href={`${REPO}/issues`}>Open an issue</a>.
+              . To try phonedriver, start with <Link href="/docs/install/">the install guide</Link>. Something wrong or out of date? <a href={`${REPO}/issues`}>Open an issue</a>.
             </p>
             </div>
             <OnPage toc={p.toc} />

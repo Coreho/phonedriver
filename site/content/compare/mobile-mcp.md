@@ -1,7 +1,7 @@
 ---
 title: phonedriver vs mobile-mcp
 seo: phonedriver vs mobile-mcp: an alternative with 6.9x fewer tokens
-updated: 2026-11-11
+updated: 2026-11-14
 meta: On nine real phone jobs mobile-mcp used 6.9x the tokens of phonedriver and passed 17 of 18 runs against 27 of 27. Platforms, telemetry and install compared.
 description: Two MCP servers that let an AI agent control a phone. On nine real phone jobs on one emulator, mobile-mcp used 6.9 times the tokens of phonedriver and passed 17 of 18 runs against 27 of 27. What each reads, installs, waits for and sends, and what I have not measured.
 ---
@@ -61,3 +61,17 @@ Setup matters for it. In my earlier token run, mobile-mcp took screenshots and l
 ## Use which
 
 Choose phonedriver if you want fewer tokens per job, the settled diff, the approval prompt, no telemetry and the speed on Android shown on the [benchmarks page](/benchmarks/). Choose mobile-mcp if you need cloud devices, location override, screen recording or device logs. They can sit side by side on different devices. Do not run both against the same Android device at once: each holds the one UiAutomation connection.
+
+## Questions
+
+### How many tokens does mobile-mcp use compared with phonedriver?
+
+On nine phone jobs on one emulator on 10 November 2026, the per-job medians summed to 4,567,200 tokens for mobile-mcp and 657,542 for phonedriver, which is 6.9 times as many. Per job the ratio ran from 2.8 to 11.7. Both tools are text-first: mobile-mcp also reads the accessibility tree before it takes a screenshot. It is a test set I wrote, with two or three runs per job.
+
+### Is phonedriver a drop-in replacement for mobile-mcp?
+
+No. Both are MCP servers for Android and iOS, and the tool names and the text they return differ. An agent needs no changes beyond the server entry, because it reads the tool descriptions. mobile-mcp has cloud devices, location override, screen recording and device logs, which phonedriver does not.
+
+### Can I run mobile-mcp and phonedriver together?
+
+On different devices, yes. On the same Android device, no: each holds the one UiAutomation connection Android allows, and the second tool fails with `another UiAutomation client`.

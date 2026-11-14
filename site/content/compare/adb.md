@@ -1,7 +1,7 @@
 ---
 title: phonedriver vs adb for AI agents on a phone
 seo: phonedriver vs adb: 170x faster screen reads for AI agents
-updated: 2026-11-11
+updated: 2026-11-14
 meta: phonedriver against adb on an Android emulator: 170x faster UI tree reads, 32x faster screenshots, 23x faster typing, and a tap 2.4 to 4.4x faster.
 description: phonedriver against plain adb on an Android emulator. 170x faster UI tree reads, 32x faster screenshots, 23x faster typing, and a bare tap that is 2.4 to 4.4 times faster. A HONOR X8 phone gave 32x and 61x on two operations. What adb still does better.
 ---
@@ -49,3 +49,17 @@ An agent given only adb finished three Android tasks in a token run as follows: 
 ## Use which
 
 Use adb when you know the command. Use phonedriver when an agent has to look at a screen, act, and decide from what changed. phonedriver's [shell](/docs/shell/) runs adb-style commands in the on-device agent when an agent should run a setting or an intent without leaving the session.
+
+## Questions
+
+### What is a faster alternative to uiautomator dump?
+
+A process that stays on the device with the accessibility connection open. `uiautomator dump` starts a new process and waits for the screen to go idle on every call. On one Android 17 emulator it took 2,163.7 ms to read a 1,000-row list, where phonedriver's resident agent took 12.7 ms (p50 of 50 runs, 11 November 2026). The Settings screen took 51.0 ms. Appium's UiAutomator2 server is also resident, and I did not measure it.
+
+### Why does uiautomator dump fail with "could not get idle state"?
+
+It waits for the screen to go idle and gives up on a screen that keeps changing. I saw that on the Contacts list on an emulator, and on the main Settings page of a HONOR X8 after 11.5 s. phonedriver read that Settings page in 110 ms.
+
+### Does phonedriver replace adb?
+
+No. phonedriver uses the adb server as its transport, so you still need adb. adb stays the better tool for installs, logs, port forwards and fixed scripts.

@@ -36,6 +36,7 @@ for (const f of walk(OUT).filter((f) => f.endsWith(".html"))) {
 
 let bad = 0;
 const types = new Set();
+const asked = new Map();
 const fail = (...m) => {
   console.log(...m);
   bad++;
@@ -64,6 +65,10 @@ for (const [f, p] of pages) {
       types.add(node["@type"]);
       if (!TYPES.has(node["@type"])) fail("LD UNKNOWN TYPE", rel, node["@type"]);
       for (const k of REQ[node["@type"]] ?? []) if (!(k in node)) fail("LD MISSING", rel, node["@type"], k);
+      for (const q of node["@type"] === "FAQPage" ? node.mainEntity : []) {
+        if (asked.has(q.name)) fail("FAQ QUESTION ON TWO PAGES", q.name, asked.get(q.name), rel);
+        asked.set(q.name, rel);
+      }
     }
   }
   if (!["404.html", "404/index.html", "_not-found/index.html"].includes(rel)) {
@@ -78,7 +83,7 @@ for (const [f, p] of pages) {
   }
   for (const t of p.tags.filter((t) => t.name === "img")) if (!t.a.alt || !t.a.width || !t.a.height) fail("IMG", rel, JSON.stringify(t.a));
 }
-for (const f of ["sitemap.xml", "robots.txt", "llms.txt", "llms-full.txt", "blog/feed.xml", "404.html", "favicon.svg", "benchmarks/data/speed-samples.csv", "og/docs.png"])
+for (const f of ["sitemap.xml", "robots.txt", "llms.txt", "llms-full.txt", "blog/feed.xml", "404.html", "favicon.svg", "benchmarks/data/speed-samples.csv", "og/docs.png", "faq/index.md"])
   if (!existsSync(join(OUT, f))) fail("MISSING", f);
 console.log("pages", [...pages.keys()].filter((f) => !f.includes("_not-found")).length, "ld types", [...types].filter(Boolean).sort(), "problems", bad);
 process.exit(bad ? 1 : 0);

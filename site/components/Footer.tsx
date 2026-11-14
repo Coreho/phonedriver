@@ -25,6 +25,7 @@ export function Footer() {
             <Link href="/docs/">Docs</Link>
             <Link href="/benchmarks/">Benchmarks</Link>
             <Link href="/compare/">Compare</Link>
+            <Link href="/faq/">FAQ</Link>
             <Link href="/blog/">Blog</Link>
           </nav>
           <nav aria-label="Project">

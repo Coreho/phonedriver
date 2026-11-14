@@ -3,9 +3,10 @@ title: How to control a real iPhone or iPad with phonedriver
 nav: Real iPhone
 description: Set up an iPhone or iPad and let an agent drive it with phonedriver, with or without the cable. Tested on an iPhone 13 Pro Max, a 14 Plus and an iPad Pro.
 updated: 2026-11-14
+seo: How to let an AI agent control a real iPhone or iPad over MCP
 ---
 
-A physical iOS device needs the runner signed with your Apple developer team. A free Apple ID works, and the signing expires every 7 days. phonedriver needs a Mac with Xcode.
+To let an AI agent control a real iPhone or iPad, plug it into a Mac with Xcode and run `phonedriver ios setup`. The agent then reads the screen as text and taps, types and swipes through phonedriver's own XCTest runner. The runner is signed with your Apple developer team. A free Apple ID works, and the signing expires every 7 days.
 
 I tested an iPhone 14 Plus (iOS 26.1) and an iPad Pro (iOS 27.0) through the CLI and MCP. Screenshots, snapshots and the diff after a tap meet the targets I set. A bare tap does not: it takes 454 to 534 ms at p50 against a target of 80 ms. The 12-scenario suite was not run on devices.
 
@@ -61,3 +62,21 @@ Unlocking, trusting the computer and Developer Mode prompts are yours. The error
 ## Safety
 
 The [approval guard](/docs/approval-guard/) is on by default. Read its limits before you give an agent a phone with accounts on it.
+
+## Questions
+
+### Does phonedriver use WebDriverAgent?
+
+No. It builds its own XCTest runner on your Mac. WebDriverAgent is an XCTest runner too, so the mechanism is the same. Mine leaves out the WebDriver HTTP server, the XPath engine and the session model. On an iPhone 17 simulator it read a screen 2.0 times faster than fully tuned WebDriverAgent at p50. If you already run Appium, WebDriverAgent is the better choice. See [phonedriver vs Appium](/compare/appium/).
+
+### Do I need a paid Apple developer account?
+
+No. A free Apple ID works, and its signing expires every 7 days.
+
+### Can I control an iPhone from Windows or Linux?
+
+No. The runner is built and signed with Xcode, so an iPhone or the iOS Simulator needs a Mac. Android devices work from macOS, Linux and Windows.
+
+### Can the agent unlock my iPhone?
+
+No. phonedriver never enters a passcode and cannot pass Face ID. On a locked iPhone each command stops with `The device is locked`, and you unlock it by hand.

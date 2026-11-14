@@ -3,9 +3,10 @@ title: How to use phonedriver with Claude Code
 seo: How to let Claude Code control an Android phone or iPhone
 nav: Claude Code
 description: Add phonedriver to Claude Code as an MCP server with one command, point it at a device and ask it to operate a phone in plain language.
+updated: 2026-11-14
 ---
 
-Claude Code is the client phonedriver is tested against: the benchmarks on this site run `claude -p` with Claude Sonnet 5.5.
+To let Claude Code control an Android phone or an iPhone, add phonedriver as an MCP server with `claude mcp add phonedriver -- npx -y phonedriver mcp`, connect a device and ask in plain language. Claude Code is the client phonedriver is tested against: the benchmarks on this site run `claude -p` with Claude Sonnet 5.5.
 
 ## Add the server
 
@@ -65,3 +66,25 @@ A tap on a button that spends money or cannot be undone (`Place order`, `Pay`, `
 ## Secrets
 
 Text typed with `secret: true` over MCP never reaches logs, traces or replies. Plain `type` into a password field or a one-time code field is refused, and the error tells the agent to get the text from you and pass it with `secret`.
+
+## Questions
+
+### Can Claude Code control an iPhone?
+
+Yes, from a Mac with Xcode. The iOS Simulator works once it is booted. For a real iPhone or iPad, plug it in and run `phonedriver ios setup` once, and `phonedriver ios wifi on` lets you unplug the cable. See [the iPhone guide](/docs/iphone/).
+
+### Does Claude Code need screenshots to use the phone?
+
+No. It reads the screen as a short numbered text list and taps by number, and each action returns only the lines that changed. It takes a screenshot only when it needs to see a picture, such as a map or a photo.
+
+### How many tokens does phonedriver add to Claude Code?
+
+The first turn of a one-word `claude -p` costs 5,606 tokens with phonedriver's 14 tools attached. On nine real phone jobs with Claude Sonnet 5.5 on one Android emulator, the per-job medians summed to 657,542 tokens (10 November 2026). See [the benchmarks](/benchmarks/#jobs).
+
+### Does it work in a headless claude -p run?
+
+Yes. The benchmarks on this site ran that way. Nobody can answer an approval prompt in a headless run, so a tap on Pay or Place order is declined and nothing is tapped.
+
+## Next
+
+Connect a device: an [Android emulator](/docs/android-emulator/), an [Android phone](/docs/android-phone/), the [iOS Simulator](/docs/ios-simulator/) or an [iPhone](/docs/iphone/). Then try [testing your own app](/docs/test-a-mobile-app/), or read how it compares with [mobile-mcp](/compare/mobile-mcp/) and [adb](/compare/adb/).

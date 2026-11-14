@@ -3,6 +3,7 @@ title: How to keep an AI agent from spending your money on a phone
 nav: Approval guard
 meta: phonedriver holds taps on Pay, Place order and Delete account and asks you first. How it works, how to answer, full autonomy, and what it misses.
 description: phonedriver stops taps on Pay, Place order and Delete account and asks you first. How the guard works, how to answer, how to switch it off for full autonomy, and what it does not catch.
+updated: 2026-11-14
 ---
 
 An agent that can drive any app can place an order. phonedriver's approval guard classifies the element the agent is about to tap and, for a button that spends money or cannot be undone, asks the human instead of tapping. It is on by default. The reasoning is in [Letting Claude order dinner without letting it spend your money](/blog/letting-claude-order-dinner-without-letting-it-spend-your-money/).
@@ -62,3 +63,21 @@ Switch the guard off only when you have decided the agent may spend money or del
 - An agent can pass `autonomous: true` over MCP, or add `--autonomous` on the CLI, when you never granted it. The guard stops a model that follows the rules or is steered by screen text. It does not stop a model set on bypassing it.
 - Point taps in a row reuse the screen the last check read, for up to one second. A change smaller than a significant repaint that adds a guarded button inside that second is missed.
 - The form has no screenshot: MCP elicitation has no image field.
+
+## Questions
+
+### Can an AI agent make a purchase with phonedriver?
+
+Not without your answer, unless you switched the guard off or told the agent to run autonomously. A tap on a button such as `Pay`, `Buy now` or `Place order` is held, and you see the app, the button and the amounts on screen before anything is tapped.
+
+### What happens if my MCP client cannot show the prompt?
+
+The tool replies `Needs the human's approval; nothing was tapped` with the facts from the screen. The agent then has to ask you in chat. In headless `claude -p` nobody can answer, so the tap is declined.
+
+### Does the guard work on an iPhone?
+
+Yes. It reads the label of the element about to be tapped, on Android and on iOS. In release 0.1.4 it was tested on a physical iPhone: a held, declined or unanswerable tap on Place order reached the app zero times.
+
+### Is the guard a security boundary?
+
+No. It stops a model that follows its rules, and one that is steered by text on the screen. It does not stop a model set on bypassing it, and it does not see a button that is only an icon or a tap sent through the shell. For unattended runs, use an emulator or a spare phone with no payment method on it.

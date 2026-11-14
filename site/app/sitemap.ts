@@ -13,6 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     at("/benchmarks/"),
     at("/compare/"),
     ...COMPARE.map(([s]) => at(`/compare/${s}/`, page("compare", s).meta.updated ?? PUBLISHED)),
+    at("/faq/"),
     at("/changelog/", LATEST),
     at("/blog/"),
     ...POSTS.map((s) => at(`/blog/${s}/`, page("blog", s).meta.updated ?? page("blog", s).meta.date)),

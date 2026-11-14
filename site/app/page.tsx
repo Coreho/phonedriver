@@ -5,13 +5,13 @@ import { Hero } from "@/components/Hero";
 import { Route } from "@/components/Route";
 import { HARNESSES, PHONE, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, tokens, type Cell, type Harness } from "@/lib/bench";
 import { mark, PAINT } from "@/lib/chauffeur";
-import { DEMO_CAPTION, FAQ, FAQ_MORE, HOME_DESC, JOBS, MCP_CONFIG, NPX } from "@/lib/data";
+import { DEMO_CAPTION, HOME_DESC, HOME_FAQ, JOBS, MCP_CONFIG, NPX } from "@/lib/data";
 import { softwareLd } from "@/lib/ld";
 import { inline, plain } from "@/lib/md";
 import { meta } from "@/lib/meta";
 import run from "@/lib/run.json";
 import screen from "@/lib/screen.json";
-import { BOOT, PUBLISHED, REPO, raw, url } from "@/lib/site";
+import { BOOT, PUBLISHED, PUBLISHER, REPO, raw, url } from "@/lib/site";
 import "./charts.css";
 import "./home.css";
 
@@ -72,8 +72,6 @@ const DEVICES: [string, React.ReactNode][] = [
   ],
 ];
 
-const ON_HOME = ["What is the best MCP server for controlling a phone?", "Is there an alternative to mobile-mcp?", "Is phonedriver an Appium alternative for AI agents?", "Can Codex or Cursor control a phone?", "Does it install anything on my phone?", "Does phonedriver send telemetry?"];
-const HOME_FAQ = [...FAQ, ...FAQ_MORE.filter(([q]) => ON_HOME.includes(q))];
 
 type Row = { k: string; text?: string; lines?: string[] };
 const ROWS = run.rows as Row[];
@@ -85,7 +83,7 @@ const DECLINED = ROWS.find((r) => r.k === "declined")!.lines![0];
 const REFS = screen.lines.filter((l) => l.ref);
 const REST = REFS.findIndex((l) => l.text.includes("Display & touch")) + 1;
 
-export const metadata = meta({ path: "/", title: "phonedriver: the MCP server that lets AI agents use a phone", description: HOME_DESC, og: "/assets/og-home.png" });
+export const metadata = meta({ path: "/", title: "phonedriver: MCP server for AI agents on Android and iOS phones", description: HOME_DESC, og: "/assets/og-home.png" });
 
 function Tokens({ c }: { c: Cell | null }) {
   if (!c) return <span className="jb-na">not run</span>;
@@ -109,7 +107,7 @@ export default function Home() {
   const read = race[0].o;
   const ld = [
     ...softwareLd(),
-    { "@context": "https://schema.org", "@type": "WebSite", name: "phonedriver", url: url("/"), inLanguage: "en" },
+    { "@context": "https://schema.org", "@type": "WebSite", name: "phonedriver", alternateName: "phonedriver.dev", description: HOME_DESC, url: url("/"), inLanguage: "en", publisher: PUBLISHER },
     {
       "@context": "https://schema.org",
       "@type": "VideoObject",
@@ -680,7 +678,7 @@ export default function Home() {
               <li>The model can do anything on the phone you could do with your finger. For unattended runs, use an emulator or a spare phone.</li>
               <li>
                 phonedriver never enters a passcode and can&apos;t pass Face ID or a fingerprint check. On a locked phone a command stops and says the device is locked, so
-                a phone that locks mid-task stops the task. Before a long task on an iPhone, set Auto-Lock to Never. Screens that block screenshots, as some banking
+                a phone that locks mid-task stops the task. Since 0.1.4, phonedriver keeps an iPhone awake while an agent is using it. Screens that block screenshots, as some banking
                 apps do, come out black in a screenshot, though their text can still be read.
               </li>
             </ul>
@@ -693,6 +691,9 @@ export default function Home() {
                   <Html html={`<p>${inline(a)}</p>`} />
                 </details>
               ))}
+              <p className="small">
+                More answers, on speed, tokens, iPhones and other tools, are in <Link href="/faq/">the FAQ</Link>.
+              </p>
             </div>
           </div>
         </div>

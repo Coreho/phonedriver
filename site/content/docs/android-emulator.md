@@ -3,6 +3,8 @@ title: How to control an Android emulator with phonedriver
 nav: Android emulator
 meta: Start an Android emulator, check that phonedriver sees it, and drive it. Includes the headless flags used in my benchmarks and remote emulators.
 description: Start an Android emulator, check phonedriver sees it, and drive it. Includes the headless flags used in the benchmarks and how to use an emulator on another machine.
+seo: How to let an AI agent control an Android emulator over MCP
+updated: 2026-11-14
 ---
 
 Android emulators on API 26 and API 37 are the best-tested target: the 21-scenario device suite passes on both. phonedriver needs only adb and nothing installed in the emulator.
@@ -66,3 +68,17 @@ phonedriver snapshot
 On the other machine, run any `phonedriver` command once, or `phonedriver daemon`, so that the socket exists. Both machines need the same version. `phonedriver screenshot` then prints a path on the machine that has the device; `phonedriver screenshot -o shot.png` writes the file on yours. The MCP `screenshot` tool returns the image itself.
 
 Alternatively, forward only adb: `ssh -N -L 5038:127.0.0.1:5037 remote-host` and `ADB_SERVER_SOCKET=tcp:127.0.0.1:5038`. Each device round trip then pays the tunnel's latency.
+
+## Questions
+
+### Can Claude Code control an Android emulator?
+
+Yes. Start the emulator, run `claude mcp add phonedriver -- npx -y phonedriver mcp`, and ask Claude Code to do something on it. Nothing is installed in the emulator. See [the Claude Code guide](/docs/claude-code/), or [Codex](/docs/codex/) and [other clients](/docs/cursor-and-mcp-clients/).
+
+### Does it work with a headless emulator?
+
+Yes. The speed benchmarks ran on an emulator started with `-no-window`, and phonedriver reads the screen from the device, not from a window on your desktop.
+
+### Which API levels work?
+
+The 21-scenario suite passes on API 26 and API 37. Release 0.1.4 fixed screen reads on Android 12 and was tested on an API 31 emulator. The hidden screen needs API 33 or later.

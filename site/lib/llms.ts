@@ -1,8 +1,12 @@
 import { benchmarksMd } from "./bench";
 import { COMPARE, DOCS, POSTS, fullMd, page } from "./content";
-import { DEFINITION, FAQ, FAQ_MORE, LLMS_NOTE } from "./data";
+import { DEFINITION, FAQ_GROUPS, LLMS_NOTE, faqAnswer } from "./data";
 import { plain } from "./md";
 import { REPO, SITE_URL } from "./site";
+
+const faqBody = () => FAQ_GROUPS.map(([name, qs]) => `## ${name}\n\n${qs.map((q) => `### ${q}\n\n${plain(faqAnswer(q))}`).join("\n\n")}`).join("\n\n");
+
+export const faqMd = () => `# Questions about phonedriver\n\n> Short answers about setup, real phones, speed, tokens, other tools, approval before paying and telemetry.\n\nWeb page: ${SITE_URL}/faq/\n\n${faqBody()}\n`;
 
 export function llmsTxt() {
   const L = [
@@ -54,6 +58,7 @@ export function llmsTxt() {
     const p = page("compare", s);
     L.push(`- [${label}](${md(p.path)}): ${p.meta.description}`);
   }
+  L.push("", "## Questions", "", `- [FAQ](${md("/faq/")}): short answers on setup, real phones, speed against uiautomator dump, tokens, WebDriverAgent, other tools, approval before paying and telemetry`);
   L.push("", "## Blog", "");
   for (const s of POSTS) {
     const p = page("blog", s);
@@ -64,9 +69,9 @@ export function llmsTxt() {
 }
 
 export function llmsFullTxt() {
-  const home = `# phonedriver\n\n${DEFINITION}\n\n${[...FAQ, ...FAQ_MORE].map(([q, a]) => `## ${q}\n\n${plain(a)}`).join("\n\n")}\n`;
   const parts: [string, string][] = [
-    ["/", home],
+    ["/", `# phonedriver\n\n${DEFINITION}\n`],
+    ["/faq/", `# Questions about phonedriver\n\n${faqBody()}\n`],
     ...DOCS.map((s) => page("docs", s)).map((p) => [p.path, fullMd(p)] as [string, string]),
     ["/benchmarks/", benchmarksMd()],
     ...COMPARE.map(([s]) => page("compare", s)).map((p) => [p.path, fullMd(p)] as [string, string]),

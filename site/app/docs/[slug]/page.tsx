@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Crumbs, Html, JsonLd, OnPage } from "@/components/Bits";
-import { DOCS, page } from "@/lib/content";
+import { DOCS, faqLd, page } from "@/lib/content";
 import { meta } from "@/lib/meta";
 import { AUTHOR, PUBLISHED, PUBLISHER, ttl, url } from "@/lib/site";
 
@@ -32,12 +32,15 @@ export default async function Doc({ params }: Props) {
             description: p.meta.description,
             url: url(p.path),
             inLanguage: "en",
+            datePublished: p.meta.date ?? PUBLISHED,
             dateModified: p.meta.updated ?? PUBLISHED,
+            image: url("/og/docs.png"),
             author: AUTHOR,
             publisher: PUBLISHER,
             isPartOf: { "@type": "WebSite", name: "phonedriver", url: url("/") },
             about: { "@id": url("/#software") },
           },
+          ...(p.faq.length ? [faqLd(p.faq)] : []),
         ]}
       />
       <div className="wrap">
