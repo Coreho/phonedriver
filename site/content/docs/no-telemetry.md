@@ -4,7 +4,7 @@ nav: No telemetry
 seo: Does phonedriver send telemetry? No, and a test proves it
 meta: phonedriver sends no telemetry. Every connection it makes, the sandbox test that fails if one is added, and how mobile-mcp and phone-harness differ.
 description: phonedriver sends no telemetry and no usage data. This page lists every connection it makes, the test that fails if anyone adds another, where logs and traces are kept, and how to check it yourself.
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 phonedriver sends no telemetry: no install id, no usage events, no crash reports. After the first download of the binary, it talks to your device and to nothing else, with one exception for iPhones that is listed below. An agent that drives your phone sees your messages, your photos and your bank's login screen, so this is a rule of the project and not a setting.

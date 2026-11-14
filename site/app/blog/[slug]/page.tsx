@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Crumbs, Html, JsonLd, OnPage } from "@/components/Bits";
 import { POSTS, page, words } from "@/lib/content";
 import { meta } from "@/lib/meta";
@@ -64,7 +65,7 @@ export default async function Post({ params }: Props) {
             <div className="body">
               <Html html={p.html} />
               <p className="small">
-                Questions or corrections: <a href={`${REPO}/issues`}>open an issue</a>. Every figure links to the page or file it came from.
+                To try phonedriver, start with <Link href="/docs/install/">the install guide</Link> or <Link href="/docs/claude-code/">the Claude Code guide</Link>. Questions or corrections: <a href={`${REPO}/issues`}>open an issue</a>. Every figure links to the page or file it came from.
               </p>
             </div>
             <OnPage toc={p.toc} />

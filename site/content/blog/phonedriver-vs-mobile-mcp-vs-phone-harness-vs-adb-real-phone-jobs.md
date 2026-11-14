@@ -8,6 +8,7 @@ date: 2026-11-07
 label: BENCHMARK
 short_card: phonedriver vs mobile-mcp vs phone-harness vs adb on real phone jobs
 card_sub: Nine jobs, independent checks, every result sourced. 27 of 27 for phonedriver, 17 of 18 for mobile-mcp, 14 of 18 for phone-harness.
+updated: 2026-11-11
 ---
 
 > **Status: finished.** The numbers were rerun on 10 November 2026 on one emulator, with all four harnesses on the same device. phonedriver ran each job three times and the others twice. Every number below that is a measurement is the median of those runs, and the raw runs are in the repository. Nothing here is a projection. The first results, from 7 November, are kept below where the comparison between the two dates is the point.

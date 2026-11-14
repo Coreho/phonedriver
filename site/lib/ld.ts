@@ -1,4 +1,4 @@
-import { DEFINITION } from "./data";
+import { DEFINITION, DISAMBIGUATION } from "./data";
 import { AUTHOR, NPM, PUBLISHER, RELEASED, REPO, TODAY, VERSION, url } from "./site";
 
 export type Ld = Record<string, unknown>;
@@ -31,6 +31,7 @@ export const softwareLd = (): Ld[] => [
     name: "phonedriver",
     alternateName: "phonedriver MCP server",
     description: DEFINITION,
+    disambiguatingDescription: DISAMBIGUATION,
     url: url("/"),
     applicationCategory: "DeveloperApplication",
     operatingSystem: "macOS, Linux, Windows (controls Android and iOS devices)",

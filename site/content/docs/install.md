@@ -3,6 +3,7 @@ title: How to install phonedriver
 nav: Install
 description: Set up phonedriver by pasting one prompt into your agent, or install the binary by hand on macOS, Linux or Windows and check it with phonedriver doctor.
 updated: 2026-11-14
+seo: Install phonedriver: npx, Homebrew, plugin or one prompt
 ---
 
 phonedriver is one binary: the CLI, the daemon and the MCP server. The Android agent is packed inside it, so there is nothing else to download.

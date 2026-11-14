@@ -7,6 +7,7 @@ date: 2026-11-07
 label: DESIGN
 short_card: Letting Claude order dinner without letting it spend your money
 card_sub: The approval guard: how it works, and where it stops working.
+updated: 2026-11-11
 ---
 
 Give an agent a phone and it can do whatever you can do on the screen. That includes tapping Place order. The baseline safety story is a paragraph in the instructions file that says to get the user's word before spending money. It works until the model skips the rule, or a line of text on the screen tells it to. A rule the model can skip is advice. This post is about the control I put in the tool, the thing the model cannot answer for itself, and about where that control stops.

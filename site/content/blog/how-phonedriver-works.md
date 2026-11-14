@@ -1,12 +1,13 @@
 ---
 title: "How phonedriver works: reading a phone's screen without uiautomator dump"
 short: How phonedriver reads a phone without uiautomator dump
-meta: How phonedriver lets an AI agent operate Android and iOS phones: the resident device agent, settle detection, the text format, the benchmarks, what it loses, and the data.
+meta: How phonedriver lets an AI agent operate Android and iOS phones: the resident agent, settle detection, the text format, the benchmarks and what it loses.
 description: How phonedriver reads and drives a phone, with the 12.7 ms against 2,163.7 ms comparison scoped, the prior work it builds on, the token result with every run, and what does not work.
 date: 2026-11-14
 label: ENGINEERING
 short_card: How phonedriver works, without uiautomator dump
 card_sub: The mechanism, the method, the prior art, the losses and the data.
+seo: How phonedriver works: reading a phone without uiautomator dump
 ---
 
 On one Android 17 emulator, phonedriver reads a 1,000-row list in 12.7 ms at p50 over 50 runs. `uiautomator dump`, a one-off command that starts a process, connects to the accessibility service and waits for one second of quiet, needs 2,163.7 ms for the same list.

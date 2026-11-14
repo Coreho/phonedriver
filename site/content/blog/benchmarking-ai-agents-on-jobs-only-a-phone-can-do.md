@@ -7,6 +7,7 @@ date: 2026-11-07
 label: METHOD
 short_card: Benchmarking AI agents on jobs only a phone can do
 card_sub: UI-only jobs, independent checks, and what I threw out.
+updated: 2026-11-11
 ---
 
 A phone benchmark has an obvious way to go wrong. If the tasks can be done without a phone, the tool that is best at not using the phone wins. "Set an alarm" can be done with one intent. "Turn on dark mode" is `cmd uimode night yes`. "What year was Grace Hopper born" is a web search. Run those through a phone harness and you are measuring how fast the model finds the shortcut.

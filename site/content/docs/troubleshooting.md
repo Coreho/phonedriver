@@ -3,6 +3,8 @@ title: How to troubleshoot phonedriver
 nav: Troubleshooting
 meta: Start with phonedriver doctor, then the daemon log and traces. Exit codes and the common errors: another UiAutomation client, WebViews, device setup.
 description: Start with phonedriver doctor, then read the daemon log and traces. Exit codes, what each means, and the errors seen most often with another UiAutomation client, WebViews and device setup.
+seo: phonedriver troubleshooting: doctor, exit codes, common errors
+updated: 2026-11-11
 ---
 
 ## Start with doctor
