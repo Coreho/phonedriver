@@ -24,6 +24,7 @@ export const COMPARE: [string, string][] = [
 ];
 
 export const POSTS = [
+  "how-phonedriver-works",
   "how-phonedriver-reads-a-screen-170x-faster-than-adb",
   "phonedriver-vs-mobile-mcp-vs-phone-harness-vs-adb-real-phone-jobs",
   "letting-claude-order-dinner-without-letting-it-spend-your-money",

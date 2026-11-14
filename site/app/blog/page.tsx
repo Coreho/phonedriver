@@ -18,6 +18,7 @@ export default function Blog() {
   const b = board();
   const read = op("tree_list");
   const figs: [string, string][] = [
+    [`${Math.round(read.phonedriver)} ms`, "to read a 1,000-row list"],
     [ratio(read.adb / read.phonedriver), "faster screen reads"],
     [ratio(b.total("mobile-mcp").tokens / b.total("phonedriver").tokens), "fewer tokens than mobile-mcp"],
     ["Pay?", "the tap it holds"],
