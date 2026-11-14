@@ -367,8 +367,8 @@ export default function Benchmarks() {
                 the same job. For &quot;tap, then what changed&quot;, the adb row is a tap, one <code>uiautomator dump</code> and a diff in the caller.
               </li>
               <li>
-                <code>adb input text</code> and phone-harness cannot type Unicode. phonedriver typed 100 mixed-script characters (ASCII, accents, CJK, Arabic, emoji) in
-                225.0 ms.
+                <code>adb shell input text</code> raises on non-ASCII text, and phone-harness cannot type Unicode. phonedriver typed 100 mixed-script characters (ASCII,
+                accents, CJK, Arabic, emoji) in 160.6 ms.
               </li>
               <li>
                 Fresh daemon to first screen read: phonedriver 1,620.5 ms, phone-harness 2,999.4 ms (new Python process), adb 2,488.0 ms (one dump; adb has no cold

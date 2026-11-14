@@ -60,6 +60,10 @@ A process that stays on the device with the accessibility connection open. `uiau
 
 It waits for the screen to go idle and gives up on a screen that keeps changing. I saw that on the Contacts list on an emulator, and on the main Settings page of a HONOR X8 after 11.5 s. phonedriver read that Settings page in 110 ms.
 
+### How do I type Unicode text or emoji over adb?
+
+`adb shell input text` raises on non-ASCII text, so accents, CJK, Arabic and emoji need another route. phonedriver types through its agent on the device and needs no keyboard app. It typed 100 mixed-script characters (ASCII, accents, CJK, Arabic, emoji) in 160.6 ms at p50 on one Android 17 emulator (50 runs, 11 November 2026).
+
 ### Does phonedriver replace adb?
 
 No. phonedriver uses the adb server as its transport, so you still need adb. adb stays the better tool for installs, logs, port forwards and fixed scripts.
