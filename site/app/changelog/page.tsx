@@ -5,7 +5,7 @@ import { PageTop } from "@/components/PageTop";
 import { crumbsLd } from "@/lib/ld";
 import { render } from "@/lib/md";
 import { meta } from "@/lib/meta";
-import { AUTHOR, PUBLISHER, RELEASED, REPO, ROOT, VERSION, url } from "@/lib/site";
+import { AUTHOR, LATEST, PUBLISHER, RELEASED, REPO, ROOT, VERSION, url } from "@/lib/site";
 
 export const metadata = meta({
   path: "/changelog/",
@@ -29,7 +29,7 @@ export default function Changelog() {
             url: url("/changelog/"),
             inLanguage: "en",
             datePublished: RELEASED,
-            dateModified: RELEASED,
+            dateModified: LATEST,
             author: AUTHOR,
             publisher: PUBLISHER,
             about: { "@id": url("/#software") },

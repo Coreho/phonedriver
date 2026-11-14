@@ -2,6 +2,7 @@
 title: How to control a real iPhone or iPad with phonedriver
 nav: Real iPhone
 description: Set up an iPhone or iPad and let an agent drive it with phonedriver, with or without the cable. Tested on an iPhone 13 Pro Max, a 14 Plus and an iPad Pro.
+updated: 2026-11-14
 ---
 
 A physical iOS device needs the runner signed with your Apple developer team. A free Apple ID works, and the signing expires every 7 days. phonedriver needs a Mac with Xcode.
@@ -41,7 +42,7 @@ A sleeping iPhone stops answering on Wi-Fi. Both phones left the list when the s
 
 phonedriver does not unlock an iPhone and never enters a passcode. On a locked iPhone each command stops with `The device is locked` and you unlock it by hand.
 
-phonedriver keeps an iPhone awake while it is in use: for 10 minutes after each command it resets the Auto-Lock timer every 10 seconds, and `phonedriver release` stops that. This is on `main` and comes with the release after 0.1.3. In 0.1.3, set Settings > Display & Brightness > Auto-Lock to Never before a long task, and set it back after.
+phonedriver keeps an iPhone awake while it is in use: for 10 minutes after each command it resets the Auto-Lock timer every 10 seconds, and `phonedriver release` stops that. This came with 0.1.4. In 0.1.3 and earlier, set Settings > Display & Brightness > Auto-Lock to Never before a long task, and set it back after.
 
 ## What differs from Android
 

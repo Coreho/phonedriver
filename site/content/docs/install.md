@@ -2,11 +2,12 @@
 title: How to install phonedriver
 nav: Install
 description: Set up phonedriver by pasting one prompt into your agent, or install the binary by hand on macOS, Linux or Windows and check it with phonedriver doctor.
+updated: 2026-11-14
 ---
 
 phonedriver is one binary: the CLI, the daemon and the MCP server. The Android agent is packed inside it, so there is nothing else to download.
 
-> The current release is phonedriver 0.1.3, on npm, Homebrew and GitHub Releases. You only need to build from source if you want to change it.
+> The current release is phonedriver 0.1.4, on npm, Homebrew and GitHub Releases. You only need to build from source if you want to change it.
 
 ## Easiest: ask your agent
 
@@ -82,7 +83,7 @@ That binary has no Android support, and `phonedriver doctor` skips the Android c
 
 ```console
 $ phonedriver version
-phonedriver 0.1.3
+phonedriver 0.1.4
 ```
 
 `phonedriver doctor` checks adb, each Android device, the agent, UiAutomation, the video stream, Xcode, the simulators and the permissions of the daemon socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`.
