@@ -81,12 +81,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ card: stri
             </div>
           </div>
         ) : (
-          <>
+          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
             <div style={{ display: "flex", flex: 1, alignItems: "center" }}>
               <div style={{ fontSize: size, fontWeight: 800, lineHeight: 1.02, letterSpacing: -size * 0.055, maxWidth: 1040 }}>{title}</div>
             </div>
             <div style={{ display: "flex", fontSize: 26, color: "#55524a", lineHeight: 1.35, letterSpacing: -0.5, maxWidth: 1000 }}>{sub}</div>
-          </>
+          </div>
         )}
         <div style={{ display: "flex", alignItems: "center", marginTop: 34, fontSize: 18, color: "#6b675e", letterSpacing: 1.5 }}>
           <span>{SITE_URL.split("//")[1].toUpperCase()}</span>
