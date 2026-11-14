@@ -1,11 +1,12 @@
 ---
 title: How to use phonedriver with Cursor and other MCP clients
-seo: How to let Cursor, Codex or any MCP client control a phone
+seo: How to let Cursor, Gemini CLI, Zed or Cline control a phone
 nav: Cursor and other clients
-description: Add phonedriver to Cursor or any MCP client that starts a stdio server, with a JSON entry, an optional device setting and the list of tools it exposes.
+description: Add phonedriver to Cursor, Gemini CLI, Zed, Cline or any MCP client that starts a stdio server, with the entry for each, a device setting and the tools.
+updated: 2026-11-14
 ---
 
-Any client that starts a stdio MCP server can use phonedriver. I test with Claude Code. I have not run a Cursor session myself, so the Cursor steps below use the standard stdio entry and Cursor's documented configuration file, not something I watched work.
+Any client that starts a stdio MCP server can use phonedriver: the command is `npx` with the arguments `-y phonedriver mcp`. I test with Claude Code. I have not run a session in Cursor, Gemini CLI, Zed or Cline, so the steps below come from each client's own documentation, read on 14 November 2026, and not from something I watched work. [Codex](/docs/codex/) and [VS Code](/docs/vs-code/) have their own pages.
 
 ## The entry
 
@@ -25,7 +26,31 @@ The first start downloads the binary once. On Windows, some clients cannot start
 
 ## Cursor
 
-Put the entry in `~/.cursor/mcp.json` for every project, or in `.cursor/mcp.json` inside one project. Open Cursor's MCP settings and check that `phonedriver` shows its tools.
+Put the entry in `~/.cursor/mcp.json` for every project, or in `.cursor/mcp.json` inside one project. Open Cursor's MCP settings and check that `phonedriver` shows its tools. [Cursor's MCP documentation](https://cursor.com/docs/context/mcp) lists elicitation as supported, which is what the approval prompt uses.
+
+## Gemini CLI
+
+Add the entry at the top of this page to `~/.gemini/settings.json`, or to `.gemini/settings.json` inside one project. It uses the same `mcpServers` key. `gemini mcp list`, or `/mcp` inside a session, shows the server. Source: [Gemini CLI's MCP documentation](https://geminicli.com/docs/tools/mcp-server/).
+
+## Zed
+
+Zed calls MCP servers context servers. Add this to Zed's settings file (`zed: open settings file`). Source: [Zed's MCP documentation](https://zed.dev/docs/ai/mcp), which says Zed supports MCP tools and prompts and not yet elicitation, so expect the approval guard to reply that a tap needs your approval instead of showing a prompt.
+
+```json
+{
+  "context_servers": {
+    "phonedriver": {
+      "command": "npx",
+      "args": ["-y", "phonedriver", "mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+## Cline
+
+Open the MCP Servers panel, choose Configure, then Configure MCP Servers. That opens `cline_mcp_settings.json`, which takes the entry at the top of this page as it is. Source: [Cline's MCP documentation](https://docs.cline.bot/mcp/configuring-mcp-servers).
 
 ## Other clients
 
@@ -40,3 +65,17 @@ In Claude Code's wrapper the fourteen tools cost about 51 tokens each whatever t
 ## Approval prompts need elicitation
 
 The [approval guard](/docs/approval-guard/) asks you through MCP elicitation. A client that does not support elicitation cannot show the question, and the tool then replies that the tap needs the human's approval and taps nothing. Check that your client supports elicitation before you give an agent a phone with a shopping app on it.
+
+## Questions
+
+### Which MCP clients does phonedriver work with?
+
+Any client that can start a local process and speak MCP over stdio. Claude Code is the one I test against. Codex 0.167.0 installed the plugin with its server and skill. For Cursor, VS Code, Gemini CLI, Zed and Cline I wrote the entry from the client's documentation and have not run a session.
+
+### What is the MCP config for phonedriver?
+
+A stdio server with the command `npx` and the arguments `-y`, `phonedriver`, `mcp`. Most clients take it under an `mcpServers` key in a JSON file. VS Code uses `servers`, Zed uses `context_servers`, and Codex uses a `[mcp_servers.phonedriver]` table in `config.toml`.
+
+### Does the approval prompt work in every client?
+
+No. It needs MCP elicitation. Claude Code supports it. Cursor's documentation lists it as supported, and Zed's says it is not supported yet. Where the prompt cannot be shown, phonedriver taps nothing and tells the agent the tap needs your approval.

@@ -29,6 +29,7 @@ const CARDS: Record<string, [string, string]> = {
   "compare-adb": ["phonedriver vs adb", `${faster("tree_list")} faster screen reads, ${faster("screenshot")} faster screenshots. The bare tap is close.`],
   "compare-mobile-mcp": ["phonedriver vs mobile-mcp", `Two MCP servers for phones. ${FEWER} fewer tokens on nine real phone jobs.`],
   "compare-phone-harness": ["phonedriver vs phone-harness", `No telemetry, a settled diff, and ${faster("type100", "phone_harness")} faster typing.`],
+  "compare-appium": ["phonedriver vs Appium", "Appium for scripted suites, phonedriver for an agent that decides each step. One measured row."],
 };
 
 function card(name: string): [string, string] {

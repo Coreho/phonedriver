@@ -8,13 +8,14 @@ import { meta } from "@/lib/meta";
 export const metadata = meta({
   path: "/docs/",
   title: "phonedriver docs: set up an AI agent to control a phone",
-  description: "How-to guides for phonedriver: install, Claude Code, Cursor, Android and iOS devices, the approval guard, telemetry, the shell and troubleshooting.",
+  description: "How-to guides for phonedriver: install, Claude Code, Codex, VS Code and Cursor, Android and iOS devices, testing an app, the approval guard and troubleshooting.",
   og: "/og/docs.png",
 });
 
 const GROUPS: [string, string[]][] = [
-  ["Start", ["install", "claude-code", "cursor-and-mcp-clients"]],
+  ["Start", ["install", "claude-code", "codex", "vs-code", "cursor-and-mcp-clients"]],
   ["Connect a phone", ["android-emulator", "android-phone", "ios-simulator", "iphone"]],
+  ["Put it to work", ["test-a-mobile-app"]],
   ["Run it safely", ["approval-guard", "no-telemetry", "shell", "troubleshooting"]],
 ];
 

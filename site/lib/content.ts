@@ -6,11 +6,14 @@ import { BOOT, REPO, SITE_URL } from "./site";
 export const DOCS = [
   "install",
   "claude-code",
+  "codex",
+  "vs-code",
   "cursor-and-mcp-clients",
   "android-emulator",
   "android-phone",
   "ios-simulator",
   "iphone",
+  "test-a-mobile-app",
   "approval-guard",
   "no-telemetry",
   "shell",
@@ -21,6 +24,7 @@ export const COMPARE: [string, string][] = [
   ["adb", "phonedriver vs adb"],
   ["mobile-mcp", "phonedriver vs mobile-mcp"],
   ["phone-harness", "phonedriver vs phone-harness"],
+  ["appium", "phonedriver vs Appium"],
 ];
 
 export const POSTS = [

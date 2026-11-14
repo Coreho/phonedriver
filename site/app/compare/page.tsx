@@ -9,7 +9,7 @@ import { meta } from "@/lib/meta";
 export const metadata = meta({
   path: "/compare/",
   title: "phonedriver vs mobile-mcp, phone-harness and adb, measured",
-  description: "Which tool should an AI agent use to control a phone? phonedriver against mobile-mcp, phone-harness and adb on tokens, passed runs, speed and telemetry.",
+  description: "Which tool should an AI agent use to control a phone? phonedriver against mobile-mcp, phone-harness, adb and Appium on tokens, passed runs and speed.",
   og: "/og/compare-adb.png",
 });
 
@@ -21,6 +21,7 @@ export default function CompareIndex() {
     adb: [ratio(read.adb / read.phonedriver), "faster screen reads"],
     "mobile-mcp": [ratio(b.total("mobile-mcp").tokens / us), "fewer tokens, nine jobs"],
     "phone-harness": [ratio(b.total("phone-harness").tokens / us), "fewer tokens, nine jobs"],
+    appium: ["2.0x", "faster reads than tuned WebDriverAgent"],
   };
   return (
     <>
@@ -46,10 +47,10 @@ export default function CompareIndex() {
           </div>
         }
       >
-        <h1>phonedriver compared with adb, mobile&#8209;mcp and phone&#8209;harness</h1>
+        <h1>phonedriver compared with adb, mobile&#8209;mcp, phone&#8209;harness and Appium</h1>
         <p className="lede">
           On nine real phone jobs phonedriver passed {b.total("phonedriver").passed} of {b.total("phonedriver").runs} runs with {figs["mobile-mcp"][0]} fewer tokens than mobile&#8209;mcp and{" "}
-          {figs["phone-harness"][0]} fewer than phone&#8209;harness, and it reads a screen {figs.adb[0]} faster than adb. Each page links its method and raw data.
+          {figs["phone-harness"][0]} fewer than phone&#8209;harness, and it reads a 1,000-row list {figs.adb[0]} faster than adb on one Android emulator. Each page links its method and raw data.
         </p>
       </PageTop>
     </>
