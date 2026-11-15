@@ -1,3 +1,4 @@
+import LocalAuthentication
 import SwiftUI
 import UserNotifications
 
@@ -108,6 +109,7 @@ struct BusyScreen: View {
 
 struct DialogsScreen: View {
     @State private var alert = false
+    @State private var biometric = "Not asked"
 
     var body: some View {
         VStack(spacing: 24) {
@@ -131,6 +133,24 @@ struct DialogsScreen: View {
             .accessibilityIdentifier("dialogs.notify")
             Button("Place order \u{00b7} $12.00") { Log.event("tap", ["id": "order"]) }
                 .accessibilityIdentifier("dialogs.order")
+            Button("Confirm with Face ID") {
+                let context = LAContext()
+                var why: NSError?
+                guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &why) else {
+                    biometric = "Not set up"
+                    Log.event("biometric", ["result": "unavailable", "code": why?.code ?? 0])
+                    return
+                }
+                context.evaluatePolicy(
+                    .deviceOwnerAuthenticationWithBiometrics, localizedReason: "Confirm payment"
+                ) { ok, error in
+                    let code = (error as NSError?)?.code ?? 0
+                    DispatchQueue.main.async { biometric = ok ? "Payment confirmed" : "Not confirmed" }
+                    Log.event("biometric", ["result": ok ? "succeeded" : "failed", "code": code])
+                }
+            }
+            .accessibilityIdentifier("dialogs.biometric")
+            Text(biometric).accessibilityIdentifier("dialogs.biometric_result")
         }
         .alert("Testbed alert", isPresented: $alert) {
             Button("OK") { Log.event("dialog", ["choice": "ok"]) }

@@ -2426,3 +2426,14 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Live from the mini (daemon there, emulator on win-pc, token file in a temporary home): enrollment `0%`, `49%`, `100%`, `Fingerprint added`; on the testbed's prompt `press wrong-fingerprint` gave `Not recognized` and `{"ev":"biometric","result":"failed"}`, `press fingerprint` gave `{"ev":"biometric","result":"succeeded"}` and `Payment confirmed`. The full lines are in D68.
 - Put back: `locksettings clear --old 1234` (`Lock credential cleared`), `set-disabled true`, no `fingerId` left, the temporary home with the token deleted from the mini.
 - Not done: the local path (phonedriver on the emulator's machine) was not run again after the refactor; its four unit tests pass. No older API level. No device test in the suite, since the suite's rig cannot enroll a fingerprint by itself.
+
+## 2026-11-15: the fingerprint keys answer Face ID on an iOS Simulator (D69)
+
+- Why: the user's "Nothing for iOS. pls try further on making this work."
+- The iOS testbed got a button on its Dialogs tab, `Confirm with Face ID` (`LAContext.evaluatePolicy`, a `biometric` log event, `NSFaceIDUsageDescription` in `project.yml`). Built and installed on the iPhone 17 Simulator on the mini with `xcodegen` and `xcodebuild`.
+- By hand first. Not enrolled: the tap logged `{"code":-7,"ev":"biometric","result":"unavailable"}` and no prompt came. After `notifyutil -s com.apple.BiometricKit.enrollmentChanged 1` and `-p`: the tap showed the system's prompt; `notifyutil -p com.apple.BiometricKit_Sim.pearl.nomatch`: `alert com.apple.springboard: "Face Not Recognised"`; `…pearl.match`: `{"code":0,"ev":"biometric","result":"succeeded"}` and `text "Payment confirmed"`.
+- Built: `IosDevice::show_face` behind `Button::Fingerprint` and `Button::WrongFingerprint` (Simulator only; a phone answers `unsupported`). It enrolls a Simulator that has nothing enrolled.
+- Live test, `PHONEDRIVER_TEST_DEVICE=sim:E02FE8A6-… cargo test --locked -p phonedriver-ios --test device_live -- --ignored --test-threads=1 a_face_id`: `1 passed … finished in 12.31s`. It passed on its first run and never ran red; before the change the same call returned `unsupported`.
+- Through the command line, from `enrollmentChanged 0`: `press fingerprint` (enrolls), `tap "Confirm with Face ID"`, `press wrong-fingerprint` printed `+ @e24 alert "Face Not Recognised"`, `press fingerprint` printed `+ @e28 text "Payment confirmed"`. The Simulator was set back to `enrollmentChanged 0`.
+- Workspace clippy clean on the mini; `--test mcp` 43 passed (the tool-list budget among them, with the longer `press` description), `--test fingerprint` 2 passed.
+- Not done: no Simulator with Touch ID, so the `fingerTouch` notifications are untried. The whole suite was not run again after this change.

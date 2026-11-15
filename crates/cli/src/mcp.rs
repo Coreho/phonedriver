@@ -1462,7 +1462,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Press home, back, recents, notifications, lock, volume-up, volume-down, enter or hide-keyboard. On an emulator, fingerprint or wrong-fingerprint touches the sensor.",
+        description = "Press home, back, recents, notifications, lock, volume-up, volume-down, enter or hide-keyboard. On an emulator or Simulator, fingerprint or wrong-fingerprint answers a fingerprint or Face ID prompt.",
         annotations(
             title = "Press a key",
             read_only_hint = false,

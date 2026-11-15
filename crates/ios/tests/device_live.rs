@@ -120,6 +120,63 @@ fn a_tap_lands_on_the_element_center() {
     }
 }
 
+fn enrolled(udid: &str, on: bool) {
+    const STATE: &str = "com.apple.BiometricKit.enrollmentChanged";
+    let value = if on { "1" } else { "0" };
+    for args in [vec!["-s", STATE, value], vec!["-p", STATE]] {
+        let done = std::process::Command::new("xcrun")
+            .args(["simctl", "spawn", udid, "notifyutil"])
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(done.success());
+    }
+}
+
+#[test]
+#[ignore]
+fn a_face_id_prompt_is_failed_by_the_wrong_face_and_passed_by_the_right_one() {
+    let d = device();
+    let udid = udid();
+    enrolled(&udid, false);
+    testbed::launch(&udid, "dialogs");
+    tap_id(&d, "dialogs.biometric");
+    let log = testbed::wait_for(&udid, "biometric", |e| ev(e, "biometric").is_some());
+    let asked: Vec<&Value> = log.iter().filter_map(|e| ev(e, "biometric")).collect();
+    assert_eq!(asked[0]["result"], "unavailable", "nothing is enrolled yet");
+
+    RT.block_on(d.button(Button::Fingerprint)).unwrap();
+    testbed::clear_log(&udid);
+    tap_id(&d, "dialogs.biometric");
+    std::thread::sleep(Duration::from_millis(1500));
+    RT.block_on(d.button(Button::WrongFingerprint)).unwrap();
+    std::thread::sleep(Duration::from_millis(1500));
+    let prompt = tree(&d);
+    assert!(
+        prompt.nodes.iter().any(|n| n
+            .label
+            .as_deref()
+            .is_some_and(|l| l.contains("Not Recogni"))),
+        "the system says the face was not recognised: {:?}",
+        prompt
+            .nodes
+            .iter()
+            .filter_map(|n| n.label.clone())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        testbed::read_log(&udid)
+            .iter()
+            .all(|e| ev(e, "biometric").is_none()),
+        "the app has no answer yet"
+    );
+    RT.block_on(d.button(Button::Fingerprint)).unwrap();
+    let log = testbed::wait_for(&udid, "biometric", |e| ev(e, "biometric").is_some());
+    let answer: Vec<&Value> = log.iter().filter_map(|e| ev(e, "biometric")).collect();
+    assert_eq!(answer[0]["result"], "succeeded");
+    enrolled(&udid, false);
+}
+
 #[test]
 #[ignore]
 fn a_recording_of_the_simulator_is_an_mp4_of_the_taps_made_while_it_ran() {

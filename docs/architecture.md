@@ -444,7 +444,7 @@ phonedriver pinch <in|out> [--at <target>] [--distance 0..1]
 phonedriver scroll <up|down|left|right> [--within <target>] [--until "text"|@ref] [--max N]
 phonedriver gesture <json>                   multi-finger paths with timing
 phonedriver press <home|back|recents|notifications|lock|volume-up|volume-down|enter|hide-keyboard|...>
-phonedriver press <fingerprint|wrong-fingerprint>     touch an Android emulator's fingerprint sensor (decision D63)
+phonedriver press <fingerprint|wrong-fingerprint>     answer a fingerprint prompt on an Android emulator or Face ID on an iOS Simulator (D63, D69)
 phonedriver launch <app name|package|bundle id> [--restart]
 phonedriver open <url>                       deep link or web URL in its handler app
 phonedriver apps [install <path> | stop|clear|uninstall <app>]   list launchable apps, or manage one
@@ -550,7 +550,7 @@ Measured in task 5.6 (`docs/bench/history/m4.md`, Mac mini M4, iPhone 17 simulat
 - iOS runner signing requires a Mac with Xcode.
 - iOS 17 to 26 devices have no frame stream, so settle and screenshots are slower.
 - DRM video renders black on both platforms.
-- Biometric prompts (Face ID, fingerprint) need the user, except on an Android emulator, whose fingerprint sensor `press fingerprint` touches (decisions D63 and D68: the emulator's console, reached directly when the emulator is on this machine and through `nc 10.0.2.2 <port>` on the device when adb is behind `ADB_SERVER_SOCKET`).
+- Biometric prompts (Face ID, fingerprint) need the user, except on an iOS Simulator, whose Face ID `press fingerprint` answers through the Simulator's `BiometricKit_Sim` notifications (decision D69), and on an Android emulator, whose fingerprint sensor `press fingerprint` touches (decisions D63 and D68: the emulator's console, reached directly when the emulator is on this machine and through `nc 10.0.2.2 <port>` on the device when adb is behind `ADB_SERVER_SOCKET`).
 - No audio capture or camera injection. A recording (`record`) has no sound, ends when the screen turns, and is unplayable if the daemon is killed before `record stop` (the index is written last). On iOS only the Simulator records; an iPhone does not.
 - No file push or pull (for example a photo to upload). Add only when an agent task needs it.
 - No GPS location simulation.

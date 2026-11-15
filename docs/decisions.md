@@ -917,3 +917,17 @@ The first run is why the `shell` description no longer says to prefer it for set
 
 **Reopen if.** An image without `nc` is used (then a forwarder in the on-device agent); someone needs the remote path without copying the file.
 
+## D69. On an iOS Simulator the fingerprint keys answer Face ID
+
+**Choice.** On a Simulator, `press fingerprint` posts the notification the Simulator's Features menu posts for a matching face, `com.apple.BiometricKit_Sim.pearl.match`, and the Touch ID one, `…fingerTouch.match`; `press wrong-fingerprint` posts the two `nomatch` ones. Both go through `xcrun simctl spawn <udid> notifyutil`. Before either, a Simulator whose `com.apple.BiometricKit.enrollmentChanged` state is not 1 is enrolled (the state set to 1 and the notification posted). A physical iPhone answers `unsupported`. The keys keep their Android names.
+
+**Why.** The user asked for the fingerprint work to reach iOS; D63 left it out because nothing here could prove it. The iOS testbed now has a button that asks `LAContext` for Face ID, so it can be proven. The enrolling is in the key because an app asks `canEvaluatePolicy` before it shows anything: on a fresh Simulator the testbed logged `{"result":"unavailable","code":-7}` (not enrolled) and no prompt came up, so there was nothing for a match to answer.
+
+**Rejected.** New key names (`face`, `wrong-face`): two more words in the `press` description for the same act, and an agent that learned the Android pair would not find them. A separate enroll command: one more thing to know, for a state a Simulator can always be put in. Leaving it to `shell` (`notifyutil` runs through it already): the notification names are not something an agent should have to remember. Posting only the Face ID notification: a Simulator with Touch ID would answer `ok` and do nothing.
+
+**Evidence.** Mac mini, iPhone 17 Simulator, iOS 26.5, 2026-11-15. By hand: after enrolling, `tap "Confirm with Face ID"` brought up the system's prompt; `pearl.nomatch` gave `alert "Face Not Recognised"` with `Try Face ID Again` and `Cancel`; `pearl.match` closed it, the testbed logged `{"code":0,"ev":"biometric","result":"succeeded"}` and showed `Payment confirmed`. Live test `a_face_id_prompt_is_failed_by_the_wrong_face_and_passed_by_the_right_one` (`--ignored`, `device_live`), from an unenrolled Simulator: the first ask is `unavailable`; after `Button::Fingerprint` the ask shows the prompt; `Button::WrongFingerprint` puts `Not Recogni…` in the tree and the app has no answer yet; `Button::Fingerprint` makes the app log `succeeded`. `1 passed … finished in 12.31s`. The test leaves the Simulator unenrolled, as it found it.
+
+**Limits.** Face ID only was run: no Simulator with Touch ID (an iPhone SE) was at hand, so the `fingerTouch` notifications are sent untried. One iOS version. The key enrolls a Simulator without saying so in its reply. The lock screen was not tried. Real iPhones never.
+
+**Reopen if.** A Touch ID Simulator shows the `fingerTouch` names are wrong; Apple renames the notifications in a later Xcode.
+

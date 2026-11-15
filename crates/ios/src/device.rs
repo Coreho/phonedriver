@@ -310,6 +310,40 @@ impl IosDevice {
     }
 }
 
+impl IosDevice {
+    /// Shows the Simulator's Face ID or Touch ID a face or finger that matches, or one that does not (decision
+    /// D69), through the notifications the Simulator's own Features menu posts. A Simulator with nothing enrolled
+    /// is enrolled first, since an app asks only when something is.
+    async fn show_face(&self, matches: bool) -> Result<()> {
+        const ENROLLED: &str = "com.apple.BiometricKit.enrollmentChanged";
+        if !matches!(self.host, Host::Simulator) {
+            return Err(Error::Unsupported {
+                op: Op::Button,
+                reason: "an iPhone's Face ID and Touch ID take their owner; only a Simulator's can be answered from here",
+            });
+        }
+        let notify = async |args: &[&str]| {
+            let mut all = vec!["spawn", self.udid.as_str(), "notifyutil"];
+            all.extend_from_slice(args);
+            simctl(&all).await
+        };
+        if !notify(&["-g", ENROLLED]).await?.trim_end().ends_with(" 1") {
+            notify(&["-s", ENROLLED, "1"]).await?;
+            notify(&["-p", ENROLLED]).await?;
+        }
+        let outcome = if matches { "match" } else { "nomatch" };
+        // `pearl` is Face ID and `fingerTouch` is Touch ID; a Simulator listens to the one it has.
+        for sensor in ["pearl", "fingerTouch"] {
+            notify(&[
+                "-p",
+                &format!("com.apple.BiometricKit_Sim.{sensor}.{outcome}"),
+            ])
+            .await?;
+        }
+        Ok(())
+    }
+}
+
 impl Drop for IosDevice {
     fn drop(&mut self) {
         self.poller.abort();
@@ -603,10 +637,7 @@ impl Device for IosDevice {
                 });
             }
             Button::Fingerprint | Button::WrongFingerprint => {
-                return Err(Error::Unsupported {
-                    op: Op::Button,
-                    reason: "Face ID and Touch ID are not simulated here; only an Android emulator's fingerprint sensor is",
-                });
+                return self.show_face(b == Button::Fingerprint).await;
             }
         };
         self.input(Op::Button, json!({"op": "button", "name": name}))
