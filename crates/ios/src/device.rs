@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    FrameRef, Gesture, Image, ImageFormat, Key, Quality, Result, ScreenState, ShellReply,
+    FrameRef, Gesture, Image, ImageFormat, Key, Quality, Recorded, Result, ScreenState, ShellReply,
     ShellRequest, TextInput, Url,
 };
 use phonedriver_core::element::Role;
@@ -38,6 +38,8 @@ const POLL_SCALE: f32 = 0.25;
 /// After an input or a visible change, settle polls back to back for this long; after that, at `IDLE_POLL`.
 const ACTIVE_WINDOW: Duration = Duration::from_secs(3);
 const IDLE_POLL: Duration = Duration::from_millis(500);
+const RECORDER_START: Duration = Duration::from_secs(10);
+const RECORDER_FINISH: Duration = Duration::from_secs(30);
 /// For this long after the host last used the device, the poller keeps its screen awake (decision D56). It is the
 /// length of a session's hold on a device, so a phone does not lock under an agent that still holds it.
 const KEEP_AWAKE: Duration = Duration::from_secs(600);
@@ -77,6 +79,24 @@ pub struct IosDevice {
     activity: Arc<Activity>,
     events: broadcast::Sender<DeviceEvent>,
     poller: JoinHandle<()>,
+    recording: tokio::sync::Mutex<Option<SimRecording>>,
+}
+
+/// `xcrun simctl io <udid> recordVideo` while it runs. It finishes its file when it is interrupted, not when it
+/// is killed.
+struct SimRecording {
+    recorder: tokio::process::Child,
+    path: std::path::PathBuf,
+}
+
+impl SimRecording {
+    fn interrupt(&self) {
+        if let Some(pid) = self.recorder.id() {
+            let _ = std::process::Command::new("kill")
+                .args(["-INT", &pid.to_string()])
+                .status();
+        }
+    }
 }
 
 struct Activity {
@@ -229,6 +249,7 @@ impl IosDevice {
             activity,
             events,
             poller,
+            recording: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -292,6 +313,9 @@ impl IosDevice {
 impl Drop for IosDevice {
     fn drop(&mut self) {
         self.poller.abort();
+        if let Some(recording) = self.recording.get_mut().as_ref() {
+            recording.interrupt();
+        }
     }
 }
 
@@ -420,6 +444,105 @@ impl Device for IosDevice {
 
     fn frames(&self) -> Option<watch::Receiver<FrameRef>> {
         Some(self.store.subscribe())
+    }
+
+    /// The Simulator records itself: `simctl io recordVideo` writes H.264 into an MP4. It says `Recording started`
+    /// about 300 ms after it is run, and this waits for that line so that the next action is in the video.
+    async fn record_start(&self, path: &Path) -> Result<()> {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+        if !matches!(self.host, Host::Simulator) {
+            return Err(Error::Unsupported {
+                op: Op::Record,
+                reason: "recording an iPhone's screen is not built; the iOS Simulator and Android devices record",
+            });
+        }
+        let mut slot = self.recording.lock().await;
+        if let Some(running) = slot.as_mut()
+            && matches!(running.recorder.try_wait(), Ok(None))
+        {
+            return Err(Error::Refused {
+                detail: "a recording is already running".into(),
+            });
+        }
+        let mut recorder = tokio::process::Command::new("xcrun")
+            .args([
+                "simctl",
+                "io",
+                &self.udid,
+                "recordVideo",
+                "--codec=h264",
+                "--force",
+            ])
+            .arg(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| Error::Transport {
+                detail: format!("cannot run xcrun simctl (is Xcode installed?): {e}"),
+            })?;
+        let mut said = BufReader::new(recorder.stderr.take().ok_or_else(|| Error::Transport {
+            detail: "the Simulator's recorder has no output to read".into(),
+        })?)
+        .lines();
+        let mut last = String::new();
+        let started = tokio::time::timeout(RECORDER_START, async {
+            while let Ok(Some(line)) = said.next_line().await {
+                if line.contains("Recording started") {
+                    return true;
+                }
+                last = line;
+            }
+            false
+        })
+        .await
+        .unwrap_or(false);
+        if !started {
+            let _ = recorder.kill().await;
+            return Err(Error::Transport {
+                detail: format!("the Simulator's recorder did not start: {last}"),
+            });
+        }
+        // The recorder writes two more lines when it is interrupted; with nobody reading them it would be
+        // stopped by the closed pipe before it finishes the file.
+        tokio::spawn(async move { while let Ok(Some(_)) = said.next_line().await {} });
+        *slot = Some(SimRecording {
+            recorder,
+            path: path.to_path_buf(),
+        });
+        Ok(())
+    }
+
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        let Some(mut recording) = self.recording.lock().await.take() else {
+            return Ok(None);
+        };
+        let early = matches!(recording.recorder.try_wait(), Ok(Some(_)))
+            .then(|| "the Simulator's recorder had stopped by itself".to_string());
+        if early.is_none() {
+            recording.interrupt();
+        }
+        if tokio::time::timeout(RECORDER_FINISH, recording.recorder.wait())
+            .await
+            .is_err()
+        {
+            let _ = recording.recorder.kill().await;
+            return Err(Error::Transport {
+                detail: "the Simulator's recorder did not finish its file".into(),
+            });
+        }
+        let read =
+            phonedriver_video::record::probe(&recording.path).map_err(|e| Error::Transport {
+                detail: format!("cannot read {}: {e}", recording.path.display()),
+            })?;
+        Ok(Some(Recorded {
+            path: read.path,
+            width: read.width,
+            height: read.height,
+            frames: read.frames,
+            ms: read.ms,
+            early,
+        }))
     }
 
     async fn screenshot(&self, _q: Quality) -> Result<Image> {

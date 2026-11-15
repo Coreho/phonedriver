@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use phonedriver_video::frame_store::FrameStore;
 use phonedriver_video::h264::{self, AccessUnit, Decoder, WirePacket};
-use phonedriver_video::record::Recording;
+use phonedriver_video::record::{Recording, probe};
 use phonedriver_video::stream::VideoStream;
 use tokio::io::AsyncWriteExt;
 
@@ -125,6 +125,11 @@ async fn the_stream_fixture_becomes_an_mp4_whose_samples_decode_to_the_same_fram
         rec.push(unit, lasts).unwrap();
     }
     let done = rec.finish().unwrap();
+    assert_eq!(
+        probe(&path).unwrap(),
+        done,
+        "the file says what `finish` said"
+    );
     assert_eq!((done.width, done.height), (1080, 2424));
     assert_eq!(done.frames as usize, pictures.len());
 
@@ -286,4 +291,22 @@ async fn a_stream_that_ends_finishes_the_recording_and_stop_says_why() {
     assert_eq!(stopped.early, Some("the device's video stream ended"));
     assert!(!track(&std::fs::read(&path).unwrap()).sizes.is_empty());
     assert_eq!(video.record_stop().unwrap(), None);
+}
+
+/// 1.2 s of a still iPhone 17 Simulator screen as `xcrun simctl io recordVideo --codec=h264` wrote it (Xcode 27):
+/// `moov` before `mdat`, a `wide` box between them, and one frame, since the Simulator writes a frame only when
+/// the screen changes. The movie still says how long the recording ran.
+#[test]
+fn a_recording_the_simulator_wrote_is_read_for_its_size_frames_and_length() {
+    let path = std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/simulator_still.mp4"
+    ));
+    let read = probe(path).unwrap();
+    assert_eq!((read.width, read.height, read.frames), (1206, 2622, 1));
+    assert_eq!(read.ms, 1306);
+    let dir = tempfile::tempdir().unwrap();
+    let cut = dir.path().join("cut.mp4");
+    std::fs::write(&cut, &std::fs::read(path).unwrap()[..500]).unwrap();
+    assert!(probe(&cut).is_err(), "a file cut short is refused");
 }

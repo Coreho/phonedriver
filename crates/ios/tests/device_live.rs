@@ -122,6 +122,50 @@ fn a_tap_lands_on_the_element_center() {
 
 #[test]
 #[ignore]
+fn a_recording_of_the_simulator_is_an_mp4_of_the_taps_made_while_it_ran() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "taps");
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("sim_record.mp4");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(RT.block_on(d.record_stop()).unwrap(), None);
+    RT.block_on(d.record_start(&path)).unwrap();
+    let began = std::time::Instant::now();
+    assert!(matches!(
+        RT.block_on(d.record_start(&path)),
+        Err(Error::Refused { .. })
+    ));
+    for id in ["taps.b17", "taps.b3", "taps.b20"] {
+        tap_id(&d, id);
+        std::thread::sleep(Duration::from_millis(600));
+    }
+    let wall_ms = began.elapsed().as_millis() as u64;
+    let done = RT
+        .block_on(d.record_stop())
+        .unwrap()
+        .expect("a recording was running");
+    assert_eq!(done.path, path);
+    assert_eq!(done.early, None);
+    assert!(
+        done.width >= 1000 && done.height > done.width,
+        "an upright phone screen in pixels: {done:?}"
+    );
+    assert!(done.frames >= 3, "{done:?}");
+    assert!(
+        done.ms >= 1200 && done.ms <= wall_ms + 300,
+        "{done:?} in {wall_ms} ms"
+    );
+    assert_eq!(
+        phonedriver_video::record::probe(&path).unwrap().frames,
+        done.frames
+    );
+    assert_eq!(RT.block_on(d.record_stop()).unwrap(), None);
+    let taps = testbed::wait_for(&udid, "three taps", |e| ev(e, "tap").is_some());
+    assert_eq!(taps.iter().filter_map(|e| ev(e, "tap")).count(), 3);
+}
+
+#[test]
+#[ignore]
 fn a_screenshot_is_a_png_at_one_pixel_per_point() {
     let d = device();
     testbed::launch(&udid(), "taps");

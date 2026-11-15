@@ -328,14 +328,14 @@ pub trait Device: Send + Sync {
     async fn record_start(&self, _path: &std::path::Path) -> Result<()> {
         Err(Error::Unsupported {
             op: Op::Record,
-            reason: "this device has no video stream to record; Android devices have one",
+            reason: "this device has no video stream to record; Android devices and the iOS Simulator record",
         })
     }
     /// Ends the recording and finishes its file. `None` when none was running.
     async fn record_stop(&self) -> Result<Option<Recorded>> {
         Err(Error::Unsupported {
             op: Op::Record,
-            reason: "this device has no video stream to record; Android devices have one",
+            reason: "this device has no video stream to record; Android devices and the iOS Simulator record",
         })
     }
     async fn logs(&self, _req: &LogRequest) -> Result<LogReply> {

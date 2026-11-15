@@ -4,7 +4,7 @@
 //! is dropped is finished first, so a device that goes away leaves a file that plays.
 
 use std::fs::File;
-use std::io::{self, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::h264::AccessUnit;
@@ -41,6 +41,92 @@ pub struct Recording {
     bytes: u64,
     mdat_at: u64,
     finished: bool,
+}
+
+/// The body of the first `kind` box among the boxes of `boxes`.
+fn child<'a>(mut boxes: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
+    while let (Some(size), Some(name)) = (boxes.get(..4), boxes.get(4..8)) {
+        let size = u32::from_be_bytes(size.try_into().ok()?) as usize;
+        let body = boxes.get(8..size)?;
+        if name == kind {
+            return Some(body);
+        }
+        boxes = &boxes[size..];
+    }
+    None
+}
+
+fn be32(bytes: &[u8], at: usize) -> Option<u64> {
+    Some(u32::from_be_bytes(bytes.get(at..at + 4)?.try_into().ok()?) as u64)
+}
+
+/// What an MP4 or QuickTime file says of its first video track: the picture's size, how many frames it holds and
+/// how long the movie runs. For a file this module did not write, such as a Simulator's own recording.
+pub fn probe(path: &Path) -> io::Result<Recorded> {
+    let bad = |what: &str| io::Error::new(io::ErrorKind::InvalidData, what.to_string());
+    let mut file = File::open(path)?;
+    let len = file.metadata()?.len();
+    let mut at = 0;
+    let moov = loop {
+        if at + 8 > len {
+            return Err(bad("the file has no moov box"));
+        }
+        file.seek(SeekFrom::Start(at))?;
+        let mut head = [0u8; 16];
+        file.read_exact(&mut head[..8])?;
+        let (size, header) = match u32::from_be_bytes([head[0], head[1], head[2], head[3]]) {
+            0 => (len - at, 8),
+            1 => {
+                file.read_exact(&mut head[8..])?;
+                let mut wide = [0u8; 8];
+                wide.copy_from_slice(&head[8..]);
+                (u64::from_be_bytes(wide), 16)
+            }
+            n => (n as u64, 8),
+        };
+        if size < header || at + size > len {
+            return Err(bad("a box runs past the end of the file"));
+        }
+        if &head[4..8] == b"moov" {
+            let mut body = vec![0; (size - header) as usize];
+            file.read_exact(&mut body)?;
+            break body;
+        }
+        at += size;
+    };
+    let read = || -> Option<Recorded> {
+        let mvhd = child(&moov, b"mvhd")?;
+        let (timescale, ticks) = match mvhd.first()? {
+            0 => (be32(mvhd, 12)?, be32(mvhd, 16)?),
+            _ => (be32(mvhd, 20)?, be32(mvhd, 24)? << 32 | be32(mvhd, 28)?),
+        };
+        let mut boxes = &moov[..];
+        loop {
+            let size = be32(boxes, 0)? as usize;
+            let (name, body) = (boxes.get(4..8)?, boxes.get(8..size)?);
+            boxes = &boxes[size..];
+            if name != b"trak" {
+                continue;
+            }
+            let tkhd = child(body, b"tkhd")?;
+            let (width, height) = (
+                be32(tkhd, tkhd.len().checked_sub(8)?)? >> 16,
+                be32(tkhd, tkhd.len() - 4)? >> 16,
+            );
+            if width == 0 || height == 0 {
+                continue;
+            }
+            let stbl = child(child(child(body, b"mdia")?, b"minf")?, b"stbl")?;
+            return Some(Recorded {
+                path: path.to_path_buf(),
+                width: width as u32,
+                height: height as u32,
+                frames: be32(child(stbl, b"stsz")?, 8)? as u32,
+                ms: (ticks * 1000).checked_div(timescale)?,
+            });
+        }
+    };
+    read().ok_or_else(|| bad("the file has no video track this reader understands"))
 }
 
 /// The NAL units of an Annex-B buffer, without their start codes.

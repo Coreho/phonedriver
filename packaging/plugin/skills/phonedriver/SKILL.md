@@ -50,7 +50,7 @@ A permission sheet, an "isn't responding" box or another system dialog shows in 
 - `screenshot` (with `marks` to box each tappable element with its ref) covers what the snapshot lacks: a map, a drawing, a photo, a game. Look at the image before tapping a point on it. A reply for a screen with no element list at all brings its picture with it (MCP).
 - A task that worked and will be asked again: `save <file>` (MCP: `replay` with `save: true`) writes your steps, and `replay <file>` runs them in one call next time. When a replay stops at a step, do that step, then replay from the next one (`--from N`, MCP `from`).
 - A fingerprint prompt on an Android emulator: `press fingerprint` passes it once a fingerprint is enrolled (enroll in Settings with the same key), `press wrong-fingerprint` fails it. On a phone, tell the user: it needs their finger.
-- Asked for a video of what you do (Android): `record start`, the actions, then `record stop` (MCP: `screenshot` with `record: "start"`, then `"stop"`). The reply names the MP4 file and a list of your actions with their times.
+- Asked for a video of what you do (Android, iOS Simulator): `record start`, the actions, then `record stop` (MCP: `screenshot` with `record: "start"`, then `"stop"`). The reply names the MP4 file and a list of your actions with their times.
 - `launch` reopens an app where it was left (Settings may open inside a sub-page); `launch --restart` (MCP `restart: true`) stops it first so it opens on its first screen.
 
 ## Typing

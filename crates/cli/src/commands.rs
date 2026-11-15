@@ -416,7 +416,7 @@ pub(crate) enum Verb {
         #[arg(long, default_value_t = 1)]
         from: usize,
     },
-    /// Record the screen to an MP4 file (Android): `record start`, the actions to show, then `record stop`, which
+    /// Record the screen to an MP4 file (Android and the iOS Simulator): `record start`, the actions to show, then `record stop`, which
     /// prints the file and, beside it, a `.steps.jsonl` file of the actions done meanwhile with their times.
     Record {
         /// What to do: `start` or `stop`.

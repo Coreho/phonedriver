@@ -251,7 +251,7 @@ On an Android emulator, `phonedriver press fingerprint` touches the fingerprint 
 
 ### Recording the screen
 
-On Android, `phonedriver record start` begins a video of the screen and `phonedriver record stop` finishes it and prints the file:
+On Android and on the iOS Simulator, `phonedriver record start` begins a video of the screen and `phonedriver record stop` finishes it and prints the file:
 
 ```
 $ phonedriver record start -o run.mp4
@@ -266,7 +266,7 @@ steps: 2 with their times in /Users/me/run.mp4.steps.jsonl
 
 The video is the H.264 stream the phone already sends, in an MP4 file, with no sound. It starts with the screen as it was at `record start`. The steps file has one line for each action that succeeded during the recording, such as `{"summary":"scrolled down","t_ms":11119}`: the summary line of the action's reply and when it began, in milliseconds on the video's clock. Text typed with `--secret` is not in it. Without `-o` the file goes under `~/.phonedriver/tmp`, where a starting daemon deletes files older than a day. In MCP, `screenshot` takes `record: "start"` and `record: "stop"`.
 
-A turned screen ends the recording, and `record stop` says so. Stop a recording before you stop the daemon: a daemon that is killed leaves a file players cannot open. iOS devices and the Simulator answer that they have no video stream to record. Decision D59.
+A turned screen ends the recording, and `record stop` says so. Stop a recording before you stop the daemon: a daemon that is killed leaves a file players cannot open. The Simulator records itself (`xcrun simctl io recordVideo`): it writes a frame only when the screen changes, so the video of a still screen has one frame, and a turned screen does not end it. An iPhone answers that recording it is not built. Decisions D59 and D66.
 
 ### Shell
 
