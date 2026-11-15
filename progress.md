@@ -2455,3 +2455,8 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Ten breaks of the product code each make the check fail (`python3 .claude/skills/verify-secrets/breaks.py <name>`, run on the mini): replies not masked, a secret forgotten after its call, a batch step or a shell command not read, the trace keeping typed text or a secret command, either `Debug` printing its text, the old focus trusted after a failure, plain text let into a password field.
 - A false alarm on the way, mine: after the breaks ran on the mini I synced with `rsync -a`, which set the restored file's time back, so cargo kept the build with a break in it and the whole-suite run failed the property. The sync now compares content and leaves times alone.
 - Not covered: pixels (screenshots, recordings), a secret under four characters after its own call, a secret the device prints back in a changed form, the CLI and MCP layers, a real device. The skill lists the rest.
+
+## 2026-11-15: the `verify-secrets` skill, and one run of it on a scratch change
+
+- `.claude/skills/verify-secrets/SKILL.md` and `breaks.py`: the promise, the harm, why a property test and not a model, which functions each check covers, the sync commit (`be4cf0b`), how to tell a real leak from a fake phone doing what no phone can, the ten breaks, what is not covered.
+- Followed as the next agent would, on a scratch change: `secrets::hide` moved below `traces.record` in `Daemon::call`, so a reply was traced before it was masked. `git diff --stat be4cf0b -- …` named `daemon/mod.rs`; the check failed with the minimal session `[Type { flagged: true, into: Note }], full = true`. Scratch change dropped (`git checkout`), check back to `3 passed; 0 failed; 1 ignored`.
