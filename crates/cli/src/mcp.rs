@@ -77,6 +77,7 @@ struct AppsArgs {
     device: Option<String>,
     action: Option<String>,
     app: Option<String>,
+    permissions: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -1119,7 +1120,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data) or uninstall.",
+        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`).",
         annotations(
             title = "Apps",
             read_only_hint = false,
@@ -1132,6 +1133,7 @@ impl Mcp {
         let verb = Verb::Apps {
             action: a.action,
             target: a.app,
+            permissions: a.permissions.unwrap_or_default(),
         };
         self.run(a.device, verb, None).await
     }

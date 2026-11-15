@@ -290,6 +290,8 @@ pub struct AppParams {
     pub action: String,
     pub app: Option<String>,
     pub path: Option<String>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]

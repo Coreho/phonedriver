@@ -299,14 +299,19 @@ pub(crate) enum Verb {
         #[arg(long)]
         app: Option<String>,
     },
-    /// List the apps that can be launched, or `install <path>`, `stop`, `clear` (data) or `uninstall` one by name or id.
-    /// On a physical device `clear` and `uninstall` only touch apps phonedriver installed.
+    /// List the apps that can be launched, or `install <path>`, `stop`, `clear` (data) or `uninstall` one by name or id,
+    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`.
+    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed.
     Apps {
         /// What to do to an app. Omit it to list apps.
-        #[arg(value_parser = ["install", "stop", "clear", "uninstall"])]
+        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke"])]
         action: Option<String>,
-        /// The app file to install (on the daemon's machine), or the app to stop, clear or uninstall.
+        /// The app file to install (on the daemon's machine), or the app to act on.
         target: Option<String>,
+        /// For `grant` and `revoke`: `notifications`, `camera`, `location`, or a full name such as
+        /// `android.permission.CAMERA` (Android); `photos`, `location` and the other `simctl privacy` services
+        /// (Simulator).
+        permissions: Vec<String>,
     },
     /// Drag from the middle of the screen, or of `--from`, the way a finger does.
     Swipe {
@@ -948,13 +953,14 @@ pub(crate) async fn execute_with(
         Verb::Apps {
             action: Some(action),
             target,
+            permissions,
         } => {
             let target = target
                 .ok_or_else(|| Failure::Local(format!("apps {action} needs an app or a path")))?;
             let p = if action == "install" {
                 json!({"action": action, "path": target})
             } else {
-                json!({"action": action, "app": target})
+                json!({"action": action, "app": target, "permissions": permissions})
             };
             let r = client.call("app", with(p)).await?;
             if g.json {

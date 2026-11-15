@@ -609,13 +609,14 @@ impl Actor {
             return Ok(json!({"ok": true, "summary": summary}));
         }
         let op = match p.action.as_str() {
-            "stop" => AppOp::Stop,
-            "clear" => AppOp::ClearData,
-            "uninstall" => AppOp::Uninstall,
+            "stop" => Some(AppOp::Stop),
+            "clear" => Some(AppOp::ClearData),
+            "uninstall" => Some(AppOp::Uninstall),
+            "grant" | "revoke" => None,
             _ => {
                 return Err(Error::Unsupported {
                     op: Op::App,
-                    reason: "the app action is install, stop, clear or uninstall",
+                    reason: "the app action is install, stop, clear, uninstall, grant or revoke",
                 });
             }
         };
@@ -625,6 +626,34 @@ impl Actor {
         })?;
         let installed = device.apps().await?;
         let found = find_app(&installed, &query)?.clone();
+        let Some(op) = op else {
+            if p.permissions.is_empty() {
+                return Err(Error::Unsupported {
+                    op: Op::App,
+                    reason: "grant and revoke need `permissions`, such as camera or location",
+                });
+            }
+            if self.physical() {
+                let mut mine = false;
+                self.ledger(|l| mine = l.contains(&found.id.0));
+                if !mine {
+                    return Err(Error::Unsupported {
+                        op: Op::App,
+                        reason: "phonedriver did not install this app on this physical device, so it will not change its permissions",
+                    });
+                }
+            }
+            let names = p.permissions.join(", ");
+            let summary = if p.action == "grant" {
+                device.grant(&found.id, &p.permissions).await?;
+                format!("granted {names} to {}", found.name)
+            } else {
+                device.revoke(&found.id, &p.permissions).await?;
+                format!("revoked {names} from {}", found.name)
+            };
+            s.set_last(None);
+            return Ok(json!({"ok": true, "summary": summary}));
+        };
         if op != AppOp::Stop && self.physical() {
             let mut mine = false;
             self.ledger(|l| mine = l.contains(&found.id.0));

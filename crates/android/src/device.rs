@@ -124,6 +124,55 @@ impl AndroidDevice {
         .await?;
         Ok(())
     }
+
+    async fn pm_permissions(&self, verb: &str, app: &AppId, permissions: &[String]) -> Result<()> {
+        let package_ok = !app.0.is_empty()
+            && app
+                .0
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_');
+        if !package_ok {
+            return Err(Error::Transport {
+                detail: format!("{:?} is not a package name", app.0),
+            });
+        }
+        let mut full = Vec::new();
+        for name in permissions {
+            let permission = permission_name(name)?;
+            let out = self
+                .adb
+                .shell(&self.serial, &format!("pm {verb} {} {permission}", app.0))
+                .await?;
+            let text = format!(
+                "{}{}",
+                out.stdout_text(),
+                String::from_utf8_lossy(&out.stderr)
+            );
+            if out.exit_code != 0 || text.contains("Exception") || text.contains("Error") {
+                let first = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                return Err(Error::Transport {
+                    detail: format!("`pm {verb} {} {permission}` said: {}", app.0, first.trim()),
+                });
+            }
+            full.push(permission);
+        }
+        let dump = self
+            .adb
+            .shell(
+                &self.serial,
+                &format!("dumpsys package {} | grep granted=", app.0),
+            )
+            .await?
+            .stdout_text();
+        for permission in &full {
+            if let Some(why) = unapplied(&dump, verb, permission) {
+                return Err(Error::Transport {
+                    detail: format!("`pm {verb} {} {permission}` changed nothing: {why}", app.0),
+                });
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -255,35 +304,11 @@ impl Device for AndroidDevice {
     }
 
     async fn grant(&self, app: &AppId, permissions: &[String]) -> Result<()> {
-        let package_ok = !app.0.is_empty()
-            && app
-                .0
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_');
-        if !package_ok {
-            return Err(Error::Transport {
-                detail: format!("{:?} is not a package name", app.0),
-            });
-        }
-        for name in permissions {
-            let permission = permission_name(name)?;
-            let out = self
-                .adb
-                .shell(&self.serial, &format!("pm grant {} {permission}", app.0))
-                .await?;
-            let text = format!(
-                "{}{}",
-                out.stdout_text(),
-                String::from_utf8_lossy(&out.stderr)
-            );
-            if out.exit_code != 0 || text.contains("Exception") || text.contains("Error") {
-                let first = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-                return Err(Error::Transport {
-                    detail: format!("`pm grant {} {permission}` said: {}", app.0, first.trim()),
-                });
-            }
-        }
-        Ok(())
+        self.pm_permissions("grant", app, permissions).await
+    }
+
+    async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
+        self.pm_permissions("revoke", app, permissions).await
     }
 
     async fn foreground(&self) -> Result<Option<AppId>> {
@@ -396,6 +421,26 @@ impl Device for AndroidDevice {
 
 /// `notifications`, `camera`, `location`... become `android.permission.POST_NOTIFICATIONS` and so on; a name with a
 /// dot is taken as written.
+/// Why `pm grant` or `pm revoke` did not do what it was asked, read from the `granted=` lines of `dumpsys package`.
+/// On API 37 `pm grant` exits 0 and prints nothing for a permission the app's manifest does not request.
+fn unapplied(dump: &str, verb: &str, permission: &str) -> Option<&'static str> {
+    let state = dump
+        .lines()
+        .filter_map(|l| {
+            l.trim()
+                .strip_prefix(permission)?
+                .strip_prefix(": granted=")
+        })
+        .map(|rest| rest.starts_with("true"))
+        .reduce(|a, b| a || b);
+    match (verb, state) {
+        ("grant", None) => Some("the app's manifest does not request that permission"),
+        ("grant", Some(false)) => Some("the permission is still not granted"),
+        ("revoke", Some(true)) => Some("the permission is still granted"),
+        _ => None,
+    }
+}
+
 fn permission_name(name: &str) -> Result<String> {
     let full = match name {
         "notifications" => "android.permission.POST_NOTIFICATIONS".to_string(),
@@ -618,7 +663,34 @@ mod barrier_tests {
 
 #[cfg(test)]
 mod permission_tests {
-    use super::permission_name;
+    use super::{permission_name, unapplied};
+
+    const DUMP: &str = "      android.permission.INTERNET: granted=true
+        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_CONTACTS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]";
+
+    #[test]
+    fn a_grant_the_package_manager_accepted_but_did_not_apply_is_a_failure() {
+        assert_eq!(
+            unapplied(DUMP, "grant", "android.permission.POST_NOTIFICATIONS"),
+            None
+        );
+        let why = unapplied(DUMP, "grant", "android.permission.CAMERA").unwrap();
+        assert!(why.contains("does not request"), "{why}");
+        let why = unapplied(DUMP, "grant", "android.permission.READ_CONTACTS").unwrap();
+        assert!(why.contains("still not granted"), "{why}");
+    }
+
+    #[test]
+    fn a_revoke_is_applied_when_the_permission_is_no_longer_granted() {
+        assert_eq!(
+            unapplied(DUMP, "revoke", "android.permission.READ_CONTACTS"),
+            None
+        );
+        assert_eq!(unapplied(DUMP, "revoke", "android.permission.CAMERA"), None);
+        let why = unapplied(DUMP, "revoke", "android.permission.POST_NOTIFICATIONS").unwrap();
+        assert!(why.contains("still granted"), "{why}");
+    }
 
     #[test]
     fn short_names_expand_and_full_names_pass() {

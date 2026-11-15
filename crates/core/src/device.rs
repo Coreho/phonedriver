@@ -283,6 +283,13 @@ pub trait Device: Send + Sync {
             reason: "this device cannot grant permissions",
         })
     }
+    /// Takes runtime permissions away from an installed app, so its next request asks again.
+    async fn revoke(&self, _app: &AppId, _permissions: &[String]) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::App,
+            reason: "this device cannot revoke permissions",
+        })
+    }
     /// Installs the app file at `path` (on the daemon's machine). Returns the new app's id when it can tell.
     async fn install(&self, _path: &std::path::Path) -> Result<Option<AppId>> {
         Err(Error::Unsupported {

@@ -680,6 +680,15 @@ impl Device for IosDevice {
         Ok(())
     }
 
+    async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
+        self.simulator_only()?;
+        for name in permissions {
+            let service = privacy_service(name)?;
+            simctl(&["privacy", &self.udid, "revoke", service, &app.0]).await?;
+        }
+        Ok(())
+    }
+
     /// The lock state comes with every screenshot the poller takes (twice a second when idle), so this costs no
     /// request. A locked iPhone is the user's to open: past the lock screen is the passcode, which phonedriver never
     /// enters, so a locked screen is reported as secure whether or not a passcode is set.

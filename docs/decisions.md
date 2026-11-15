@@ -246,7 +246,9 @@ Secrets. The trace keeps the command text (an agent's command is what it did), b
 
 **Why.** Competitor analysis gap 5: a first launch puts a permission sheet in the way and agents spend two to three calls on it. The tree already held the dialog (all windows are read); what was missing was a handle in the header, a correct `app` line (it named the permission controller), and a way to skip the sheet. A heuristic on package and size rather than a list of every dialog id, because dialogs from OEM permission controllers vary and the packages are stable.
 
-**Rejected.** `launch --auto-allow` (a policy decision for the user: the agent can tap Allow when the task needs it). A `grant` on the `apps` action as well (one place is enough; `launch --grant` grants, then launches). Reading toasts through `TYPE_NOTIFICATION_STATE_CHANGED` (they vanish in about three seconds and cannot be tapped; not done, not tried). Changing a dialog's tappable wrapper so the question is not a `button` (the permission controller wraps its dialog in a tappable layout; the header line carries the question).
+**Rejected.** `launch --auto-allow` (a policy decision for the user: the agent can tap Allow when the task needs it). Reading toasts through `TYPE_NOTIFICATION_STATE_CHANGED` (they vanish in about three seconds and cannot be tapped; not done, not tried). Changing a dialog's tappable wrapper so the question is not a `button` (the permission controller wraps its dialog in a tappable layout; the header line carries the question).
+
+**Changed 2026-11-15.** `apps grant` and `apps revoke` exist beside `launch --grant`. A `grant` on `apps` was rejected here at first ("one place is enough"). Taking a permission away has no launch to ride on, and a developer who tests the denied path or the first-run prompt needs it between two runs of the same app, so both directions are `apps` actions with the same names and the same rule on physical devices.
 
 **Reopen if.** An OEM's dialogs (Samsung, Xiaomi) are missed by the package list; the iOS runner's extra SpringBoard query turns out to cost noticeably per snapshot (not measured: no Simulator run in this change).
 

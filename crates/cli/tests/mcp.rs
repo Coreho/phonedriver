@@ -850,6 +850,35 @@ async fn apps_with_an_action_stops_an_app_and_refuses_a_missing_path() {
     assert_eq!(r.is_error, Some(true), "{r:?}");
 }
 
+#[tokio::test]
+async fn apps_grant_and_revoke_take_permissions_and_say_what_they_did() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.install(&[("com.example.app", "Example")]);
+    let rig = rig_with(fake.clone()).await;
+    let r = rig
+        .call(
+            "apps",
+            json!({"action": "grant", "app": "Example", "permissions": ["camera"]}),
+        )
+        .await;
+    assert_eq!(texts(&r), ["ok granted camera to Example"]);
+    let r = rig
+        .call(
+            "apps",
+            json!({"action": "revoke", "app": "Example", "permissions": ["camera"]}),
+        )
+        .await;
+    assert_eq!(texts(&r), ["ok revoked camera from Example"]);
+    let tools = rig.client.list_all_tools().await.unwrap();
+    let apps = tools.iter().find(|t| t.name == "apps").unwrap();
+    assert!(
+        serde_json::to_string(apps).unwrap().contains("revoke"),
+        "{apps:?}"
+    );
+}
+
 fn test_socket(home: &std::path::Path, name: &str) -> std::path::PathBuf {
     if cfg!(windows) {
         let scope = home.file_name().unwrap().to_string_lossy();

@@ -4582,6 +4582,92 @@ async fn grant_on_a_physical_device_needs_an_app_phonedriver_installed() {
     );
 }
 
+#[tokio::test(start_paused = true)]
+async fn apps_grant_and_revoke_change_an_apps_permissions_without_launching_it() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let r = ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "grant", "app": "Settings", "permissions": ["camera", "location"]}),
+    )
+    .await;
+    assert_eq!(r["summary"], "granted camera, location to Settings");
+    let r = ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "revoke", "app": "Settings", "permissions": ["camera"]}),
+    )
+    .await;
+    assert_eq!(r["summary"], "revoked camera from Settings");
+    let settings = AppId("com.android.settings".into());
+    assert_eq!(
+        fake.calls(),
+        vec![
+            Call::Grant(settings.clone(), vec!["camera".into(), "location".into()]),
+            Call::Revoke(settings, vec!["camera".into()]),
+        ]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn apps_grant_without_permissions_says_what_it_needs() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "grant", "app": "Settings"}),
+    )
+    .await;
+    assert!(e.message.contains("`permissions`"), "{}", e.message);
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+}
+
+#[tokio::test]
+async fn apps_grant_and_revoke_on_a_physical_device_need_an_app_phonedriver_installed() {
+    let (source, fake) = physical();
+    let (d, _home) = daemon(source);
+    for action in ["grant", "revoke"] {
+        let e = err(
+            &d,
+            "default",
+            "app",
+            json!({"action": action, "app": "Theirs", "permissions": ["camera"]}),
+        )
+        .await;
+        assert_eq!(e.code, -32011);
+        assert!(
+            e.message.contains("will not change its permissions"),
+            "{}",
+            e.message
+        );
+    }
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+    ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await;
+    ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "revoke", "app": "Mine", "permissions": ["camera"]}),
+    )
+    .await;
+    assert!(
+        fake.calls()
+            .iter()
+            .any(|c| matches!(c, Call::Revoke(a, _) if a.0 == "com.example.installed"))
+    );
+}
+
 #[tokio::test]
 async fn a_system_dialog_over_an_app_is_named_in_the_header_and_is_not_the_app() {
     let json = r#"{"windows":[
