@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use phonedriver::daemon::rpc::RpcError;
 use phonedriver::daemon::{Config, Daemon, DeviceSource, Listed};
 use phonedriver_core::device::{
-    AppId, Capabilities, Device, DeviceEvent, FrameRef, TextInput, Url,
+    AppId, Capabilities, Device, DeviceEvent, FrameRef, Key, TextInput, Url,
 };
 use phonedriver_core::error::Error;
 use phonedriver_core::geometry::{Point, Rect, Scale};
@@ -2678,8 +2678,31 @@ async fn a_launch_whose_app_is_not_in_front_afterwards_says_which_app_is() {
     assert!(
         summary.contains("Calculator is not in front")
             && summary.contains("com.launcher")
+            && summary.contains("still starting")
             && summary.contains("quit"),
         "{summary}"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_launch_waits_for_an_app_that_comes_to_the_front_late() {
+    let (source, fake) = installed();
+    fake.launch(&AppId("com.launcher".into())).await.unwrap();
+    fake.set_launch_takes(12);
+    let (d, _home) = daemon(source);
+    let started = tokio::time::Instant::now();
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        act_with(json!({"kind": "launch", "app": "Calculator"})),
+    )
+    .await;
+    assert_eq!(r["summary"], "launched Calculator", "{r}");
+    assert!(
+        started.elapsed() > Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
     );
 }
 
@@ -3400,6 +3423,38 @@ fn keyboard_tree() -> RawTree {
         {"p":0,"w":1,"cls":"android.widget.Button","text":"Cancel","b":[0,300,360,360],"f":"vVe","a":["tap"]},
         {"p":-1,"w":2,"cls":"android.inputmethodservice.SoftInputWindow","b":[0,500,360,800],"f":"vVe"}]}"#;
     RawTree::from_android_json(json, Scale { density: 1.0 }).unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_submit_that_leaves_the_keyboard_up_says_so_and_how_to_close_it() {
+    let (source, fake) = FakeSource::polled(vec![keyboard_tree()]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "Gym", "submit": true}}),
+    )
+    .await;
+    assert!(
+        fake.calls().contains(&Call::Key(Key::Enter)),
+        "{:?}",
+        fake.calls()
+    );
+    let summary = r["summary"].as_str().unwrap();
+    assert!(
+        summary.ends_with("and enter left the keyboard up (`press hide-keyboard` closes it)"),
+        "{summary}"
+    );
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "Gym"}}),
+    )
+    .await;
+    assert!(!r["summary"].as_str().unwrap().contains("keyboard"), "{r}");
 }
 
 fn half_covered_tree() -> RawTree {

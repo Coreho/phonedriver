@@ -250,7 +250,12 @@ fn not_ready(
     lines: &[String],
     serial: &str,
 ) -> Error {
-    let tail = lines.join("\n");
+    let tail = lines
+        .iter()
+        .filter(|l| !l.starts_with("\tat ") && !l.starts_with("\t... "))
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
     if exit == Some(OWNED)
         && let Some(held) = lines.iter().rev().find_map(|l| l.strip_prefix("owned "))
         && let Some((pid, host)) = held
@@ -280,6 +285,15 @@ fn not_ready(
             "the agent did not print `ready` within {} s: {tail}",
             limit.as_secs()
         ));
+    }
+    // Observed on the API 37 emulator after its system server died (bench task alarm-gym): the agent's stack ended in
+    // a null `IAccessibilityManager`, 1,200 characters with "Ask the user to run `doctor`" under them, three times.
+    if tail.contains("IAccessibilityManager") && tail.contains("null object reference") {
+        return Error::Refused {
+            detail: format!(
+                "Android's accessibility service is not running on {serial}: the system is still starting, or it crashed and is restarting. Wait 30 seconds and call again; an emulator that stays like this needs a restart"
+            ),
+        };
     }
     if exit == Some(SIGTERM) && tail.is_empty() {
         return transport(
@@ -679,6 +693,45 @@ mod tests {
         )
         .to_string();
         assert!(other.ends_with("before it was ready: boom"), "{other}");
+    }
+
+    #[test]
+    fn an_agent_that_finds_no_accessibility_service_says_the_system_is_not_up_and_to_wait() {
+        let seen = "java.lang.reflect.InvocationTargetException
+\tat java.lang.reflect.Method.invoke(Native Method)
+\tat dev.phonedriver.agent.Accessibility.connect(Accessibility.java:50)
+\tat dev.phonedriver.agent.Main.run(Main.java:59)
+Caused by: java.lang.NullPointerException: Attempt to invoke interface method 'void android.view.accessibility.IAccessibilityManager.registerUiTestAutomationService(android.os.IBinder, android.accessibilityservice.IAccessibilityServiceClient, android.accessibilityservice.AccessibilityServiceInfo, int, int)' on a null object reference
+\tat android.app.UiAutomationConnection.registerUiTestAutomationServiceLocked(UiAutomationConnection.java:689)
+\t... 6 more";
+        let lines: Vec<String> = seen.lines().map(str::to_string).collect();
+        let e = not_ready(Some(1), false, READY_TIMEOUT, &lines, "emulator-5554");
+        assert!(matches!(e, Error::Refused { .. }), "{e:?}");
+        let text = e.to_string();
+        assert!(
+            text.contains("accessibility service is not running on emulator-5554")
+                && text.contains("Wait 30 seconds"),
+            "{text}"
+        );
+        assert!(!text.contains("UiAutomationConnection"), "{text}");
+    }
+
+    #[test]
+    fn an_agent_that_dies_of_an_exception_is_reported_without_the_stack_frames() {
+        let lines: Vec<String> = [
+            "java.lang.IllegalStateException: boom",
+            "\tat a.b.C.d(C.java:1)",
+            "Caused by: java.lang.RuntimeException: why",
+            "\tat x.Y.z(Y.java:2)",
+            "\t... 6 more",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        let text = not_ready(Some(1), false, READY_TIMEOUT, &lines, "emulator-5554").to_string();
+        assert!(
+            text.ends_with("before it was ready: java.lang.IllegalStateException: boom\nCaused by: java.lang.RuntimeException: why"),
+            "{text}"
+        );
     }
 
     #[test]

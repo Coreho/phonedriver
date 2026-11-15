@@ -112,6 +112,12 @@ const FOCUS_STEP: Duration = Duration::from_millis(30);
 const SEARCH_WAIT: Duration = Duration::from_millis(1500);
 const WEB_VIEW_WAIT: Duration = Duration::from_secs(10);
 const LEAVE_WAIT: Duration = Duration::from_millis(2500);
+/// Observed on the API 37 emulator, bench task files-new-folder: Files was launched twice, the launcher was still in
+/// front 2.8 s and 3.0 s later, and Files came to the front about 7 s after the second launch. Each reply said "it may
+/// have quit at start", and the agent spent four more calls on `am start` and `dumpsys` to find it.
+const LATE_START_WAIT: Duration = Duration::from_secs(6);
+const LATE_START_STEP: Duration = Duration::from_millis(250);
+const KEYBOARD_STAYED: &str = ", and enter left the keyboard up (`press hide-keyboard` closes it)";
 /// Observed on the API 37 tablet emulator: the first "Add alarm" tap after a cold Clock launch opened its time picker
 /// after more than 500 ms, so the reply said "no change" while the dialog was on its way, and the agent tapped again.
 const COLD_APP_WINDOW: Duration = Duration::from_secs(30);
@@ -2255,6 +2261,7 @@ impl Actor {
                     self.lap("stop", t);
                 }
                 let t = Instant::now();
+                let started_launch = t;
                 device.launch(&found.id).await?;
                 self.lap("launch", t);
                 let t = Instant::now();
@@ -2270,10 +2277,23 @@ impl Actor {
                 };
                 // Observed on the iOS 26.5 Simulator: Photos crashed at every launch, the home screen stayed, and the
                 // agent read "launched Photos" as a launch that worked and tapped the icon again and again.
-                if let Some(front) = device.foreground().await?.filter(|f| *f != found.id) {
+                let mut front = device.foreground().await?;
+                let late = Instant::now();
+                while front.as_ref().is_some_and(|f| *f != found.id)
+                    && late.elapsed() < LATE_START_WAIT
+                {
+                    tokio::time::sleep(LATE_START_STEP).await;
+                    front = device.foreground().await?;
+                    if front.as_ref() == Some(&found.id) {
+                        self.until_app_content(leaving.as_ref()).await?;
+                    }
+                }
+                if let Some(front) = front.filter(|f| *f != found.id) {
                     summary = format!(
-                        "{summary}, but {} is not in front ({} is): it may have quit at start",
-                        found.name, front.0
+                        "{summary}, but {} is not in front after {} s ({} is): it is still starting, or it quit at start; `snapshot` shows which",
+                        found.name,
+                        started_launch.elapsed().as_secs(),
+                        front.0
                     );
                 }
                 self.finish(s, p.settle, cfg, started, summary, None, None)
@@ -2677,7 +2697,7 @@ impl Actor {
                         ..cfg
                     }
                 };
-                let first = self
+                let mut first = self
                     .finish(
                         s,
                         p.settle,
@@ -2688,6 +2708,15 @@ impl Actor {
                         Some(verify.clone()),
                     )
                     .await?;
+                // Observed in Clock's alarm name field (API 37, bench task alarm-gym): enter left the field and its
+                // keyboard as they were, the reply showed only the text, and the agent took a snapshot and a
+                // screenshot to learn that Save was under the keyboard.
+                if submit
+                    && first.observation.kind != Kind::Full
+                    && first.observation.header.keyboard.is_some()
+                {
+                    first.summary.push_str(KEYBOARD_STAYED);
+                }
                 let Some(keys) = keys.filter(|_| {
                     first.verified == Some(false) && field_empty(s.last.as_ref(), field_ref)
                 }) else {

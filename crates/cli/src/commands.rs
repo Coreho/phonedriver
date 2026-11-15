@@ -1594,7 +1594,12 @@ pub(crate) fn show_shell(result: &Value, json: bool) -> Result<String, Failure> 
 /// The last line of a reply whose screen gives nothing to act on. The MCP server attaches the picture in its place.
 pub(crate) const EMPTY_SCREEN: &str = "hint: this screen gives no element list; `phonedriver screenshot` shows it, and `tap x,y` taps a point on the picture";
 
-/// `save`: how many steps went into the file, and how many of them a replay cannot be sure of.
+/// Observed in the replay evaluation (`docs/bench/replay.md`): files-new-folder saved two launches that had not worked
+/// and two shell commands the agent used to look around, the reply said only "saved 8 steps", and all eight ran again
+/// in every replay.
+const SAVED_STEP_CHARS: usize = 60;
+
+/// `save`: the steps that went into the file, one line each, and how many of them a replay cannot be sure of.
 pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
     if steps.is_empty() {
         return format!(
@@ -1603,6 +1608,17 @@ pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
     }
     let count = |field: &str| steps.iter().filter(|s| !s[field].is_null()).count() as u64;
     let mut out = format!("saved {} to {path}", plural(steps.len() as u64, "step"));
+    for (i, step) in steps.iter().enumerate() {
+        let what = Replay::describe(step);
+        let cut: String = what.chars().take(SAVED_STEP_CHARS).collect();
+        let more = if cut.len() < what.len() { "…" } else { "" };
+        out.push_str(&format!("\n{}. {cut}{more}", i + 1));
+    }
+    if steps.len() > 1 {
+        out.push_str(
+            "\nthe file holds one step a line: delete the line of a step that was a detour",
+        );
+    }
     let by_position = count("by_position");
     if by_position > 0 {
         out.push_str(&format!(

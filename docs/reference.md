@@ -219,6 +219,10 @@ iOS devices and the Simulator answer that logs cannot be read. Decision D58.
 ```
 $ phonedriver save run.steps
 saved 7 steps to run.steps
+1. launch Settings
+2. tap "Network & internet"
+...
+the file holds one step a line: delete the line of a step that was a detour
 $ phonedriver replay run.steps
 replayed 7 steps in 18.1 s
 1. restarted Settings
@@ -228,7 +232,7 @@ screen now:
 ...
 ```
 
-Only calls that worked are saved: actions, waits, shell commands, app installs and permission changes, and settings written by key. An element is saved by its text and role, not by its `@ref`, so the file works in a later session. Where no text singles the element out it is saved by position, and `save` says how many such steps there are. After `save` the session's list starts again empty, so save once before a flow (to a file you throw away) and once after it.
+Only calls that worked are saved: actions, waits, shell commands, app installs and permission changes, and settings written by key. An element is saved by its text and role, not by its `@ref`, so the file works in a later session. Where no text singles the element out it is saved by position, and `save` says how many such steps there are. `save` lists every step it wrote, so a step that was a wrong turn can be seen and its line deleted from the file. After `save` the session's list starts again empty, so save once before a flow (to a file you throw away) and once after it.
 
 A replay stops at the first step that fails, or that changes nothing where it changed the screen when it was saved. It prints the steps that ran, the screen, and the step to go on from:
 

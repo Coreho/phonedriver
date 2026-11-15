@@ -957,7 +957,12 @@ async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
     let r = rig
         .call("replay", json!({"file": path, "save": true}))
         .await;
-    assert_eq!(texts(&r), [format!("saved 2 steps to {path}")]);
+    assert_eq!(
+        texts(&r),
+        [format!(
+            "saved 2 steps to {path}\n1. tap \"One\"\n2. tap \"Two\"\nthe file holds one step a line: delete the line of a step that was a detour"
+        )]
+    );
     let saved = std::fs::read_to_string(&file).unwrap();
     assert!(
         saved

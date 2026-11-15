@@ -44,6 +44,8 @@ pub struct FakeDevice {
     foreground: Mutex<Option<AppId>>,
     url_handler: Mutex<Option<AppId>>,
     quits_at_launch: std::sync::atomic::AtomicBool,
+    slow_launch: Mutex<Option<(usize, AppId)>>,
+    launch_reads: std::sync::atomic::AtomicUsize,
     screen: Mutex<ScreenState>,
     screen_reads: std::sync::atomic::AtomicUsize,
     tree_reads: std::sync::atomic::AtomicUsize,
@@ -86,6 +88,8 @@ impl FakeDevice {
             foreground: Mutex::new(None),
             url_handler: Mutex::new(None),
             quits_at_launch: Default::default(),
+            slow_launch: Mutex::new(None),
+            launch_reads: Default::default(),
             screen_reads: Default::default(),
             tree_reads: Default::default(),
             screen: Mutex::new(ScreenState {
@@ -161,6 +165,13 @@ impl FakeDevice {
     pub fn set_quits_at_launch(&self, quits: bool) {
         self.quits_at_launch
             .store(quits, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// A launched app comes to the front only at the `reads`th `foreground()` call after its launch, as a slow cold
+    /// start does.
+    pub fn set_launch_takes(&self, reads: usize) {
+        self.launch_reads
+            .store(reads, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// The app `open_url` reports as handling a link that names no app.
@@ -361,7 +372,10 @@ impl Device for FakeDevice {
     }
 
     async fn launch(&self, app: &AppId) -> Result<()> {
-        if !self
+        let reads = self.launch_reads.load(std::sync::atomic::Ordering::Relaxed);
+        if reads > 0 {
+            *lock(&self.slow_launch) = Some((reads, app.clone()));
+        } else if !self
             .quits_at_launch
             .load(std::sync::atomic::Ordering::Relaxed)
         {
@@ -464,6 +478,14 @@ impl Device for FakeDevice {
     }
 
     async fn foreground(&self) -> Result<Option<AppId>> {
+        let mut slow = lock(&self.slow_launch);
+        if let Some((left, app)) = slow.as_mut() {
+            *left -= 1;
+            if *left == 0 {
+                *lock(&self.foreground) = Some(app.clone());
+                *slow = None;
+            }
+        }
         Ok(lock(&self.foreground).clone())
     }
 
