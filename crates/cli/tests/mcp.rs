@@ -131,6 +131,7 @@ async fn tools_list_is_the_tools_with_short_descriptions_and_the_cli_required_ar
         ("clipboard", vec![]),
         ("shell", vec!["command"]),
         ("setting", vec![]),
+        ("logs", vec![]),
     ]
     .into_iter()
     .map(|(n, r)| (n.to_string(), r.into_iter().map(String::from).collect()))
@@ -468,7 +469,7 @@ async fn tap_says_its_reply_is_the_new_screen_and_that_tools_go_one_at_a_time() 
 }
 
 #[tokio::test]
-async fn every_tool_says_whether_it_only_reads_and_the_three_that_do_are_marked() {
+async fn every_tool_says_whether_it_only_reads_and_the_four_that_do_are_marked() {
     let rig = rig(vec![tree(&["One"])]).await;
     let tools = rig.client.list_all_tools().await.unwrap();
     let mut read_only = Vec::new();
@@ -485,7 +486,7 @@ async fn every_tool_says_whether_it_only_reads_and_the_three_that_do_are_marked(
         }
     }
     read_only.sort();
-    assert_eq!(read_only, ["screenshot", "snapshot", "wait"]);
+    assert_eq!(read_only, ["logs", "screenshot", "snapshot", "wait"]);
     let then = |name: &str| {
         let t = tools.iter().find(|t| t.name == name).unwrap();
         serde_json::to_string(&*t.input_schema)
@@ -877,6 +878,32 @@ async fn apps_grant_and_revoke_take_permissions_and_say_what_they_did() {
     assert!(
         serde_json::to_string(apps).unwrap().contains("revoke"),
         "{apps:?}"
+    );
+}
+
+#[tokio::test]
+async fn logs_prints_the_crash_then_the_last_lines_of_the_app_in_front() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.answer_logs(phonedriver_core::device::LogReply {
+        text: "I/Example( 222): started\nE/Example( 222): failed to load\n".into(),
+        crash: Some(
+            "java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)".into(),
+        ),
+    });
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("logs", json!({})).await;
+    assert_eq!(
+        texts(&r),
+        [
+            "crashed: java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)\nI/Example( 222): started\nE/Example( 222): failed to load"
+        ]
+    );
+    let r = rig.call("logs", json!({"grep": "failed"})).await;
+    assert!(
+        texts(&r)[0].ends_with("E/Example( 222): failed to load"),
+        "{r:?}"
     );
 }
 

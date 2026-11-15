@@ -401,6 +401,20 @@ pub(crate) enum Verb {
         #[arg(long)]
         secret: bool,
     },
+    /// Print the last log lines of the app in front, or of the named app, and its last crash (Android).
+    Logs {
+        /// The app's name or id; the default is the app in front.
+        app: Option<String>,
+        /// Keep only lines containing one of these words, separated by `|`, ignoring case.
+        #[arg(long)]
+        grep: Option<String>,
+        /// Keep this many of the last lines (default 40, 0 keeps all).
+        #[arg(long)]
+        head: Option<usize>,
+        /// Read this many seconds back (default 60).
+        #[arg(long)]
+        since: Option<u64>,
+    },
     /// A system setting without its screen (Android 17): `setting find dark` lists keys and what each accepts
     /// (`find "dark theme|media volume"` runs several searches), `setting get <key>` reads one,
     /// `setting set <key> <value> [<key> <value>...]` writes and prints the values afterwards, and
@@ -954,6 +968,23 @@ pub(crate) async fn execute_with(
             let r = client.call("shell", with(p)).await?;
             show_shell(&r, g.json)
         }
+        Verb::Logs {
+            app,
+            grep,
+            head,
+            since,
+        } => {
+            let r = client
+                .call(
+                    "logs",
+                    with(json!({"app": app, "grep": grep, "head": head, "since_s": since})),
+                )
+                .await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_logs(&r, since.unwrap_or(60)))
+        }
         Verb::Setting {
             action,
             args,
@@ -1464,6 +1495,29 @@ pub(crate) fn show_shell(result: &Value, json: bool) -> Result<String, Failure> 
     Ok(out)
 }
 
+/// `logs`: the crash first, then how many earlier lines were left out, then the lines.
+pub(crate) fn show_logs(result: &Value, seconds: u64) -> String {
+    let app = result["app"].as_str().unwrap_or_default();
+    let output = result["output"].as_str().unwrap_or_default();
+    let mut out = Vec::new();
+    if let Some(crash) = result["crash"].as_str() {
+        out.push(format!("crashed: {crash}"));
+    }
+    match result["omitted"].as_u64() {
+        Some(n) if n > 0 => out.push(format!(
+            "… {n} earlier lines (narrow them with grep, or set head to 0 for all)"
+        )),
+        _ => {}
+    }
+    if !output.is_empty() {
+        out.push(output.to_string());
+    }
+    if out.is_empty() {
+        return format!("no log lines from {app} in the last {seconds} s");
+    }
+    out.join("\n")
+}
+
 /// `setting`: the matching lines of a search, `key = value` for a read, `ok key = value` and the screen change for
 /// a write, or the action line of an opened screen.
 pub(crate) fn show_setting(result: &Value, asked: &str, json: bool) -> Result<String, Failure> {
@@ -1567,6 +1621,12 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
     if !r.observation.text.is_empty() {
         out.push('\n');
         out.push_str(&r.observation.text);
+    }
+    if let Some(crash) = &r.crashed {
+        out.push_str(&format!(
+            "\ncrashed: {} stopped during this action: {}\nhint: `phonedriver logs {}` prints its last log lines",
+            crash.app, crash.what, crash.app
+        ));
     }
     if let Some(n) = r.unchanged_repeats {
         out.push_str(&format!("\nhint: this action has changed nothing {n} times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"));
@@ -1860,6 +1920,34 @@ mod tests {
                 "hint: this action has changed nothing 3 times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"
             ],
             "{shown}"
+        );
+    }
+
+    #[test]
+    fn an_action_that_crashed_the_app_prints_the_crash_and_how_to_read_the_log() {
+        let mut v = action(true, "full", "@e1 button \"Apps\"");
+        v["crashed"] = json!({"app": "com.example", "what": "java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)"});
+        let shown = show_action(&v, false).unwrap();
+        assert!(
+            shown.contains("\ncrashed: com.example stopped during this action: java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)\nhint: `phonedriver logs com.example` prints its last log lines"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn logs_with_nothing_to_show_says_so() {
+        let shown = show_logs(
+            &json!({"app": "com.example", "output": "", "omitted": 0, "crash": null}),
+            60,
+        );
+        assert_eq!(shown, "no log lines from com.example in the last 60 s");
+        let shown = show_logs(
+            &json!({"app": "com.example", "output": "a\nb", "omitted": 3, "crash": null}),
+            60,
+        );
+        assert_eq!(
+            shown,
+            "… 3 earlier lines (narrow them with grep, or set head to 0 for all)\na\nb"
         );
     }
 

@@ -198,6 +198,20 @@ phonedriver setting open dark_ui_mode                        # shows that settin
 
 The API 37 emulator lists 182 settings on 196 screens; 105 can be written. A write answers with the value the device reports afterwards, and a refusal carries the device's reason. On a physical device, a setting the device marks as needing its user's confirmation (NFC, mobile data, the camera and microphone switches) is refused without `--force`. Older Android, iOS and the Simulator answer that the device has no settings by key: use `shell` there. Decision D57.
 
+### Logs and crashes
+
+On Android, `phonedriver logs` prints the last 40 log lines of the app in front (`logs <app>` for another, `--grep "error|warn"`, `--head 0` for all, `--since 300` to read five minutes back) and, first, its last crash. An action during which the app in front crashed carries the crash in its own reply:
+
+```
+ok tapped @e6 "Busy" at 382,78 · settled in 837ms · new screen
+alert android: "phonedriver testbed keeps stopping"
+...
+crashed: dev.phonedriver.testbed stopped during this action: android.app.RemoteServiceException$CrashedByAdbException: shell-induced crash at android.app.ActivityThread.throwRemoteServiceException(ActivityThread.java:2581)
+hint: `phonedriver logs dev.phonedriver.testbed` prints its last log lines
+```
+
+iOS devices and the Simulator answer that logs cannot be read. Decision D58.
+
 ### Shell
 
 `phonedriver shell "cmd uimode night yes"` runs a command on the device and prints the exit code, the output (cut at 40 lines; `--grep`, `--head`) and what changed on screen. On Android it runs in the agent already on the device, not in a new `adb shell`. On an iOS Simulator it runs through `simctl spawn`, and `shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands. A physical iPhone has no shell. A physical device refuses wipes and removing apps phonedriver did not install unless you pass `--force`. See `docs/bench/history/shell.md` and decision D21.

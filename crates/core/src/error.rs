@@ -188,6 +188,7 @@ pub enum Op {
     Shell,
     Display,
     Setting,
+    Logs,
 }
 
 impl Op {
@@ -209,6 +210,7 @@ impl Op {
             Op::Shell => "shell",
             Op::Display => "display",
             Op::Setting => "setting",
+            Op::Logs => "logs",
         }
     }
 }

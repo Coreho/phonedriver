@@ -7,8 +7,8 @@ use tokio::sync::{broadcast, watch};
 
 use crate::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    FrameRef, Gesture, Image, Key, Quality, Result, ScreenState, ShellReply, ShellRequest,
-    TextInput, Url,
+    FrameRef, Gesture, Image, Key, LogReply, LogRequest, Quality, Result, ScreenState, ShellReply,
+    ShellRequest, TextInput, Url,
 };
 use crate::error::{Error, Op};
 use crate::geometry::Size;
@@ -27,6 +27,7 @@ pub enum Call {
     Grant(AppId, Vec<String>),
     Revoke(AppId, Vec<String>),
     Setting(SettingOp),
+    Logs(AppId, bool),
     Install(std::path::PathBuf),
     AppOp(AppOp, AppId),
     Wake,
@@ -56,6 +57,7 @@ pub struct FakeDevice {
     shot_failures: Mutex<Vec<Error>>,
     order: Mutex<Vec<&'static str>>,
     settings: Mutex<Option<FakeSettings>>,
+    logs: Mutex<Option<LogReply>>,
 }
 
 type FakeSettings = (std::sync::Arc<SettingsIndex>, Vec<(String, String)>);
@@ -100,6 +102,7 @@ impl FakeDevice {
             shot_failures: Mutex::new(Vec::new()),
             order: Mutex::new(Vec::new()),
             settings: Mutex::new(None),
+            logs: Mutex::new(None),
         }
     }
 
@@ -189,6 +192,11 @@ impl FakeDevice {
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         *lock(&self.settings) = Some((std::sync::Arc::new(index), values));
+    }
+
+    /// What `logs()` answers from now on; without it the device has no logs.
+    pub fn answer_logs(&self, reply: LogReply) {
+        *lock(&self.logs) = Some(reply);
     }
 
     /// What `shell()` answers from now on.
@@ -342,6 +350,17 @@ impl Device for FakeDevice {
 
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.record(Call::Revoke(app.clone(), permissions.to_vec()))
+    }
+
+    async fn logs(&self, req: &LogRequest) -> Result<LogReply> {
+        let Some(reply) = lock(&self.logs).clone() else {
+            return Err(Error::Unsupported {
+                op: Op::Logs,
+                reason: "this fake has no logs",
+            });
+        };
+        self.record(Call::Logs(req.app.clone(), req.crashes))?;
+        Ok(reply)
     }
 
     async fn setting(&self, op: SettingOp) -> Result<SettingReply> {

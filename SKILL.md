@@ -23,6 +23,8 @@ Change a setting, send an intent or press a key without tapping through screens.
 2. Act on a ref: `tap @e4`.
 3. Read the lines the action returns: what changed once the screen settled, or the whole new screen. Act from those lines; call `snapshot` when you need the whole screen again. `the screen before the last one is back` means the screen you were shown before the last one returned (a dialog closed, or you went back to a page you had just seen): its lines and refs hold again, apart from the changes listed.
 
+A reply with a `crashed:` line means the app stopped during that action; the line holds the exception, and `logs` prints the app's last log lines (Android). Report a crash you were not asked to cause.
+
 Actions already wait for the screen; use `wait` when something loads later (`wait "Row 640"`, `wait gone:"Loading"`).
 
 A path of taps you can predict goes in one MCP call with `then`: `tap {"target":"More options","then":["Settings","Dark theme"]}` taps each text in order on the screens that follow, and `type {"text":"Paris","then":["Paris, France"]}` types and picks the suggestion. Name every step you expect, even on screens you have not seen: a missing text stops the path and returns that screen, so a wrong guess costs one call.
@@ -77,4 +79,4 @@ Each error has a hint that names the next step; follow it.
 
 ## Verbs
 
-`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `batch`, `clipboard`. The command line also has `find`, `clear`, `open <url>`, `gesture` and `release`.
+`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `batch`, `clipboard`. The command line also has `find`, `clear`, `open <url>`, `gesture` and `release`.

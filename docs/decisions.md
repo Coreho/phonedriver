@@ -754,3 +754,20 @@ The first run is why the `shell` description no longer says to prefer it for set
 **Limits.** Android 17 only, and only where the shell user may run app functions: seen on a userdebug emulator image, not on a retail phone. The other packages with the same functions (Play services, Digital Wellbeing) are not indexed. Values are the device's strings, passed through. The sensitivity mark `MUST_PROVIDE_UNDO` (airplane mode, Bluetooth, the hotspot; 4 settings) is not acted on.
 
 **Reopen if.** A retail Android 17 phone refuses the shell user; `getDeviceStateItem` starts working (a read becomes one call); third-party apps publish functions worth a general tool.
+
+## D58. A crash is said in the reply of the action that caused it, and `logs` reads the app's lines
+
+**Choice.** After an action that ends on a new screen (any action but `launch` and `open`), the daemon asks the device whether the app that was in front crashed since the action began, and a crash goes into the reply: `crashed: <app> stopped during this action: <exception> at <frame>`, with a hint naming `logs`. `logs` is a CLI verb, an MCP tool and a daemon method: the last 40 lines the app logged in the last 60 seconds, its last crash first. Android only. The crash buffer is read with `logcat -b crash -d -T <device time>` through the agent's shell; an app's lines are picked with `--uid`, because the pid is gone once it has crashed.
+
+**Why.** The people who file issues on these tools are developers testing their own app (the roadmap research, 2026-11-15), and logs are what they ask for next after screenshots; mobile-mcp and agent-device have them. For an agent, a crash looked like any other screen change: the launcher, or the app's earlier screen after Android restarts it. The system's "keeps stopping" dialog shows only from the second crash. Saying it in the reply costs the agent no call and no decision to look.
+
+**Rejected.** Reading the crash log only when the app in front changed: Android often restarts the app on its previous screen after a crash, which is the case an agent cannot see. A check on every action: most actions change part of a screen and cannot be a crash that the agent would miss. Logs as an `apps` action: hints name the verb (`phonedriver logs`), and a hint must name something that exists as a tool.
+
+**Evidence.** API 37 emulator, 2026-11-15. With `am crash dev.phonedriver.testbed` timed to fire during a tap, the tap answered `ok tapped @e6 "Busy" ... new screen`, the system's `alert android: "phonedriver testbed keeps stopping"`, and `crashed: dev.phonedriver.testbed stopped during this action: android.app.RemoteServiceException$CrashedByAdbException: shell-induced crash at android.app.ActivityThread.throwRemoteServiceException(ActivityThread.java:2581)`. `logs dev.phonedriver.testbed --grep AndroidRuntime` printed the same crash and the trace. The planted crash is the system's own (`am crash`), not an exception thrown by the app's code on a tap: the testbed has no button that crashes.
+
+**Cost.** The read took 70.7, 73.4, 79.2 and 99.8 ms on the emulator, on the actions that showed a new screen (their settle and tree reads took 0.8 to 2.9 s). An action that changes part of a screen, or nothing, pays nothing. The `logs` tool adds 219 characters to the tool list (16 tools, 4,815 characters).
+
+**Limits.** Java and Kotlin crashes only: a native crash writes a tombstone, not a `FATAL EXCEPTION` block, and an ANR is not a crash. Only the app that was in front before the action is checked. `--uid` was tried on API 37 only. iOS has no implementation: the Simulator's `log show` and a device's crash reports are not wired.
+
+**Reopen if.** The read shows up in the speed benchmark (then the agent keeps one crash-buffer reader open and answers from memory); a testbed button that throws lets the app's own frame be proven; someone asks for iOS.
+

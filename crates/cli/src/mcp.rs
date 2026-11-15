@@ -82,6 +82,15 @@ struct AppsArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct LogsArgs {
+    device: Option<String>,
+    app: Option<String>,
+    grep: Option<String>,
+    /// The last lines to keep; default 40, 0 for all.
+    head: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct SettingArgs {
     device: Option<String>,
     find: Option<String>,
@@ -1145,6 +1154,24 @@ impl Mcp {
             action: action.to_string(),
             args,
             force: a.force.unwrap_or(false),
+        };
+        self.run(a.device, verb, None).await
+    }
+
+    #[tool(
+        description = "An app's last log lines and its last crash (Android). `app` defaults to the one in front; `grep` keeps lines with these words (`a|b`).",
+        annotations(
+            title = "Read an app's logs",
+            read_only_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn logs(&self, Parameters(a): Parameters<LogsArgs>) -> CallToolResult {
+        let verb = Verb::Logs {
+            app: a.app,
+            grep: a.grep,
+            head: a.head.map(|h| h as usize),
+            since: None,
         };
         self.run(a.device, verb, None).await
     }

@@ -9,7 +9,8 @@ use std::time::Duration;
 use base64::Engine;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DisplayMode,
-    FrameRef, Gesture, Key, Quality, ScreenState, ShellRequest, TextInput, TimedPoint, Url,
+    FrameRef, Gesture, Key, LogRequest, Quality, ScreenState, ShellRequest, TextInput, TimedPoint,
+    Url,
 };
 use phonedriver_core::diff::{Change, DiffOrFull, Field, diff};
 use phonedriver_core::element::{Actions, Element, ElementState, Ref, Role, Source};
@@ -37,9 +38,9 @@ use super::verify::{Expect, Verdict, Verify};
 use super::{guard, secret_field};
 use crate::wire::{
     ActParams, Action, ActionResult, AppParams, Approval, BatchParams, BatchResult,
-    ClipboardParams, FindParams, Kind, Observation, PinchDirection, ScreenshotParams,
-    ScreenshotResult, SettingParams, ShellParams, ShellResult, SnapshotParams, Step, StepFailure,
-    StepResult, Target, TypeMode, WaitCondition, WaitParams,
+    ClipboardParams, Crashed, FindParams, Kind, LogsParams, Observation, PinchDirection,
+    ScreenshotParams, ScreenshotResult, SettingParams, ShellParams, ShellResult, SnapshotParams,
+    Step, StepFailure, StepResult, Target, TypeMode, WaitCondition, WaitParams,
 };
 
 pub const LEASE_TTL: Duration = Duration::from_secs(600);
@@ -50,6 +51,9 @@ pub const LEASE_TTL: Duration = Duration::from_secs(600);
 pub const TERMINAL_HOLD: Duration = Duration::from_secs(30);
 const TICK: Duration = Duration::from_millis(5);
 const SETTING_LINES: usize = 12;
+const LOGS_SINCE_S: u64 = 60;
+/// Added to an action's own time when its crash log is read, for the action's preparation before the clock started.
+const CRASH_MARGIN: Duration = Duration::from_secs(2);
 const SETTING_LINES_OF_MANY: usize = 4;
 const SCREEN_WAIT: Duration = Duration::from_secs(3);
 const KEYGUARD_WAIT: Duration = Duration::from_millis(1000);
@@ -126,6 +130,7 @@ pub enum Call {
     Clipboard(ClipboardParams),
     Shell(ShellParams),
     Setting(SettingParams),
+    Logs(LogsParams),
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
@@ -584,6 +589,7 @@ impl Actor {
             }
             Call::Shell(p) => to_value(self.shell(s, p).await?),
             Call::Setting(p) => self.setting(s, p).await?,
+            Call::Logs(p) => self.logs(s, p).await?,
             Call::Health => self.health().await?,
             Call::Release | Call::Leased => json!({}),
         };
@@ -759,6 +765,42 @@ impl Actor {
             ms,
             action,
         })
+    }
+
+    /// The last lines an app logged, the app in front unless one is named, and its last crash (decision D58).
+    async fn logs(&mut self, s: &mut Session, p: LogsParams) -> Result<Value, Error> {
+        let device = self.device()?;
+        let app = match p.app {
+            Some(name) => find_app(&device.apps().await?, &name)?.id.clone(),
+            None => {
+                let now = self.fresh(s).await?;
+                let front = now.header.app.as_ref().map(|a| a.id.clone());
+                AppId(front.ok_or(Error::Unsupported {
+                    op: Op::Logs,
+                    reason: "no app is in front; name one with `app`",
+                })?)
+            }
+        };
+        let reply = device
+            .logs(&LogRequest {
+                app: app.clone(),
+                since: Duration::from_secs(p.since_s.unwrap_or(LOGS_SINCE_S)),
+                crashes: false,
+            })
+            .await?;
+        let all = shell::tidy(&reply.text, "", p.grep.as_deref(), 0);
+        let lines: Vec<&str> = all.text.lines().collect();
+        let keep = match p.head.unwrap_or(shell::DEFAULT_HEAD) {
+            0 => lines.len(),
+            n => n.min(lines.len()),
+        };
+        let omitted = lines.len() - keep;
+        Ok(json!({
+            "app": app.0,
+            "output": lines[omitted..].join("\n"),
+            "omitted": omitted,
+            "crash": reply.crash,
+        }))
     }
 
     /// Finds, reads, writes or opens a system setting by key (decision D57). A write settles and reports the
@@ -1695,6 +1737,13 @@ impl Actor {
         ) {
             self.guard_view = None;
         }
+        let leaves = matches!(&p.action, Action::Launch { .. } | Action::Open { .. });
+        let front = s
+            .last
+            .as_ref()
+            .and_then(|last| last.header.app.as_ref())
+            .map(|app| app.id.clone());
+        let began = Instant::now();
         let acted = self.act_now(s, p).await;
         if acted.is_err() {
             self.awake = None;
@@ -1702,6 +1751,20 @@ impl Actor {
         let mut result = acted?;
         result.woke = woke;
         result.unlocked = unlocked;
+        if let Some(app) = front.filter(|_| !leaves && result.observation.kind == Kind::Full) {
+            let t = Instant::now();
+            let asked = LogRequest {
+                app: AppId(app.clone()),
+                since: began.elapsed() + CRASH_MARGIN,
+                crashes: true,
+            };
+            if let Ok(reply) = self.device()?.logs(&asked).await
+                && let Some(what) = reply.crash
+            {
+                result.crashed = Some(Crashed { app, what });
+            }
+            self.lap("crash_log", t);
+        }
         // Run i18: after a launch that changed nothing, an agent tapped the same icon again and again.
         s.idle = match s.idle.take() {
             _ if !result.settled || result.changed => None,
@@ -3004,6 +3067,7 @@ impl Actor {
         self.lap("render", render);
         Ok(ActionResult {
             unchanged_repeats: None,
+            crashed: None,
             ok: true,
             summary,
             via: via.map(str::to_string),
@@ -3095,6 +3159,7 @@ impl Actor {
                 s.set_last(Some(rendered));
                 ActionResult {
                     unchanged_repeats: None,
+                    crashed: None,
                     ok: true,
                     summary: String::new(),
                     via: None,
@@ -3203,6 +3268,7 @@ impl Actor {
                 s.set_last(Some(rendered));
                 return Ok(ActionResult {
                     unchanged_repeats: None,
+                    crashed: None,
                     ok: true,
                     summary,
                     via: None,
@@ -3302,6 +3368,7 @@ impl Actor {
         s.set_last(Some(rendered));
         Ok(ActionResult {
             unchanged_repeats: None,
+            crashed: None,
             ok: true,
             summary: "screen settled".into(),
             via: None,
@@ -3544,6 +3611,7 @@ fn scroll_container(now: &Rendered, direction: Direction) -> Option<&Element> {
 fn delivered(s: &Session, summary: String, via: Option<&'static str>) -> ActionResult {
     ActionResult {
         unchanged_repeats: None,
+        crashed: None,
         ok: true,
         summary,
         via: via.map(str::to_string),

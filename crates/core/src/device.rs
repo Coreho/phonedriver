@@ -199,6 +199,22 @@ pub enum AppOp {
     Uninstall,
 }
 
+/// What `Device::logs` reads: the log lines of `app` from the last `since`, or (`crashes`) only whether it crashed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogRequest {
+    pub app: AppId,
+    pub since: std::time::Duration,
+    pub crashes: bool,
+}
+
+/// `text` is the app's lines, oldest first (empty for a crash-only request). `crash` is the app's last crash in
+/// that time: the exception and the frame that threw it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LogReply {
+    pub text: String,
+    pub crash: Option<String>,
+}
+
 /// A command for the device's own shell. `Debug` never prints the command, because it may hold a secret.
 #[derive(Clone, PartialEq, Eq)]
 pub struct ShellRequest {
@@ -289,6 +305,12 @@ pub trait Device: Send + Sync {
         Err(Error::Unsupported {
             op: Op::App,
             reason: "this device cannot revoke permissions",
+        })
+    }
+    async fn logs(&self, _req: &LogRequest) -> Result<LogReply> {
+        Err(Error::Unsupported {
+            op: Op::Logs,
+            reason: "this device's app logs cannot be read; Android devices have them",
         })
     }
     /// System settings as typed reads and writes: the index of what there is, one value, or a write (which answers

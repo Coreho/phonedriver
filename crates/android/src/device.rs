@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    DisplayMode, FrameRef, Gesture, Image, ImageFormat, Key, Quality, Result, ScreenState,
-    ShellReply, ShellRequest, TextInput, Url,
+    DisplayMode, FrameRef, Gesture, Image, ImageFormat, Key, LogReply, LogRequest, Quality, Result,
+    ScreenState, ShellReply, ShellRequest, TextInput, Url,
 };
 use phonedriver_core::error::{Error, Op};
 use phonedriver_core::geometry::{Rect, Size};
@@ -19,6 +19,7 @@ use tokio::sync::{broadcast, watch};
 use crate::adb::Adb;
 use crate::agent::{Agent, AgentLog, Launched};
 use crate::control::Control;
+use crate::logs;
 use crate::map;
 use crate::settings;
 
@@ -154,16 +155,7 @@ impl AndroidDevice {
     }
 
     async fn pm_permissions(&self, verb: &str, app: &AppId, permissions: &[String]) -> Result<()> {
-        let package_ok = !app.0.is_empty()
-            && app
-                .0
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_');
-        if !package_ok {
-            return Err(Error::Transport {
-                detail: format!("{:?} is not a package name", app.0),
-            });
-        }
+        package_name(app)?;
         let mut full = Vec::new();
         for name in permissions {
             let permission = permission_name(name)?;
@@ -337,6 +329,25 @@ impl Device for AndroidDevice {
 
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.pm_permissions("revoke", app, permissions).await
+    }
+
+    async fn logs(&self, req: &LogRequest) -> Result<LogReply> {
+        package_name(&req.app)?;
+        let seconds = req.since.as_secs() + 1;
+        let run = |command: String| async move {
+            let request = ShellRequest {
+                command,
+                timeout: LOGS_LIMIT,
+            };
+            Ok::<_, Error>(self.shell(&request).await?.stdout)
+        };
+        let crash = logs::crash_of(&run(logs::crash_command(seconds)).await?, &req.app.0);
+        let text = if req.crashes {
+            String::new()
+        } else {
+            run(logs::app_command(&req.app.0, seconds)).await?
+        };
+        Ok(LogReply { text, crash })
     }
 
     async fn setting(&self, op: SettingOp) -> Result<SettingReply> {
@@ -518,6 +529,24 @@ fn unapplied(dump: &str, verb: &str, permission: &str) -> Option<&'static str> {
         ("grant", Some(false)) => Some("the permission is still not granted"),
         ("revoke", Some(true)) => Some("the permission is still granted"),
         _ => None,
+    }
+}
+
+const LOGS_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// An app id goes into shell commands, so it must look like a package name.
+fn package_name(app: &AppId) -> Result<()> {
+    let ok = !app.0.is_empty()
+        && app
+            .0
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_');
+    if ok {
+        Ok(())
+    } else {
+        Err(Error::Transport {
+            detail: format!("{:?} is not a package name", app.0),
+        })
     }
 }
 

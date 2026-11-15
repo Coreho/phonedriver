@@ -203,6 +203,9 @@ pub struct ActionResult {
     /// How many times in a row this same action has settled with no change, from the third time on.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub unchanged_repeats: Option<u32>,
+    /// The app that was in front crashed during the action.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub crashed: Option<Crashed>,
     /// The screen was off and the action woke it first.
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub woke: bool,
@@ -210,6 +213,13 @@ pub struct ActionResult {
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub unlocked: bool,
     pub observation: Observation,
+}
+
+/// `what` is the exception and the frame that threw it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Crashed {
+    pub app: String,
+    pub what: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -292,6 +302,17 @@ pub struct AppParams {
     pub path: Option<String>,
     #[serde(default)]
     pub permissions: Vec<String>,
+}
+
+/// An app's recent log lines (`docs/protocol.md`, `logs`). `app` defaults to the one in front.
+#[derive(Debug, Deserialize)]
+pub struct LogsParams {
+    pub app: Option<String>,
+    pub grep: Option<String>,
+    /// The last lines to keep; default 40, 0 keeps all.
+    pub head: Option<usize>,
+    /// How far back to read, in seconds; default 60.
+    pub since_s: Option<u64>,
 }
 
 /// A system setting by key (`docs/protocol.md`, `setting`): `find` searches (`a|b` for several searches), `key`
