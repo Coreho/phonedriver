@@ -2415,3 +2415,14 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Together: 109 of 110 replays passed with no model call. The one miss: `the agent did not print ready within 10 s` at a daemon start.
 - A pass I threw away is described in the entry above this one (the disk I filled).
 - Not done: waits before a step, variables for typed text and a file digest (agent-device has them; no replay here failed for lack of them). Trimming an agent's detours. iOS. A replay after an app's labels changed. An agent doing each task a second time, which is the fair comparison for time.
+
+## 2026-11-15: `press fingerprint` from another machine, and on an app's own prompt (D68)
+
+- Why: the user asked to push the fingerprint key further; D63 worked only with phonedriver on the emulator's machine and was never tried on an app's prompt.
+- Found by hand first, from the mini through the adb tunnel: `adb shell '(printf "auth …\r\nfinger touch 2\r\nfinger remove\r\nquit\r\n"; sleep 1) | nc -w 3 10.0.2.2 5554'` answered `Authentication required`, then `OK` four times. The emulator's own network reaches its host's loopback at 10.0.2.2.
+- Built: `Adb::exec_stream`, `console::touch_sensor_on` (the console's lines over any open connection; `touch_sensor` connects and calls it), and in `AndroidDevice::touch_sensor` the remote branch in place of the refusal. In the Android testbed: a `biometric` screen (not in the tab bar; `--es tab biometric`) with a button that shows `BiometricPrompt` and logs `biometric` events, and the `USE_BIOMETRIC` permission.
+- Tests: `cargo test --locked -p phonedriver-android --lib console`: 5 passed, the new one among them (it failed to compile before `touch_sensor_on` existed).
+- The testbed was built on win-pc (`gradlew.bat assembleDebug`, JDK 22) and installed there. The emulator's copy was signed by the mini's debug key, so the install was refused (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) until I uninstalled the old one. The mini's test rig will meet the same refusal the next time it installs its own build.
+- Live from the mini (daemon there, emulator on win-pc, token file in a temporary home): enrollment `0%`, `49%`, `100%`, `Fingerprint added`; on the testbed's prompt `press wrong-fingerprint` gave `Not recognized` and `{"ev":"biometric","result":"failed"}`, `press fingerprint` gave `{"ev":"biometric","result":"succeeded"}` and `Payment confirmed`. The full lines are in D68.
+- Put back: `locksettings clear --old 1234` (`Lock credential cleared`), `set-disabled true`, no `fingerId` left, the temporary home with the token deleted from the mini.
+- Not done: the local path (phonedriver on the emulator's machine) was not run again after the refactor; its four unit tests pass. No older API level. No device test in the suite, since the suite's rig cannot enroll a fingerprint by itself.

@@ -1,10 +1,13 @@
 //! The console of an Android emulator: the control port it opens on the machine that runs it (5554 for
 //! `emulator-5554`). It is how a test touches the emulated fingerprint sensor (decision D63). The console asks for
 //! the token the emulator wrote to `.emulator_console_auth_token` in the home folder of whoever started it.
+//!
+//! The port listens on that machine's loopback only. From another machine it is reached from inside the emulator,
+//! where the host's loopback is `10.0.2.2`.
 
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
 const ANSWER_WAIT: Duration = Duration::from_secs(3);
@@ -23,7 +26,17 @@ pub async fn touch_sensor(addr: &str, token: Option<&str>, finger: u32) -> Resul
         .await
         .map_err(|_| format!("the emulator console at {addr} did not answer"))?
         .map_err(|e| format!("cannot reach the emulator console at {addr}: {e}"))?;
-    let (read, mut write) = stream.into_split();
+    touch_sensor_on(stream, token, finger).await
+}
+
+/// `touch_sensor` over a connection to the console that is already open, such as one made from inside the
+/// emulator when the console's machine is not this one.
+pub async fn touch_sensor_on(
+    console: impl AsyncRead + AsyncWrite + Unpin,
+    token: Option<&str>,
+    finger: u32,
+) -> Result<(), String> {
+    let (read, mut write) = tokio::io::split(console);
     let mut lines = BufReader::new(read).lines();
     let mut answer = async |sent: Option<String>| -> Result<String, String> {
         if let Some(line) = sent {
@@ -54,7 +67,7 @@ pub async fn touch_sensor(addr: &str, token: Option<&str>, finger: u32) -> Resul
         let token = token
             .map(str::trim)
             .filter(|t| !t.is_empty())
-            .ok_or("the emulator console asks for a token and .emulator_console_auth_token was not found in the home folder")?;
+            .ok_or("the emulator console asks for a token: `.emulator_console_auth_token`, from the home folder of whoever started the emulator, has to be in the home folder here")?;
         answer(Some(format!("auth {token}"))).await?;
     }
     answer(Some(format!("finger touch {finger}"))).await?;
@@ -112,6 +125,27 @@ mod tests {
         assert_eq!(
             served.await.unwrap(),
             ["auth s3cr3t", "finger touch 1", "finger remove"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_touch_goes_over_a_connection_that_is_already_open() {
+        let (ours, theirs) = tokio::io::duplex(1024);
+        let served = tokio::spawn(async move {
+            let (read, mut write) = tokio::io::split(theirs);
+            write.write_all(ASKS.as_bytes()).await.unwrap();
+            let mut lines = BufReader::new(read).lines();
+            let mut got = Vec::new();
+            for _ in 0..3 {
+                got.push(lines.next_line().await.unwrap().unwrap());
+                write.write_all(b"OK\r\n").await.unwrap();
+            }
+            got
+        });
+        touch_sensor_on(ours, Some("s3cr3t"), 2).await.unwrap();
+        assert_eq!(
+            served.await.unwrap(),
+            ["auth s3cr3t", "finger touch 2", "finger remove"]
         );
     }
 

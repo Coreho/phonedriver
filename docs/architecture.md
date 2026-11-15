@@ -550,7 +550,7 @@ Measured in task 5.6 (`docs/bench/history/m4.md`, Mac mini M4, iPhone 17 simulat
 - iOS runner signing requires a Mac with Xcode.
 - iOS 17 to 26 devices have no frame stream, so settle and screenshots are slower.
 - DRM video renders black on both platforms.
-- Biometric prompts (Face ID, fingerprint) need the user, except on an Android emulator, whose fingerprint sensor `press fingerprint` touches (decision D63).
+- Biometric prompts (Face ID, fingerprint) need the user, except on an Android emulator, whose fingerprint sensor `press fingerprint` touches (decisions D63 and D68: the emulator's console, reached directly when the emulator is on this machine and through `nc 10.0.2.2 <port>` on the device when adb is behind `ADB_SERVER_SOCKET`).
 - No audio capture or camera injection. A recording (`record`) has no sound, ends when the screen turns, and is unplayable if the daemon is killed before `record stop` (the index is written last). On iOS only the Simulator records; an iPhone does not.
 - No file push or pull (for example a photo to upload). Add only when an agent task needs it.
 - No GPS location simulation.

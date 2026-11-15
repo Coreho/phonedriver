@@ -131,20 +131,24 @@ impl AndroidDevice {
         let port = console::port(&self.serial).ok_or(unsupported(
             "a phone's fingerprint sensor takes its owner's finger; only an emulator's can be touched from here",
         ))?;
-        if !self.adb.is_local() {
-            return Err(unsupported(
-                "the emulator's console is on the machine that runs the emulator, and adb here is reached through ADB_SERVER_SOCKET; run phonedriver on that machine",
-            ));
-        }
         let token = std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))
             .and_then(|home| {
                 let file = std::path::Path::new(&home).join(".emulator_console_auth_token");
                 std::fs::read_to_string(file).ok()
             });
-        console::touch_sensor(&format!("127.0.0.1:{port}"), token.as_deref(), finger)
-            .await
-            .map_err(|detail| Error::Transport { detail })
+        let touched = if self.adb.is_local() {
+            console::touch_sensor(&format!("127.0.0.1:{port}"), token.as_deref(), finger).await
+        } else {
+            // Behind `ADB_SERVER_SOCKET` the console's machine is not this one. The emulator's own network gives
+            // its host's loopback the address 10.0.2.2, so `nc` on the device reaches the console.
+            let through = self
+                .adb
+                .exec_stream(&self.serial, &format!("nc 10.0.2.2 {port}"))
+                .await?;
+            console::touch_sensor_on(through, token.as_deref(), finger).await
+        };
+        touched.map_err(|detail| Error::Transport { detail })
     }
 
     async fn simple(&self, op: Op, req: Value) -> Result<Value> {

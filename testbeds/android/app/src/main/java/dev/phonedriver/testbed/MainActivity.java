@@ -136,6 +136,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
                 screen = Screens.secure(this);
                 break;
             case "dialogs": screen = Screens.dialogs(this); break;
+            case "biometric": screen = Screens.biometric(this); break;
             case "web": screen = Screens.web(this); break;
             case "webopaque": screen = Screens.web(this, false); break;
             case "settle": screen = Screens.settle(this); break;

@@ -903,3 +903,17 @@ The first run is why the `shell` description no longer says to prefer it for set
 
 **Reopen if.** A replay presses the wrong thing through an id (then keep the role with it as a check); iOS replays show identifiers that repeat.
 
+## D68. The emulator's console is reached through the emulator when adb is on another machine
+
+**Choice.** `press fingerprint` and `press wrong-fingerprint` no longer refuse when adb is behind `ADB_SERVER_SOCKET`. The console listens on the loopback of the machine that runs the emulator; inside the emulator that loopback is `10.0.2.2`. So the daemon opens `exec:nc 10.0.2.2 <port>` on the device through adb and speaks the console's lines over that stream (`console::touch_sensor_on`). The token is still read from `.emulator_console_auth_token` in the home folder here, so for a remote emulator the user copies that one file over once. With adb on this machine the console is reached directly, as in D63.
+
+**Why.** The user asked for the fingerprint key to work beyond D63's two limits: only on the emulator's own machine, and never tried on an app's prompt. The first is this project's own test setup (the daemon on a Mac, the emulators on a PC) and any farm of emulators. The second needed a prompt to try it on, which the Android testbed now has.
+
+**Rejected.** adb's `tcp:<port>:<host>` service: adbd refuses connections to other hosts. `adb emu`: it is the adb client that connects to the console, on its own machine, and phonedriver speaks to the adb server itself (D11). A variable or a flag for the token: a file with the name the emulator already uses needs no new setting, and the token never passes through a command line. Sending the lines as a shell command (`printf … | nc`): the token would be in the device's process list for a moment; over `exec:` it is only bytes on the stream.
+
+**Evidence.** Mac mini, adb through the tunnel to win-pc, API 37 emulator, 2026-11-15, the token file in a temporary home that was deleted afterwards. Enrollment from Settings: three `press fingerprint` calls took `Touch the sensor` to `progress "0%"`, `"49%"`, `"100%"` and `Fingerprint added`. Then the testbed's new `biometric` screen, which shows the system's `BiometricPrompt` as an app does before a payment: `tap "Confirm with fingerprint"` showed `heading "Confirm payment"`, `Pad thai, $12.00` and `image "Fingerprint sensor"`; `press wrong-fingerprint` changed it to `Try again` with `Not recognized`, and the app logged `{"ev":"biometric","result":"failed"}`; `press fingerprint` closed the prompt, the app logged `{"ev":"biometric","result":"succeeded"}` and the screen said `Payment confirmed`. Unit test `a_touch_goes_over_a_connection_that_is_already_open` (the same three lines over an in-memory stream). Afterwards the PIN and the fingerprint were removed and the lock screen turned off again (`get-disabled` `true`, no `fingerId`).
+
+**Limits.** One emulator, one API level. `nc` has to be on the emulator image (it is on API 37; older images were not tried). An emulator with custom networking may not have `10.0.2.2`. The remote path has no automated test against a device; the local path was not run again after the code was shared between the two. Face unlock is not built. iOS is D69.
+
+**Reopen if.** An image without `nc` is used (then a forwarder in the on-device agent); someone needs the remote path without copying the file.
+

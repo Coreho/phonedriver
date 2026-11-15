@@ -33,6 +33,8 @@
     <item name="gesture_surface" type="id" />
     <item name="busy_progress" type="id" />
     <item name="secret_label" type="id" />
+    <item name="biometric_ask" type="id" />
+    <item name="biometric_result" type="id" />
     <item name="open_dialog" type="id" />
     <item name="ask_permission" type="id" />
     <item name="web" type="id" />

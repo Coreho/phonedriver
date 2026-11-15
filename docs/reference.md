@@ -247,7 +247,7 @@ Text typed with `--secret` is never in the file; a replay stops at that step for
 
 ### Fingerprint on an emulator
 
-On an Android emulator, `phonedriver press fingerprint` touches the fingerprint sensor with the finger a test enrolls, and `phonedriver press wrong-fingerprint` with another. Enroll by opening fingerprint setup in Settings and pressing `fingerprint` until it says the fingerprint was added; after that the same key passes a fingerprint prompt or unlocks the emulator, and `wrong-fingerprint` fails it. phonedriver has to run on the machine that runs the emulator. A physical phone answers that its sensor takes its owner's finger. Decision D63.
+On an Android emulator, `phonedriver press fingerprint` touches the fingerprint sensor with the finger a test enrolls, and `phonedriver press wrong-fingerprint` with another. Enroll by opening fingerprint setup in Settings and pressing `fingerprint` until it says the fingerprint was added; after that the same key passes a fingerprint prompt or unlocks the emulator, and `wrong-fingerprint` fails it. When phonedriver is on another machine than the emulator (adb through `ADB_SERVER_SOCKET`), copy the file `.emulator_console_auth_token` from the home folder of whoever started the emulator into your home folder here: the emulator's console asks for it. A physical phone answers that its sensor takes its owner's finger. Decisions D63 and D68.
 
 ### Recording the screen
 

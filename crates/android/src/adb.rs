@@ -317,6 +317,12 @@ impl Adb {
         }
     }
 
+    /// Starts a command whose input and output are the stream itself, unframed (`exec:`): for a command that is a
+    /// connection, such as `nc`.
+    pub async fn exec_stream(&self, serial: &str, cmd: &str) -> Result<TcpStream> {
+        self.transport_stream(serial, &format!("exec:{cmd}")).await
+    }
+
     /// Starts a command and keeps the stream open. Closing the stream kills the command on the device.
     pub async fn shell_stream(&self, serial: &str, cmd: &str) -> Result<ShellStream> {
         let s = self
