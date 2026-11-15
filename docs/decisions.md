@@ -819,3 +819,17 @@ The first run is why the `shell` description no longer says to prefer it for set
 
 **Reopen if.** Someone on Linux asks (then Tesseract's command line, tried on a real Linux host); the duplicate lines cost an agent a wrong tap; a user wants icons found on a screen with no text.
 
+## D62. A screen with nothing to act on arrives with its picture
+
+**Choice.** When a reply's screen has a hollow tree (no elements, or a web view with none inside) and no text read from its pixels, the observation says `empty: true`. The command line adds one hint line: `this screen gives no element list; \`phonedriver screenshot\` shows it, and \`tap x,y\` taps a point on the picture`. The MCP server replaces that line with the picture itself, as an image block in the same tool result, for `snapshot`, every action, `wait` and `batch`.
+
+**Why.** On such a screen the element list gives an agent nothing, and the only way on is the picture and points on it. Without this, every step on a game or a canvas costs two calls and two model turns: the action, then `screenshot`. On a Linux host, which has no text recognition (D61), every web view with accessibility off is such a screen.
+
+**Rejected.** A picture with every reply: a 411 by 923 PNG is about 27 kB and some 500 tokens, paid on screens whose element list already says everything. Calling a screen sparse by how much of it its elements cover: a home screen is mostly wallpaper and is not sparse; the rule that held is the one the daemon already used to decide when to read pixels (`tree_is_hollow`).
+
+**Evidence.** `a_screen_with_nothing_to_act_on_comes_with_its_picture` and `a_screen_with_elements_comes_without_a_picture` in `crates/cli/tests/mcp.rs` (a `SurfaceView` and nothing else: the snapshot and a tap at a point each return one image block and the note; a screen with a button returns none). Live on the API 37 emulator through `phonedriver mcp` on the Mac mini, the testbed's `webopaque` tab, in a call where Apple Vision failed: the `snapshot` result was the tab bar's lines, `@e7 webview`, the note, and `image/png` of 26,780 bytes, which I opened: the web form with its Send button at 31,259. In a later call Vision worked, the reply had ten `(ocr)` lines and no picture, and `tap` at `30,259` made the testbed log `{"ev":"web","field":"send"}`.
+
+**Limits.** A screen with one stray label is not empty and gets no picture; `screenshot` is still there for it. The picture is one pixel per point. No agent run measures the calls saved. Not tried on a game.
+
+**Reopen if.** An agent run on a canvas app shows it still asks for screenshots (then the rule is too narrow); the pictures show up in a token audit of ordinary runs (then it is too wide).
+

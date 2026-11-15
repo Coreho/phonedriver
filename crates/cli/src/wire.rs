@@ -184,6 +184,10 @@ pub struct Observation {
     /// The device's own tree JSON, only when the request asked to capture a fixture.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub capture: Option<String>,
+    /// The screen gives nothing to act on: no elements (or a web view with none inside) and no text read from
+    /// its pixels.
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    pub empty: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

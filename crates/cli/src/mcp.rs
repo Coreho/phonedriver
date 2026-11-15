@@ -580,7 +580,7 @@ impl Mcp {
             .await;
         let Some((label, app, category, details)) = first.as_ref().err().and_then(approval_needed)
         else {
-            return Outcome::Done(self.reply(first));
+            return Outcome::Done(self.reply(&globals, first).await);
         };
         let asked = commitment(&label, app.as_deref(), category, &details);
         let prompt = format!("Your agent wants to do this on your phone:\n{asked}\nAllow it?");
@@ -624,7 +624,7 @@ impl Mcp {
                         execute_with(client, verb(), secret, &globals).await
                     })
                     .await;
-                Outcome::Done(self.reply(second))
+                Outcome::Done(self.reply(&globals, second).await)
             }
         }
     }
@@ -667,7 +667,7 @@ impl Mcp {
             let Some((label, app, category, details)) =
                 result.as_ref().err().and_then(approval_needed)
             else {
-                return Outcome::Done(self.reply(result));
+                return Outcome::Done(self.reply(&globals, result).await);
             };
             let held = result
                 .as_ref()
@@ -806,11 +806,46 @@ impl Mcp {
         })
     }
 
-    fn reply(&self, result: Result<String, Failure>) -> CallToolResult {
-        match result {
-            Ok(text) => text_result(self.told.trim(success_text(text))),
-            Err(f) => failure(&f),
-        }
+    /// The tool result for a command's output. A reply that ends by saying its screen gives no element list
+    /// gets the screen's picture attached, so the agent does not spend a call and a turn asking for it.
+    async fn reply(&self, globals: &Globals, result: Result<String, Failure>) -> CallToolResult {
+        let text = match result {
+            Ok(text) => text,
+            Err(f) => return failure(&f),
+        };
+        let Some(above) = text.strip_suffix(crate::commands::EMPTY_SCREEN) else {
+            return text_result(self.told.trim(success_text(text)));
+        };
+        let note = match self.shot(globals, false).await {
+            Ok(ScreenshotResult {
+                data_b64: Some(data),
+                ..
+            }) => {
+                return CallToolResult::success(vec![
+                    ContentBlock::text(format!(
+                        "{}\nthis screen gives no element list: its picture is attached; tap a point on it as `x,y`",
+                        self.told.trim(success_text(above.trim_end().to_string()))
+                    )),
+                    ContentBlock::image(data, "image/png"),
+                ]);
+            }
+            _ => text,
+        };
+        text_result(self.told.trim(success_text(note)))
+    }
+
+    async fn shot(&self, globals: &Globals, marks: bool) -> Result<ScreenshotResult, Failure> {
+        self.with_client(async |client| {
+            let mut params = json!({"inline": true, "marks": marks});
+            if let Some(d) = &globals.device {
+                params["device"] = json!(d);
+            }
+            crate::commands::put_display(&mut params, globals.display);
+            let reply = client.call("screenshot", params).await?;
+            serde_json::from_value::<ScreenshotResult>(reply)
+                .map_err(|e| Failure::Local(format!("the daemon sent an unexpected reply: {e}")))
+        })
+        .await
     }
 
     async fn run_with(
@@ -822,10 +857,7 @@ impl Mcp {
         let result = self
             .with_client(async |client| execute_with(client, verb, secret, &globals).await)
             .await;
-        match result {
-            Ok(text) => text_result(self.told.trim(success_text(text))),
-            Err(f) => failure(&f),
-        }
+        self.reply(&globals, result).await
     }
 }
 
@@ -1292,20 +1324,7 @@ impl Mcp {
         }
         let marks = a.marks.unwrap_or(false);
         let globals = self.globals(a.device);
-        let shot = self
-            .with_client(async |client| {
-                let mut params = json!({"inline": true, "marks": marks});
-                if let Some(d) = &globals.device {
-                    params["device"] = json!(d);
-                }
-                crate::commands::put_display(&mut params, globals.display);
-                let reply = client.call("screenshot", params).await?;
-                serde_json::from_value::<ScreenshotResult>(reply).map_err(|e| {
-                    Failure::Local(format!("the daemon sent an unexpected reply: {e}"))
-                })
-            })
-            .await;
-        let shot = match shot {
+        let shot = match self.shot(&globals, marks).await {
             Ok(s) => s,
             Err(f) => return failure(&f),
         };

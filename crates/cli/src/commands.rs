@@ -897,11 +897,16 @@ pub(crate) async fn execute_with(
             if g.json {
                 return Ok(result.to_string());
             }
-            Ok(if obs.text.is_empty() {
+            let mut out = if obs.text.is_empty() {
                 "no change".to_string()
             } else {
                 obs.text
-            })
+            };
+            if obs.empty {
+                out.push('\n');
+                out.push_str(EMPTY_SCREEN);
+            }
+            Ok(out)
         }
         Verb::Screenshot { output, marks } => {
             let mut params = json!({"marks": marks});
@@ -1583,6 +1588,9 @@ pub(crate) fn show_shell(result: &Value, json: bool) -> Result<String, Failure> 
     Ok(out)
 }
 
+/// The last line of a reply whose screen gives nothing to act on. The MCP server attaches the picture in its place.
+pub(crate) const EMPTY_SCREEN: &str = "hint: this screen gives no element list; `phonedriver screenshot` shows it, and `tap x,y` taps a point on the picture";
+
 /// `save`: how many steps went into the file, and how many of them a replay cannot be sure of.
 pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
     if steps.is_empty() {
@@ -1953,7 +1961,10 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
             crash.app, crash.what, crash.app
         ));
     }
-    if let Some(n) = r.unchanged_repeats {
+    if r.observation.empty {
+        out.push('\n');
+        out.push_str(EMPTY_SCREEN);
+    } else if let Some(n) = r.unchanged_repeats {
         out.push_str(&format!("\nhint: this action has changed nothing {n} times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"));
     } else if r.settled && !r.changed {
         out.push_str("\nhint: nothing changed; the tap may have missed, or changed only what the element list does not show (a web checkbox): `phonedriver screenshot` shows the picture");

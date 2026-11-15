@@ -334,6 +334,14 @@ async fn next_signal(live: &mut Option<Live>) -> Signal {
     }
 }
 
+/// True when the screen the session now holds gives an agent nothing to act on: a hollow tree, and no text read
+/// from its pixels either (a game, a canvas, or a host with no text recognition).
+fn nothing_to_act_on(s: &Session) -> bool {
+    s.last.as_ref().is_some_and(|last| {
+        tree_is_hollow(last) && !last.elements.iter().any(|e| e.source == Source::Ocr)
+    })
+}
+
 fn zero() -> Rect {
     Rect {
         x: 0.0,
@@ -595,11 +603,27 @@ impl Actor {
 
     async fn dispatch(&mut self, s: &mut Session, call: Call) -> Result<Value, Error> {
         let value = match call {
-            Call::Snapshot(p) => to_value(self.snapshot(s, p).await?),
+            Call::Snapshot(p) => {
+                let mut seen = self.snapshot(s, p).await?;
+                seen.empty = nothing_to_act_on(s);
+                to_value(seen)
+            }
             Call::Screenshot(p) => to_value(self.screenshot(s, p).await?),
-            Call::Act(p) => to_value(self.act(s, p).await?),
-            Call::Wait(p) => to_value(self.wait(s, p).await?),
-            Call::Batch(p) => to_value(self.batch(s, p).await?),
+            Call::Act(p) => {
+                let mut done = self.act(s, p).await?;
+                done.observation.empty = nothing_to_act_on(s);
+                to_value(done)
+            }
+            Call::Wait(p) => {
+                let mut done = self.wait(s, p).await?;
+                done.observation.empty = nothing_to_act_on(s);
+                to_value(done)
+            }
+            Call::Batch(p) => {
+                let mut done = self.batch(s, p).await?;
+                done.observation.empty = nothing_to_act_on(s);
+                to_value(done)
+            }
             Call::Find(p) => {
                 let now = self.fresh(s).await?;
                 to_value(s.find(&now, &p.text, p.role))
@@ -1492,6 +1516,7 @@ impl Actor {
             loading: rendered.loading(),
             elements: p.elements.then(|| rendered.elements.clone()),
             capture,
+            empty: false,
         };
         s.set_last(Some(rendered));
         Ok(obs)
@@ -3217,6 +3242,7 @@ impl Actor {
             loading: rendered.loading(),
             elements,
             capture: None,
+            empty: false,
         };
         s.set_last(Some(rendered));
         self.lap("render", render);
@@ -3310,6 +3336,7 @@ impl Actor {
                     loading: rendered.loading(),
                     elements: None,
                     capture: None,
+                    empty: false,
                 };
                 s.set_last(Some(rendered));
                 ActionResult {
@@ -3418,6 +3445,7 @@ impl Actor {
                     loading: rendered.loading(),
                     elements: None,
                     capture: None,
+                    empty: false,
                 };
                 s.set_last(Some(rendered));
                 return Ok(ActionResult {
@@ -3518,6 +3546,7 @@ impl Actor {
             loading: rendered.loading(),
             elements: None,
             capture: None,
+            empty: false,
         };
         s.set_last(Some(rendered));
         Ok(ActionResult {
@@ -3791,6 +3820,7 @@ fn delivered(s: &Session, summary: String, via: Option<&'static str>) -> ActionR
             loading: false,
             elements: None,
             capture: None,
+            empty: false,
         },
     }
 }

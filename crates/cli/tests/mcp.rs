@@ -882,6 +882,54 @@ async fn apps_grant_and_revoke_take_permissions_and_say_what_they_did() {
     );
 }
 
+fn bare_screen() -> RawTree {
+    RawTree::from_android_json(
+        r#"{"windows":[{"id":1,"type":"application","package":"com.game","bounds":[0,0,360,800]}],"nodes":[
+        {"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"},
+        {"p":0,"w":1,"cls":"android.view.SurfaceView","b":[0,0,360,800],"f":"vVe"}]}"#,
+        phonedriver_core::geometry::Scale { density: 1.0 },
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_screen_with_nothing_to_act_on_comes_with_its_picture() {
+    let rig = rig(vec![bare_screen()]).await;
+    let r = rig.call("snapshot", json!({})).await;
+    let text = texts(&r).join("\n");
+    assert!(
+        r.content.iter().any(|c| c.as_image().is_some()),
+        "no image: {text}"
+    );
+    assert!(
+        text.contains(
+            "\nthis screen gives no element list: its picture is attached; tap a point on it as `x,y`"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("phonedriver screenshot"), "{text}");
+
+    let r = rig
+        .call("tap", json!({"target": "100,200", "autonomous": true}))
+        .await;
+    let text = texts(&r).join("\n");
+    assert!(
+        r.content.iter().any(|c| c.as_image().is_some()),
+        "no image after a tap: {text}"
+    );
+    assert_eq!(text.matches("its picture is attached").count(), 1, "{text}");
+}
+
+#[tokio::test]
+async fn a_screen_with_elements_comes_without_a_picture() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("snapshot", json!({})).await;
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+    assert!(!texts(&r).join("\n").contains("picture"), "{r:?}");
+    let r = rig.call("tap", json!({"target": "One"})).await;
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+}
+
 #[tokio::test]
 async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
     use phonedriver_core::testing::Call;

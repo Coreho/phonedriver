@@ -89,6 +89,7 @@ type Observation = {
   kind: "full" | "diff",
   changed: boolean, settled: boolean, settle_ms: number,
   still_changing?: Rect,          // the union of recent changed boxes when settled is false
+  empty?: true,                   // nothing to act on: a hollow tree and no text read from the pixels (decision D62)
   loading: boolean,
   elements?: Element[],           // only with `elements: true` (CLI --json)
   capture?: string                // the device's own tree JSON with a `density` key, only with `capture: true`
