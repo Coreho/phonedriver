@@ -120,6 +120,7 @@ async fn tools_list_is_the_tools_with_short_descriptions_and_the_cli_required_ar
         ("devices", vec![]),
         ("snapshot", vec![]),
         ("screenshot", vec![]),
+        ("replay", vec!["file"]),
         ("tap", vec!["target"]),
         ("type", vec!["text"]),
         ("swipe", vec![]),
@@ -879,6 +880,87 @@ async fn apps_grant_and_revoke_take_permissions_and_say_what_they_did() {
         serde_json::to_string(apps).unwrap().contains("revoke"),
         "{apps:?}"
     );
+}
+
+#[tokio::test]
+async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
+    use phonedriver_core::testing::Call;
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One", "Two",
+    ])]));
+    let rig = rig_with(fake.clone()).await;
+    let taps = || {
+        fake.calls()
+            .iter()
+            .filter(|c| matches!(c, Call::Gesture(_)))
+            .count()
+    };
+    let file = rig.home.path().join("run.steps");
+    let path = file.to_str().unwrap();
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert!(texts(&r)[0].starts_with("nothing to save"), "{r:?}");
+
+    rig.call("snapshot", json!({})).await;
+    rig.call("tap", json!({"target": "@e1"})).await;
+    rig.call("tap", json!({"target": "Two"})).await;
+    assert_eq!(taps(), 2);
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert_eq!(texts(&r), [format!("saved 2 steps to {path}")]);
+    let saved = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        saved
+            .lines()
+            .next()
+            .unwrap()
+            .contains(r#""target":{"role":"button","text":"One"}"#),
+        "{saved}"
+    );
+
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_ne!(r.is_error, Some(true), "{text}");
+    assert!(text.starts_with("replayed 2 steps in "), "{text}");
+    assert!(text.contains("\n1. tapped @e1 \"One\""), "{text}");
+    assert!(text.contains("screen now:\n"), "{text}");
+    assert_eq!(taps(), 4);
+
+    let more = format!(
+        "{saved}{}\n{}\n{}\n",
+        json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "Gone"}}}}),
+        json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "One"}}}, "changed": true}),
+        json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "Two"}}}}),
+    );
+    std::fs::write(&file, more).unwrap();
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_eq!(r.is_error, Some(true), "{text}");
+    assert!(
+        text.starts_with("step 3 of 5 (tap \"Gone\") failed: no element matches \"Gone\""),
+        "{text}"
+    );
+    assert!(text.contains("\n2. tapped @e2 \"Two\""), "{text}");
+    assert!(
+        text.contains(
+            "Do step 3 yourself, then replay the same file from step 4 for the 2 steps left."
+        ),
+        "{text}"
+    );
+    assert_eq!(taps(), 6);
+
+    let r = rig.call("replay", json!({"file": path, "from": 4})).await;
+    let text = texts(&r).join("\n");
+    assert!(
+        text.starts_with("step 4 of 5 (tap \"One\") failed: it changed nothing this time; when it was saved it changed the screen"),
+        "{text}"
+    );
+    let r = rig.call("replay", json!({"file": path, "from": 5})).await;
+    assert!(texts(&r)[0].starts_with("replayed 1 step in "), "{r:?}");
+    let r = rig.call("replay", json!({"file": path, "from": 6})).await;
+    assert!(texts(&r)[0].contains("there is no step 6"), "{r:?}");
 }
 
 #[tokio::test]

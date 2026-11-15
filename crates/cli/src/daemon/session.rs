@@ -33,6 +33,7 @@ pub struct Session {
     gone: Vec<Element>,
     /// The summary of the last action that settled with no change, and how many times in a row it has.
     pub idle: Option<(String, u32)>,
+    pub journal: super::journal::Journal,
 }
 
 /// How many dropped text fields a session remembers.

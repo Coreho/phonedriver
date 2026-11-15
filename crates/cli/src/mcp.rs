@@ -117,6 +117,17 @@ struct ScreenshotArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ReplayArgs {
+    device: Option<String>,
+    file: String,
+    /// Write the file instead of running it.
+    save: Option<bool>,
+    /// Start at this step.
+    from: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct ClipboardArgs {
     device: Option<String>,
     set: Option<String>,
@@ -1174,6 +1185,29 @@ impl Mcp {
             grep: a.grep,
             head: a.head.map(|h| h as usize),
             since: None,
+        };
+        self.run(a.device, verb, None).await
+    }
+
+    #[tool(
+        description = "Run a saved steps file again in one call; it stops at the first step that fails and shows the screen. `save: true` writes the file from this session's actions: do it when a task that worked will be asked again.",
+        annotations(
+            title = "Replay saved steps",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
+    )]
+    async fn replay(&self, Parameters(a): Parameters<ReplayArgs>) -> CallToolResult {
+        let file = std::path::PathBuf::from(a.file);
+        let verb = if a.save.unwrap_or(false) {
+            Verb::Save { file }
+        } else {
+            Verb::Replay {
+                file,
+                from: a.from.map_or(1, |n| n as usize),
+            }
         };
         self.run(a.device, verb, None).await
     }

@@ -401,6 +401,21 @@ pub(crate) enum Verb {
         #[arg(long)]
         secret: bool,
     },
+    /// Save what this session has done so far as a steps file that `replay` runs again with no model. The
+    /// session's list of steps starts again empty.
+    Save {
+        /// Where to write the steps, one JSON object a line.
+        file: PathBuf,
+    },
+    /// Run a steps file from `save`, in order, with no model. It stops at the first step that fails, or that
+    /// changes nothing where it changed the screen when saved, prints the screen and says how to go on.
+    Replay {
+        /// The steps file.
+        file: PathBuf,
+        /// Start at this step (1 is the first), after doing the one before it yourself.
+        #[arg(long, default_value_t = 1)]
+        from: usize,
+    },
     /// Record the screen to an MP4 file (Android): `record start`, the actions to show, then `record stop`, which
     /// prints the file and, beside it, a `.steps.jsonl` file of the actions done meanwhile with their times.
     Record {
@@ -978,6 +993,49 @@ pub(crate) async fn execute_with(
             let r = client.call("shell", with(p)).await?;
             show_shell(&r, g.json)
         }
+        Verb::Save { file } => {
+            let mut out = std::fs::File::create(&file)
+                .map_err(|e| Failure::Local(format!("cannot write {}: {e}", file.display())))?;
+            let r = client.call("journal", with(json!({}))).await?;
+            let steps = r["steps"].as_array().cloned().unwrap_or_default();
+            let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
+            std::io::Write::write_all(&mut out, text.as_bytes())
+                .map_err(|e| Failure::Local(format!("cannot write {}: {e}", file.display())))?;
+            if g.json {
+                return Ok(
+                    json!({"path": file, "steps": steps.len(), "over": r["over"]}).to_string(),
+                );
+            }
+            Ok(show_saved(
+                &file.display().to_string(),
+                &steps,
+                r["over"] == true,
+            ))
+        }
+        Verb::Replay { file, from } => {
+            let text = std::fs::read_to_string(&file)
+                .map_err(|e| Failure::Local(format!("cannot read {}: {e}", file.display())))?;
+            let steps = text
+                .lines()
+                .enumerate()
+                .filter(|(_, l)| !l.trim().is_empty())
+                .map(|(i, l)| {
+                    serde_json::from_str::<Value>(l).map_err(|e| {
+                        Failure::Local(format!(
+                            "line {} of {} is not a step: {e}",
+                            i + 1,
+                            file.display()
+                        ))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let run = Replay {
+                file: file.display().to_string(),
+                steps,
+                from,
+            };
+            run.play(client, &act, &with, g.json).await
+        }
         Verb::Record { action, output } => {
             let mut params = json!({"action": action});
             if let Some(out) = output {
@@ -1523,6 +1581,212 @@ pub(crate) fn show_shell(result: &Value, json: bool) -> Result<String, Failure> 
         out.push_str(&seen.join("\n"));
     }
     Ok(out)
+}
+
+/// `save`: how many steps went into the file, and how many of them a replay cannot be sure of.
+pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
+    if steps.is_empty() {
+        return format!(
+            "nothing to save: this session has done no action since its last save ({path} is empty)"
+        );
+    }
+    let count = |field: &str| steps.iter().filter(|s| !s[field].is_null()).count() as u64;
+    let mut out = format!("saved {} to {path}", plural(steps.len() as u64, "step"));
+    let by_position = count("by_position");
+    if by_position > 0 {
+        out.push_str(&format!(
+            "\n{by_position} of them tap a position, because no text singles out the element: they hold only while the layout does"
+        ));
+    }
+    let manual = count("manual");
+    if manual > 0 {
+        out.push_str(&format!(
+            "\n{manual} of them need a person or a model (a secret): a replay stops there"
+        ));
+    }
+    if over {
+        out.push_str(&format!(
+            "\nonly the first {} steps were kept",
+            crate::daemon::journal::MAX
+        ));
+    }
+    out
+}
+
+/// A steps file being run again.
+pub(crate) struct Replay {
+    pub file: String,
+    pub steps: Vec<Value>,
+    pub from: usize,
+}
+
+impl Replay {
+    /// What a step does, in words that do not depend on the refs of the run it was saved from.
+    fn describe(step: &Value) -> String {
+        if let Some(what) = step["manual"].as_str() {
+            return what.to_string();
+        }
+        let params = &step["params"];
+        let action = &params["action"];
+        let target = |t: &Value| match (t["text"].as_str(), t["point"].as_object()) {
+            (Some(text), _) => format!(" \"{text}\""),
+            (None, Some(p)) => format!(" {},{}", p["x"], p["y"]),
+            _ => String::new(),
+        };
+        match step["method"].as_str().unwrap_or_default() {
+            "act" => {
+                let kind = action["kind"].as_str().unwrap_or("act");
+                let what = ["app", "url", "key", "direction"]
+                    .iter()
+                    .find_map(|f| action[*f].as_str())
+                    .map(|v| format!(" {v}"))
+                    .unwrap_or_default();
+                let typed = action["text"]
+                    .as_str()
+                    .map(|t| format!(" \"{t}\""))
+                    .unwrap_or_default();
+                let on = ["target", "into", "until", "from", "at"]
+                    .iter()
+                    .map(|f| target(&action[*f]))
+                    .find(|t| !t.is_empty())
+                    .unwrap_or_default();
+                let into = if typed.is_empty() || on.is_empty() {
+                    ""
+                } else {
+                    " into"
+                };
+                format!("{kind}{what}{typed}{into}{on}")
+            }
+            "shell" => format!("shell {}", params["command"].as_str().unwrap_or_default()),
+            method => format!("{method} {params}"),
+        }
+    }
+
+    pub async fn play(
+        &self,
+        client: &mut Client,
+        act: &(dyn Fn(Value) -> Value + Sync),
+        with: &(dyn Fn(Value) -> Value + Sync),
+        json: bool,
+    ) -> Result<String, Failure> {
+        let total = self.steps.len();
+        if self.from == 0 || self.from > total {
+            return Err(Failure::Local(format!(
+                "{} has {}; there is no step {}",
+                self.file,
+                plural(total as u64, "step"),
+                self.from
+            )));
+        }
+        let started = std::time::Instant::now();
+        let mut done = Vec::new();
+        for (i, step) in self.steps.iter().enumerate().skip(self.from - 1) {
+            let outcome = match (step["manual"].as_str(), step["method"].as_str()) {
+                (Some(what), _) => Err(refused(what)),
+                (None, Some("act")) => {
+                    client
+                        .call("act", act(step["params"]["action"].clone()))
+                        .await
+                }
+                (None, Some(method @ ("wait" | "shell" | "setting" | "app"))) => {
+                    client.call(method, with(step["params"].clone())).await
+                }
+                _ => Err(refused("this is not a step this version can run")),
+            };
+            let outcome = match outcome {
+                Ok(r) if step["changed"] == true && r["changed"] == false => Err(refused(
+                    "it changed nothing this time; when it was saved it changed the screen",
+                )),
+                other => other,
+            };
+            match outcome {
+                Ok(r) => done.push(format!(
+                    "{}. {}",
+                    i + 1,
+                    r["summary"]
+                        .as_str()
+                        .map_or_else(|| Replay::describe(step), str::to_string)
+                )),
+                Err(failure) => {
+                    return Err(self.stopped(client, with, i + 1, &done, failure).await);
+                }
+            }
+        }
+        let ran = done.len() as u64;
+        let ms = started.elapsed().as_millis() as u64;
+        if json {
+            return Ok(json!({"ok": true, "steps": ran, "ms": ms}).to_string());
+        }
+        let mut out = format!(
+            "replayed {} in {:.1} s\n{}",
+            plural(ran, "step"),
+            ms as f64 / 1000.0,
+            done.join("\n")
+        );
+        if let Some(screen) = screen_now(client, with).await {
+            out.push_str("\nscreen now:\n");
+            out.push_str(&screen);
+        }
+        Ok(out)
+    }
+
+    /// The failure of step `n`, with what ran before it, the screen, and how to go on from here.
+    async fn stopped(
+        &self,
+        client: &mut Client,
+        with: &(dyn Fn(Value) -> Value + Sync),
+        n: usize,
+        done: &[String],
+        failure: Failure,
+    ) -> Failure {
+        let total = self.steps.len();
+        let step = Replay::describe(&self.steps[n - 1]);
+        let mut error = match failure {
+            Failure::Rpc(e) => e,
+            Failure::Local(m) => match refused(&m) {
+                Failure::Rpc(e) => e,
+                Failure::Local(_) => return Failure::Local(m),
+            },
+        };
+        let mut text = format!("step {n} of {total} ({step}) failed: {}", error.message);
+        for line in done {
+            text.push('\n');
+            text.push_str(line);
+        }
+        if let Some(screen) = screen_now(client, with).await {
+            text.push_str("\nscreen now:\n");
+            text.push_str(&screen);
+        }
+        let hint = if n < total {
+            format!(
+                "Do step {n} yourself, then replay the same file from step {} for the {} left.",
+                n + 1,
+                plural((total - n) as u64, "step")
+            )
+        } else {
+            format!("Do step {n} yourself; it is the last one.")
+        };
+        error.message = text;
+        if let Some(data) = error.data.as_object_mut() {
+            data.insert("hint".into(), json!(hint));
+            data.insert("step".into(), json!(n));
+        }
+        Failure::Rpc(error)
+    }
+}
+
+fn refused(detail: &str) -> Failure {
+    Failure::Rpc(
+        phonedriver_core::error::Error::Refused {
+            detail: detail.to_string(),
+        }
+        .into(),
+    )
+}
+
+async fn screen_now(client: &mut Client, with: &(dyn Fn(Value) -> Value + Sync)) -> Option<String> {
+    let reply = client.call("snapshot", with(json!({}))).await.ok()?;
+    reply["text"].as_str().map(str::to_string)
 }
 
 /// `record`: where a started recording goes, or the finished file with its length, size and steps file.

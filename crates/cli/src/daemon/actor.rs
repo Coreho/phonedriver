@@ -32,6 +32,7 @@ use tokio::time::Instant;
 
 use super::DeviceSource;
 use super::checkbox;
+use super::journal::{self, Kept};
 use super::session::{Resolved, Session};
 use super::shell;
 use super::verify::{Expect, Verdict, Verify};
@@ -133,6 +134,8 @@ pub enum Call {
     Setting(SettingParams),
     Logs(LogsParams),
     Record(RecordParams),
+    /// The session's steps so far, taken out of it.
+    Journal,
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
@@ -605,7 +608,15 @@ impl Actor {
                 self.need(Capabilities::APPS, Op::Apps, "this device cannot list apps")?;
                 to_value(self.device()?.apps().await?)
             }
-            Call::App(p) => self.app(s, p).await?,
+            Call::App(p) => {
+                let step = journal::call(
+                    "app",
+                    json!({"action": p.action, "app": p.app, "path": p.path, "permissions": p.permissions}),
+                );
+                let done = self.app(s, p).await?;
+                s.journal.push(step);
+                done
+            }
             Call::Clipboard(p) => {
                 self.need(
                     Capabilities::CLIPBOARD,
@@ -621,8 +632,41 @@ impl Actor {
                     None => json!({"text": device.clipboard(ClipboardOp::Get).await?}),
                 }
             }
-            Call::Shell(p) => to_value(self.shell(s, p).await?),
-            Call::Setting(p) => self.setting(s, p).await?,
+            Call::Shell(p) => {
+                let step = if p.secret {
+                    journal::manual("a shell command was run here with `--secret`; run it again")
+                } else if p.force {
+                    journal::call("shell", json!({"command": p.command, "force": true}))
+                } else {
+                    journal::call("shell", json!({"command": p.command}))
+                };
+                let done = self.shell(s, p).await?;
+                s.journal.push(step);
+                to_value(done)
+            }
+            Call::Setting(p) => {
+                let mut params = json!({});
+                for (name, value) in [
+                    ("key", json!(p.key)),
+                    ("value", json!(p.value)),
+                    ("values", json!(p.values)),
+                    ("open", json!(p.open)),
+                ] {
+                    if !value.is_null() {
+                        params[name] = value;
+                    }
+                }
+                if p.force {
+                    params["force"] = json!(true);
+                }
+                let writes = p.value.is_some() || p.values.is_some() || p.open.is_some();
+                let done = self.setting(s, p).await?;
+                if writes {
+                    s.journal.push(journal::call("setting", params));
+                }
+                done
+            }
+            Call::Journal => s.journal.take(),
             Call::Logs(p) => self.logs(s, p).await?,
             Call::Record(p) => self.record(p).await?,
             Call::Health => self.health().await?,
@@ -1850,6 +1894,7 @@ impl Actor {
             .and_then(|last| last.header.app.as_ref())
             .map(|app| app.id.clone());
         let began = Instant::now();
+        let kept = Kept::of(&p.action, s);
         let acted = self.act_now(s, p).await;
         if acted.is_err() {
             self.awake = None;
@@ -1858,6 +1903,7 @@ impl Actor {
         if let Some(taping) = &mut self.recording {
             taping.step(began, &result.summary);
         }
+        s.journal.push(kept.step(&result));
         result.woke = woke;
         result.unlocked = unlocked;
         if let Some(app) = front.filter(|_| !leaves && result.observation.kind == Kind::Full) {
@@ -3316,17 +3362,16 @@ impl Actor {
     }
 
     async fn wait(&mut self, s: &mut Session, p: WaitParams) -> Result<ActionResult, Error> {
-        match p.condition {
+        let condition = p.condition.clone();
+        let mut step = journal::wait(&condition, s);
+        let result = match condition {
             WaitCondition::Settled(_) => self.wait_settled(s, p).await,
-            WaitCondition::Appears(ref t) => {
-                let t = t.clone();
-                self.wait_for(s, &t, true, p.timeout_ms).await
-            }
-            WaitCondition::Gone(ref t) => {
-                let t = t.clone();
-                self.wait_for(s, &t, false, p.timeout_ms).await
-            }
-        }
+            WaitCondition::Appears(ref t) => self.wait_for(s, t, true, p.timeout_ms).await,
+            WaitCondition::Gone(ref t) => self.wait_for(s, t, false, p.timeout_ms).await,
+        }?;
+        step["summary"] = json!(result.summary);
+        s.journal.push(step);
+        Ok(result)
     }
 
     /// Waits until the target is on screen (or gone). The tree is read once at the start and then once after each

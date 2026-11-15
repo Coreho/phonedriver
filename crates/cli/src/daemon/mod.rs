@@ -9,6 +9,7 @@ pub mod android;
 pub mod checkbox;
 pub mod guard;
 pub mod ios;
+pub mod journal;
 pub mod progress;
 pub mod rpc;
 pub mod secret_field;
@@ -206,7 +207,8 @@ impl Daemon {
                 Ok(json!({"same": last.as_deref() == Some(line.as_str())}))
             }
             "release" | "snapshot" | "screenshot" | "act" | "wait" | "batch" | "find" | "apps"
-            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "record" => {
+            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "record"
+            | "journal" => {
                 let common: Common = rpc::params(params)?;
                 if method == "release" && common.device.is_none() {
                     self.release_everywhere(session).await;
@@ -220,6 +222,7 @@ impl Daemon {
                     "apps" => Call::Apps,
                     "app" => Call::App(rpc::params(params)?),
                     "health" => Call::Health,
+                    "journal" => Call::Journal,
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
                     "shell" => Call::Shell(rpc::params(params)?),
                     "logs" => Call::Logs(rpc::params(params)?),

@@ -48,6 +48,7 @@ A permission sheet, an "isn't responding" box or another system dialog shows in 
 - `scroll down` reveals more of a list; `scroll down --until "Row 640"` reaches a known row. `swipe` is for other gestures: pulling a sheet, reordering with `to`, zooming with `pinch`.
 - A line ending in `under-keyboard` is hidden by the keyboard: `press hide-keyboard`, then tap.
 - `screenshot` (with `marks` to box each tappable element with its ref) covers what the snapshot lacks: a map, a drawing, a photo, a game. Look at the image before tapping a point on it.
+- A task that worked and will be asked again: `save <file>` (MCP: `replay` with `save: true`) writes your steps, and `replay <file>` runs them in one call next time. When a replay stops at a step, do that step, then replay from the next one (`--from N`, MCP `from`).
 - Asked for a video of what you do (Android): `record start`, the actions, then `record stop` (MCP: `screenshot` with `record: "start"`, then `"stop"`). The reply names the MP4 file and a list of your actions with their times.
 - `launch` reopens an app where it was left (Settings may open inside a sub-page); `launch --restart` (MCP `restart: true`) stops it first so it opens on its first screen.
 
@@ -80,4 +81,4 @@ Each error has a hint that names the next step; follow it.
 
 ## Verbs
 
-`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `batch`, `clipboard`. The command line also has `find`, `clear`, `open <url>`, `gesture` and `release`.
+`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `batch`, `clipboard`, `replay`. The command line also has `find`, `clear`, `open <url>`, `gesture` and `release`.
