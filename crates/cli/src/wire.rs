@@ -25,9 +25,25 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Target {
-    Ref { r#ref: Ref },
-    Point { point: PointJson },
-    Text { text: String, role: Option<Role> },
+    Ref {
+        r#ref: Ref,
+    },
+    Point {
+        point: PointJson,
+    },
+    /// The one element with this id (an Android resource name, an iOS accessibility identifier). When no element
+    /// has it, or several do, `text` and `role` find the element as a text target would. Saved steps use it.
+    Id {
+        id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<Role>,
+    },
+    Text {
+        text: String,
+        role: Option<Role>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

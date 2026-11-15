@@ -2956,7 +2956,11 @@ impl Actor {
                 Err(e) => return Err(e),
             }
             let query = || match &until {
-                Target::Text { text, .. } => text.clone(),
+                Target::Text { text, .. }
+                | Target::Id {
+                    text: Some(text), ..
+                } => text.clone(),
+                Target::Id { id, .. } => id.clone(),
                 Target::Ref { r#ref } => format!("@{}", r#ref),
                 Target::Point { .. } => "the target".into(),
             };
@@ -3974,7 +3978,11 @@ fn named_inside<'a>(installed: &'a [App], query: &str) -> Option<&'a App> {
 
 fn describe(target: &Target) -> String {
     match target {
-        Target::Text { text, .. } => format!("\"{text}\""),
+        Target::Text { text, .. }
+        | Target::Id {
+            text: Some(text), ..
+        } => format!("\"{text}\""),
+        Target::Id { id, .. } => id.clone(),
         Target::Ref { r#ref } => format!("@{}", r#ref),
         Target::Point { point } => format!("{},{}", point.x, point.y),
     }

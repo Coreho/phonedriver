@@ -207,6 +207,26 @@ impl Session {
                     unseen: self.unseen(*r#ref),
                 }),
             },
+            Target::Id { id, text, role } => {
+                let with: Vec<usize> = (0..now.elements.len())
+                    .filter(|&i| now.elements[i].id.as_deref() == Some(id))
+                    .collect();
+                match (with.as_slice(), text) {
+                    ([one], _) => Ok(element_at(now, *one)),
+                    (_, Some(text)) => self.resolve(
+                        &Target::Text {
+                            text: text.clone(),
+                            role: *role,
+                        },
+                        now,
+                    ),
+                    ([], None) => Err(not_found(now, id)),
+                    (many, None) => Err(Error::Ambiguous {
+                        query: id.clone(),
+                        matches: many.iter().map(|&i| now.line(&now.elements[i])).collect(),
+                    }),
+                }
+            }
             Target::Text { text, role } => match find_text(now, text, *role, Some(EXTRA_WORDS)) {
                 TextMatch::One { r#ref, .. } => {
                     let i = now.index_of(r#ref).ok_or_else(|| not_found(now, text))?;

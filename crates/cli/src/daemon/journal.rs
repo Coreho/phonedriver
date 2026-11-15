@@ -39,8 +39,7 @@ pub fn manual(what: &str) -> Value {
 }
 
 /// An action about to run, in the form it is kept in: every `@ref` replaced by what finds the same element in a
-/// later run. That is the element's text and role when they single it out on the screen the agent saw, and its
-/// centre otherwise (`by_position`). A typed secret is not kept at all.
+/// later run (`lasting`): its id, its text and role, or its centre (`by_position`). A typed secret is not kept at all.
 pub struct Kept {
     action: Option<Action>,
     by_position: bool,
@@ -105,9 +104,13 @@ pub fn wait(condition: &WaitCondition, s: &Session) -> Value {
     call("wait", json!({"condition": condition}))
 }
 
+/// What finds the element of `target` in a later run, best first: an id the app gave it (with its text beside it,
+/// for a run where the id is gone), its label or a hint with its role, and last its centre. Each is used only when
+/// it singles the element out on the screen the agent saw. `android:id/…` names a slot every app has (`button1`
+/// is the confirming button of any dialog), not a thing, so it is never used.
 fn lasting(target: &Target, s: &Session, by_position: &mut bool) -> Target {
     let r = match target {
-        Target::Text { .. } => return target.clone(),
+        Target::Text { .. } | Target::Id { .. } => return target.clone(),
         Target::Point { .. } => {
             *by_position = true;
             return target.clone();
@@ -121,23 +124,58 @@ fn lasting(target: &Target, s: &Session, by_position: &mut bool) -> Target {
     else {
         return target.clone();
     };
-    if let Some(label) = element.label.as_deref().filter(|l| !l.trim().is_empty()) {
-        let named = Target::Text {
-            text: label.to_string(),
-            role: Some(element.role),
-        };
-        let same = s
-            .resolve(&named, last)
-            .is_ok_and(|found| found.element.is_some_and(|e| e.r#ref == r));
-        if same {
-            return named;
+    let finds_it = |named: &Target| {
+        s.resolve(named, last)
+            .is_ok_and(|found| found.element.is_some_and(|e| e.r#ref == r))
+    };
+    let named = element
+        .label
+        .as_deref()
+        .into_iter()
+        .chain(
+            element
+                .hint
+                .as_deref()
+                .into_iter()
+                .flat_map(|h| h.split(" · ")),
+        )
+        .filter(|text| !text.trim().is_empty())
+        .map(|text| (text.to_string(), Some(element.role)))
+        .find(|(text, role)| {
+            finds_it(&Target::Text {
+                text: text.clone(),
+                role: *role,
+            })
+        });
+    let id = element
+        .id
+        .clone()
+        .filter(|id| !id.starts_with("android:id/"))
+        .filter(|id| {
+            finds_it(&Target::Id {
+                id: id.clone(),
+                text: None,
+                role: None,
+            })
+        });
+    match (id, named) {
+        (Some(id), named) => {
+            let (text, role) = named.unzip();
+            Target::Id {
+                id,
+                text,
+                role: role.flatten(),
+            }
         }
-    }
-    *by_position = true;
-    Target::Point {
-        point: PointJson {
-            x: element.bounds.x + element.bounds.w / 2.0,
-            y: element.bounds.y + element.bounds.h / 2.0,
-        },
+        (None, Some((text, role))) => Target::Text { text, role },
+        (None, None) => {
+            *by_position = true;
+            Target::Point {
+                point: PointJson {
+                    x: element.bounds.x + element.bounds.w / 2.0,
+                    y: element.bounds.y + element.bounds.h / 2.0,
+                },
+            }
+        }
     }
 }

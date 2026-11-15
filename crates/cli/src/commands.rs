@@ -1638,11 +1638,13 @@ impl Replay {
         }
         let params = &step["params"];
         let action = &params["action"];
-        let target = |t: &Value| match (t["text"].as_str(), t["point"].as_object()) {
-            (Some(text), _) => format!(" \"{text}\""),
-            (None, Some(p)) => format!(" {},{}", p["x"], p["y"]),
-            _ => String::new(),
-        };
+        let target =
+            |t: &Value| match (t["text"].as_str(), t["id"].as_str(), t["point"].as_object()) {
+                (Some(text), ..) => format!(" \"{text}\""),
+                (None, Some(id), _) => format!(" {id}"),
+                (None, None, Some(p)) => format!(" {},{}", p["x"], p["y"]),
+                _ => String::new(),
+            };
         match step["method"].as_str().unwrap_or_default() {
             "act" => {
                 let kind = action["kind"].as_str().unwrap_or("act");

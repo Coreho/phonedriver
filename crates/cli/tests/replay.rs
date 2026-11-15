@@ -197,3 +197,102 @@ async fn typed_text_a_wait_and_a_shell_command_are_steps_too() {
     );
     assert!(!saved.to_string().contains("login token"), "{saved}");
 }
+
+fn fields(nodes: &[&str]) -> RawTree {
+    let mut all = vec![
+        r#"{"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"}"#
+            .to_string(),
+    ];
+    for (i, more) in nodes.iter().enumerate() {
+        let top = 100 + 100 * i as i32;
+        all.push(format!(
+            r#"{{"p":0,"w":1,"cls":"android.widget.EditText",{more},"b":[0,{top},360,{}],"f":"vVeEF","a":["tap","set_text"]}}"#,
+            top + 60
+        ));
+    }
+    let json = format!(
+        r#"{{"windows":[{{"id":1,"type":"application","package":"com.example","bounds":[0,0,360,800]}}],"nodes":[{}]}}"#,
+        all.join(",")
+    );
+    RawTree::from_android_json(&json, Scale { density: 1.0 }).unwrap()
+}
+
+fn type_into(target: Value) -> Value {
+    json!({"action": {"kind": "type", "text": "x", "into": target}})
+}
+
+/// The Files app's "New folder" field and the testbed's web form have fields with no label; a run of the bench's
+/// jobs saved both by position (2026-11-15), and the dialog sat 156 points higher in the replay.
+#[tokio::test(start_paused = true)]
+async fn an_element_is_saved_by_an_id_of_its_own_with_its_text_beside_it() {
+    let screen = || {
+        fields(&[
+            r#""id":"name""#,
+            r#""id":"email","hint":"Email address""#,
+            r#""id":"same""#,
+            r#""id":"same""#,
+            r#""id":"android:id/text1""#,
+            r#""hint":"Search""#,
+        ])
+    };
+    let (d, _fake, _home) = setup(vec![screen(); 20]);
+    ok(&d, "snapshot", json!({})).await;
+    for r in ["e1", "e2", "e3", "e5", "e6"] {
+        ok(&d, "act", type_into(json!({"ref": r}))).await;
+    }
+    let saved = ok(&d, "journal", json!({})).await;
+    let steps = saved["steps"].as_array().unwrap();
+    assert_eq!(
+        steps[0]["params"]["action"]["into"],
+        json!({"id": "name"}),
+        "{saved}"
+    );
+    assert!(steps[0].get("by_position").is_none(), "{saved}");
+    assert_eq!(
+        steps[1]["params"]["action"]["into"],
+        json!({"id": "email", "text": "Email address", "role": "text_field"}),
+        "{saved}"
+    );
+    assert_eq!(
+        steps[2]["params"]["action"]["into"],
+        json!({"point": {"x": 180.0, "y": 330.0}}),
+        "an id two elements share finds neither: {saved}"
+    );
+    assert_eq!(steps[2]["by_position"], true);
+    assert_eq!(
+        steps[3]["params"]["action"]["into"],
+        json!({"point": {"x": 180.0, "y": 530.0}}),
+        "an id of the platform's names a slot, not this field: {saved}"
+    );
+    assert_eq!(
+        steps[4]["params"]["action"]["into"],
+        json!({"text": "Search", "role": "text_field"}),
+        "{saved}"
+    );
+
+    let again = ok(&d, "act", type_into(json!({"id": "name"}))).await;
+    assert!(
+        again["summary"].as_str().unwrap().contains("@e1"),
+        "{again}"
+    );
+    let renamed = ok(
+        &d,
+        "act",
+        type_into(json!({"id": "mail", "text": "Email address", "role": "text_field"})),
+    )
+    .await;
+    assert!(
+        renamed["summary"].as_str().unwrap().contains("@e2"),
+        "the text finds it when the id is gone: {renamed}"
+    );
+    let two = d
+        .call("default", "act", type_into(json!({"id": "same"})))
+        .await
+        .expect_err("two elements have this id");
+    assert!(two.message.contains("same"), "{two:?}");
+    let none = d
+        .call("default", "act", type_into(json!({"id": "gone"})))
+        .await
+        .expect_err("no element has this id");
+    assert!(none.message.contains("gone"), "{none:?}");
+}
