@@ -1,4 +1,5 @@
-//! Text recognition in screenshots with Apple Vision (architecture section 9).
+//! Text recognition in screenshots (architecture section 9): Apple Vision on macOS, the OCR engine Windows ships
+//! (`Windows.Media.Ocr`) on Windows. Both run on this machine and send nothing anywhere.
 //!
 //! Vision hands back normalized boxes with the origin at the bottom left. `boundingBox` and `setRevision` are
 //! the Vision calls `objc2-vision` declares `unsafe`, so this module allows unsafe code for those two and nothing else.
@@ -67,11 +68,89 @@ pub fn recognize(png: &[u8], screen: Size) -> Result<Vec<TextBox>, Error> {
     })
 }
 
-/// Recognizes text in `png`; only macOS has an engine.
-#[cfg(not(target_os = "macos"))]
+/// Recognizes text in `png`, a screenshot of a screen `screen` points large, one box for each line Windows finds.
+/// The engine reads the languages of the user's Windows profile and gives no confidence, so every box says 1.
+#[cfg(windows)]
+pub fn recognize(png: &[u8], screen: Size) -> Result<Vec<TextBox>, Error> {
+    use phonedriver_core::geometry::Rect;
+    use windows::Graphics::Imaging::{
+        BitmapAlphaMode, BitmapDecoder, BitmapInterpolationMode, BitmapPixelFormat,
+        BitmapTransform, ColorManagementMode, ExifOrientationMode,
+    };
+    use windows::Media::Ocr::OcrEngine;
+    use windows::Storage::Streams::{DataWriter, InMemoryRandomAccessStream};
+
+    /// Measured on the testbed's taps tab at one pixel per point (24 two-character button labels and 6 words):
+    /// 20 strings read as they are, 25 enlarged twice, 22 enlarged three times, in 37 ms and 71 ms a frame.
+    const ENLARGE: u32 = 2;
+    let engine = OcrEngine::TryCreateFromUserProfileLanguages().map_err(|_| Error::Unsupported {
+        op: Op::Ocr,
+        reason: "Windows has no text recognition for this account's languages; add a language with OCR in Settings, Time & language",
+    })?;
+    let read = || -> windows::core::Result<Vec<TextBox>> {
+        let stream = InMemoryRandomAccessStream::new()?;
+        let writer = DataWriter::CreateDataWriter(&stream)?;
+        writer.WriteBytes(png)?;
+        writer.StoreAsync()?.join()?;
+        writer.DetachStream()?;
+        stream.Seek(0)?;
+        let decoder = BitmapDecoder::CreateAsync(&stream)?.join()?;
+        let (w, h) = (decoder.PixelWidth()?, decoder.PixelHeight()?);
+        let enlarge = (OcrEngine::MaxImageDimension()? / w.max(h).max(1)).clamp(1, ENLARGE);
+        let transform = BitmapTransform::new()?;
+        transform.SetScaledWidth(w * enlarge)?;
+        transform.SetScaledHeight(h * enlarge)?;
+        transform.SetInterpolationMode(BitmapInterpolationMode::Cubic)?;
+        let bitmap = decoder
+            .GetSoftwareBitmapTransformedAsync(
+                BitmapPixelFormat::Bgra8,
+                BitmapAlphaMode::Premultiplied,
+                &transform,
+                ExifOrientationMode::IgnoreExifOrientation,
+                ColorManagementMode::DoNotColorManage,
+            )?
+            .join()?;
+        let (across, down) = (
+            screen.w / bitmap.PixelWidth()? as f32,
+            screen.h / bitmap.PixelHeight()? as f32,
+        );
+        let mut boxes = Vec::new();
+        for line in engine.RecognizeAsync(&bitmap)?.join()?.Lines()? {
+            let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, 0f32, 0f32);
+            for word in line.Words()? {
+                let r = word.BoundingRect()?;
+                left = left.min(r.X);
+                top = top.min(r.Y);
+                right = right.max(r.X + r.Width);
+                bottom = bottom.max(r.Y + r.Height);
+            }
+            if right <= left {
+                continue;
+            }
+            boxes.push(TextBox {
+                text: line.Text()?.to_string(),
+                bounds: Rect {
+                    x: left * across,
+                    y: top * down,
+                    w: (right - left) * across,
+                    h: (bottom - top) * down,
+                },
+                confidence: 1.0,
+            });
+        }
+        Ok(boxes)
+    };
+    read().map_err(|_| Error::Unsupported {
+        op: Op::Ocr,
+        reason: "Windows could not read this screenshot",
+    })
+}
+
+/// Recognizes text in `png`; Linux has no engine.
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn recognize(_png: &[u8], _screen: Size) -> Result<Vec<TextBox>, Error> {
     Err(Error::Unsupported {
         op: Op::Ocr,
-        reason: "OCR uses Apple Vision, which only macOS has",
+        reason: "text recognition uses Apple Vision on macOS and Windows OCR on Windows; Linux has neither",
     })
 }

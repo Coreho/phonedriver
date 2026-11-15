@@ -1,4 +1,4 @@
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", windows))]
 
 use std::time::Instant;
 
@@ -44,6 +44,24 @@ fn assert_finds(found: &[String], expected: &[&str]) {
     assert!(missing.is_empty(), "missing {missing:?} in {found:?}");
 }
 
+/// Windows reads words well and two-character labels less well: it takes `b10` for `blO` and `b1` for `bl`.
+#[cfg(windows)]
+#[test]
+fn windows_reads_the_words_of_the_taps_tab_and_most_of_its_short_labels() {
+    for (file, least) in [
+        (format!("{ANDROID}testbed_taps.png"), 15),
+        (format!("{FIXTURES}testbed_taps_2x.png"), 15),
+    ] {
+        let found = texts(&read(&file), 411.0, 923.0);
+        assert_finds(&found, &["Taps", "Text", "List", "Gestures", "Dark theme"]);
+        let labels = (0..24)
+            .filter(|i| found.iter().any(|f| *f == format!("b{i}")))
+            .count();
+        assert!(labels >= least, "{labels} of 24 labels in {found:?}");
+    }
+}
+
+#[cfg(target_os = "macos")]
 #[test]
 fn the_android_testbed_taps_tab_at_one_pixel_per_point() {
     let found = texts(&read(&format!("{ANDROID}testbed_taps.png")), 411.0, 923.0);
@@ -53,6 +71,7 @@ fn the_android_testbed_taps_tab_at_one_pixel_per_point() {
     assert_finds(&found, &expected);
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn the_same_tab_at_twice_the_resolution_reads_the_lower_rows_too() {
     if hosted_runner() {
@@ -154,7 +173,7 @@ fn a_frame_of_412_by_915_takes_under_120_ms_at_the_median() {
         .collect();
     ms.sort_by(f64::total_cmp);
     eprintln!(
-        "vision p50 {:.1} ms, min {:.1}, max {:.1}, 30 runs",
+        "p50 {:.1} ms, min {:.1}, max {:.1}, 30 runs",
         ms[15], ms[0], ms[29]
     );
     assert!(ms[15] < 120.0, "p50 {:.1} ms", ms[15]);
