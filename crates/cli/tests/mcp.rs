@@ -882,6 +882,32 @@ async fn apps_grant_and_revoke_take_permissions_and_say_what_they_did() {
 }
 
 #[tokio::test]
+async fn screenshot_with_record_starts_and_stops_a_video_and_returns_text_only() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.with_recorder();
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("screenshot", json!({"record": "start"})).await;
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+    let started = texts(&r).join("\n");
+    assert!(
+        started.starts_with("recording the screen to ") && started.contains(".mp4"),
+        "{started}"
+    );
+    rig.call("tap", json!({"target": "One"})).await;
+    let r = rig.call("screenshot", json!({"record": "stop"})).await;
+    let stopped = texts(&r).join("\n");
+    assert!(stopped.contains("1.5 s, 360x800, 2 frames"), "{stopped}");
+    assert!(
+        stopped.contains("steps: 1 with their times in "),
+        "{stopped}"
+    );
+    let r = rig.call("screenshot", json!({"record": "pause"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+}
+
+#[tokio::test]
 async fn logs_prints_the_crash_then_the_last_lines_of_the_app_in_front() {
     let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
         "One",

@@ -304,6 +304,21 @@ pub struct AppParams {
     pub permissions: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordAction {
+    Start,
+    Stop,
+}
+
+/// A recording of the screen to an MP4 file (`docs/protocol.md`, `record`). `path` is absolute, and only for a
+/// start; without it the file goes under the daemon's `tmp`.
+#[derive(Debug, Deserialize)]
+pub struct RecordParams {
+    pub action: RecordAction,
+    pub path: Option<std::path::PathBuf>,
+}
+
 /// An app's recent log lines (`docs/protocol.md`, `logs`). `app` defaults to the one in front.
 #[derive(Debug, Deserialize)]
 pub struct LogsParams {

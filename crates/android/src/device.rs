@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    DisplayMode, FrameRef, Gesture, Image, ImageFormat, Key, LogReply, LogRequest, Quality, Result,
-    ScreenState, ShellReply, ShellRequest, TextInput, Url,
+    DisplayMode, FrameRef, Gesture, Image, ImageFormat, Key, LogReply, LogRequest, Quality,
+    Recorded, Result, ScreenState, ShellReply, ShellRequest, TextInput, Url,
 };
 use phonedriver_core::error::{Error, Op};
 use phonedriver_core::geometry::{Rect, Size};
@@ -121,6 +121,13 @@ impl AndroidDevice {
         self.control.request(op, req).await
     }
 
+    async fn video_caught_up(&self, op: Op) -> Result<()> {
+        caught_up(&self.video, &self.info.id, BARRIER_WAIT, |id| {
+            self.simple(op, json!({"op": "video_barrier", "id": id}))
+        })
+        .await
+    }
+
     async fn press(&self, op: Op, keycode: i32) -> Result<()> {
         self.simple(
             op,
@@ -231,9 +238,7 @@ impl Device for AndroidDevice {
                 id: self.info.id.clone(),
             });
         }
-        let barrier = caught_up(&self.video, &self.info.id, BARRIER_WAIT, |id| {
-            self.simple(Op::Screenshot, json!({"op": "video_barrier", "id": id}))
-        });
+        let barrier = self.video_caught_up(Op::Screenshot);
         let (width, height, bytes) = newest_png(store, barrier).await?;
         Ok(Image {
             width,
@@ -329,6 +334,38 @@ impl Device for AndroidDevice {
 
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.pm_permissions("revoke", app, permissions).await
+    }
+
+    /// Observed with a debug build on a loaded host: the reader was 1.0 s behind the stream, so a recording held
+    /// 1.0 s from before its start and its steps file ran that much ahead of the picture. Both ends wait for the
+    /// stream to catch up first.
+    async fn record_start(&self, path: &std::path::Path) -> Result<()> {
+        if self.video.recording() {
+            return Err(Error::Refused {
+                detail: "a recording is already running".into(),
+            });
+        }
+        self.video_caught_up(Op::Record).await?;
+        self.video.record_start(path).map_err(|e| Error::Transport {
+            detail: format!("cannot record to {}: {e}", path.display()),
+        })
+    }
+
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        let behind = self.video.recording() && self.video_caught_up(Op::Record).await.is_err();
+        let stopped = self.video.record_stop().map_err(|e| Error::Transport {
+            detail: format!("cannot finish the recording: {e}"),
+        })?;
+        Ok(stopped.map(|s| Recorded {
+            path: s.recorded.path,
+            width: s.recorded.width,
+            height: s.recorded.height,
+            frames: s.recorded.frames,
+            ms: s.recorded.ms,
+            early: s.early.map(str::to_string).or_else(|| {
+                behind.then(|| "the device stopped answering before its last frames arrived".into())
+            }),
+        }))
     }
 
     async fn logs(&self, req: &LogRequest) -> Result<LogReply> {

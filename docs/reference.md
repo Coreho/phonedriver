@@ -212,6 +212,25 @@ hint: `phonedriver logs dev.phonedriver.testbed` prints its last log lines
 
 iOS devices and the Simulator answer that logs cannot be read. Decision D58.
 
+### Recording the screen
+
+On Android, `phonedriver record start` begins a video of the screen and `phonedriver record stop` finishes it and prints the file:
+
+```
+$ phonedriver record start -o run.mp4
+recording the screen to /Users/me/run.mp4; `phonedriver record stop` ends it
+$ phonedriver launch settings
+$ phonedriver scroll down
+$ phonedriver record stop
+/Users/me/run.mp4
+15.2 s, 1080x2424, 150 frames, 3.6 MB
+steps: 2 with their times in /Users/me/run.mp4.steps.jsonl
+```
+
+The video is the H.264 stream the phone already sends, in an MP4 file, with no sound. It starts with the screen as it was at `record start`. The steps file has one line for each action that succeeded during the recording, such as `{"summary":"scrolled down","t_ms":11119}`: the summary line of the action's reply and when it began, in milliseconds on the video's clock. Text typed with `--secret` is not in it. Without `-o` the file goes under `~/.phonedriver/tmp`, where a starting daemon deletes files older than a day. In MCP, `screenshot` takes `record: "start"` and `record: "stop"`.
+
+A turned screen ends the recording, and `record stop` says so. Stop a recording before you stop the daemon: a daemon that is killed leaves a file players cannot open. iOS devices and the Simulator answer that they have no video stream to record. Decision D59.
+
 ### Shell
 
 `phonedriver shell "cmd uimode night yes"` runs a command on the device and prints the exit code, the output (cut at 40 lines; `--grep`, `--head`) and what changed on screen. On Android it runs in the agent already on the device, not in a new `adb shell`. On an iOS Simulator it runs through `simctl spawn`, and `shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands. A physical iPhone has no shell. A physical device refuses wipes and removing apps phonedriver did not install unless you pass `--force`. See `docs/bench/history/shell.md` and decision D21.

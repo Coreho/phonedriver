@@ -42,7 +42,7 @@ tokio::task_local! {
 }
 use self::trace::{TraceOptions, Traces};
 use crate::wire::{
-    ActParams, Action, BatchParams, Common, DeviceEntry, SettingParams, Step, VERSION,
+    ActParams, Action, BatchParams, Common, DeviceEntry, RecordParams, SettingParams, Step, VERSION,
 };
 
 const IDLE_EXIT: Duration = Duration::from_secs(15 * 60);
@@ -206,7 +206,7 @@ impl Daemon {
                 Ok(json!({"same": last.as_deref() == Some(line.as_str())}))
             }
             "release" | "snapshot" | "screenshot" | "act" | "wait" | "batch" | "find" | "apps"
-            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" => {
+            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "record" => {
                 let common: Common = rpc::params(params)?;
                 if method == "release" && common.device.is_none() {
                     self.release_everywhere(session).await;
@@ -223,6 +223,15 @@ impl Daemon {
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
                     "shell" => Call::Shell(rpc::params(params)?),
                     "logs" => Call::Logs(rpc::params(params)?),
+                    "record" => {
+                        let p: RecordParams = rpc::params(params)?;
+                        if p.path.as_ref().is_some_and(|path| !path.is_absolute()) {
+                            return Err(RpcError::invalid_params(
+                                "record needs an absolute `path`",
+                            ));
+                        }
+                        Call::Record(p)
+                    }
                     "setting" => {
                         let p: SettingParams = rpc::params(params)?;
                         let asked = [

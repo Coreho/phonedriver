@@ -112,6 +112,8 @@ struct DevicesArgs {
 struct ScreenshotArgs {
     device: Option<String>,
     marks: Option<bool>,
+    /// `start`, later `stop` (Android).
+    record: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -1240,10 +1242,20 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Image of the screen, for what the snapshot lacks (canvas, map, photo). `marks` boxes tappable elements with their @ref.",
+        description = "Image of the screen, for what the snapshot lacks (canvas, map, photo). `marks` boxes tappable elements with their @ref. `record` saves a video of the screen instead, with the actions done meanwhile.",
         annotations(title = "Screenshot", read_only_hint = true, open_world_hint = true)
     )]
     async fn screenshot(&self, Parameters(a): Parameters<ScreenshotArgs>) -> CallToolResult {
+        if let Some(action) = a.record {
+            if !matches!(action.as_str(), "start" | "stop") {
+                return bad("`record` is `start` or `stop`");
+            }
+            let verb = Verb::Record {
+                action,
+                output: None,
+            };
+            return self.run(a.device, verb, None).await;
+        }
         let marks = a.marks.unwrap_or(false);
         let globals = self.globals(a.device);
         let shot = self

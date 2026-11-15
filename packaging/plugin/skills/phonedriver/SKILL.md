@@ -48,6 +48,7 @@ A permission sheet, an "isn't responding" box or another system dialog shows in 
 - `scroll down` reveals more of a list; `scroll down --until "Row 640"` reaches a known row. `swipe` is for other gestures: pulling a sheet, reordering with `to`, zooming with `pinch`.
 - A line ending in `under-keyboard` is hidden by the keyboard: `press hide-keyboard`, then tap.
 - `screenshot` (with `marks` to box each tappable element with its ref) covers what the snapshot lacks: a map, a drawing, a photo, a game. Look at the image before tapping a point on it.
+- Asked for a video of what you do (Android): `record start`, the actions, then `record stop` (MCP: `screenshot` with `record: "start"`, then `"stop"`). The reply names the MP4 file and a list of your actions with their times.
 - `launch` reopens an app where it was left (Settings may open inside a sub-page); `launch --restart` (MCP `restart: true`) stops it first so it opens on its first screen.
 
 ## Typing

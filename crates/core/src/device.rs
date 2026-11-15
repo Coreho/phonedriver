@@ -215,6 +215,18 @@ pub struct LogReply {
     pub crash: Option<String>,
 }
 
+/// A finished screen recording: an MP4 file of `frames` pictures over `ms`. `early` says why it ended before it was
+/// stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recorded {
+    pub path: std::path::PathBuf,
+    pub width: u32,
+    pub height: u32,
+    pub frames: u32,
+    pub ms: u64,
+    pub early: Option<String>,
+}
+
 /// A command for the device's own shell. `Debug` never prints the command, because it may hold a secret.
 #[derive(Clone, PartialEq, Eq)]
 pub struct ShellRequest {
@@ -305,6 +317,20 @@ pub trait Device: Send + Sync {
         Err(Error::Unsupported {
             op: Op::App,
             reason: "this device cannot revoke permissions",
+        })
+    }
+    /// Starts writing the screen's video to an MP4 file at `path`, from the picture now on screen.
+    async fn record_start(&self, _path: &std::path::Path) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::Record,
+            reason: "this device has no video stream to record; Android devices have one",
+        })
+    }
+    /// Ends the recording and finishes its file. `None` when none was running.
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        Err(Error::Unsupported {
+            op: Op::Record,
+            reason: "this device has no video stream to record; Android devices have one",
         })
     }
     async fn logs(&self, _req: &LogRequest) -> Result<LogReply> {

@@ -7,8 +7,8 @@ use tokio::sync::{broadcast, watch};
 
 use crate::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    FrameRef, Gesture, Image, Key, LogReply, LogRequest, Quality, Result, ScreenState, ShellReply,
-    ShellRequest, TextInput, Url,
+    FrameRef, Gesture, Image, Key, LogReply, LogRequest, Quality, Recorded, Result, ScreenState,
+    ShellReply, ShellRequest, TextInput, Url,
 };
 use crate::error::{Error, Op};
 use crate::geometry::Size;
@@ -28,6 +28,8 @@ pub enum Call {
     Revoke(AppId, Vec<String>),
     Setting(SettingOp),
     Logs(AppId, bool),
+    RecordStart(std::path::PathBuf),
+    RecordStop,
     Install(std::path::PathBuf),
     AppOp(AppOp, AppId),
     Wake,
@@ -58,6 +60,7 @@ pub struct FakeDevice {
     order: Mutex<Vec<&'static str>>,
     settings: Mutex<Option<FakeSettings>>,
     logs: Mutex<Option<LogReply>>,
+    recorder: Mutex<Option<Option<std::path::PathBuf>>>,
 }
 
 type FakeSettings = (std::sync::Arc<SettingsIndex>, Vec<(String, String)>);
@@ -103,6 +106,7 @@ impl FakeDevice {
             order: Mutex::new(Vec::new()),
             settings: Mutex::new(None),
             logs: Mutex::new(None),
+            recorder: Mutex::new(None),
         }
     }
 
@@ -192,6 +196,18 @@ impl FakeDevice {
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         *lock(&self.settings) = Some((std::sync::Arc::new(index), values));
+    }
+
+    /// The device can record its screen: a start writes a small file, a stop answers 2 frames over 1500 ms.
+    pub fn with_recorder(&self) {
+        *lock(&self.recorder) = Some(None);
+    }
+
+    /// Ends a running recording the way a lost connection does: the next stop finds none.
+    pub fn lose_recording(&self) {
+        if let Some(running) = lock(&self.recorder).as_mut() {
+            *running = None;
+        }
     }
 
     /// What `logs()` answers from now on; without it the device has no logs.
@@ -350,6 +366,45 @@ impl Device for FakeDevice {
 
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.record(Call::Revoke(app.clone(), permissions.to_vec()))
+    }
+
+    async fn record_start(&self, path: &std::path::Path) -> Result<()> {
+        let mut recorder = lock(&self.recorder);
+        let Some(running) = recorder.as_mut() else {
+            return Err(Error::Unsupported {
+                op: Op::Record,
+                reason: "this fake has no video stream",
+            });
+        };
+        if running.is_some() {
+            return Err(Error::Refused {
+                detail: "a recording is already running".into(),
+            });
+        }
+        std::fs::write(path, b"video").map_err(|e| Error::Transport {
+            detail: e.to_string(),
+        })?;
+        *running = Some(path.to_path_buf());
+        self.record(Call::RecordStart(path.to_path_buf()))
+    }
+
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        let mut recorder = lock(&self.recorder);
+        let Some(running) = recorder.as_mut() else {
+            return Err(Error::Unsupported {
+                op: Op::Record,
+                reason: "this fake has no video stream",
+            });
+        };
+        self.record(Call::RecordStop)?;
+        Ok(running.take().map(|path| Recorded {
+            path,
+            width: 360,
+            height: 800,
+            frames: 2,
+            ms: 1500,
+            early: None,
+        }))
     }
 
     async fn logs(&self, req: &LogRequest) -> Result<LogReply> {

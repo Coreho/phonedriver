@@ -5,5 +5,6 @@ pub mod h264;
 pub mod image;
 pub mod marks;
 pub mod receive;
+pub mod record;
 pub mod rtp;
 pub mod stream;

@@ -39,8 +39,9 @@ use super::{guard, secret_field};
 use crate::wire::{
     ActParams, Action, ActionResult, AppParams, Approval, BatchParams, BatchResult,
     ClipboardParams, Crashed, FindParams, Kind, LogsParams, Observation, PinchDirection,
-    ScreenshotParams, ScreenshotResult, SettingParams, ShellParams, ShellResult, SnapshotParams,
-    Step, StepFailure, StepResult, Target, TypeMode, WaitCondition, WaitParams,
+    RecordAction, RecordParams, ScreenshotParams, ScreenshotResult, SettingParams, ShellParams,
+    ShellResult, SnapshotParams, Step, StepFailure, StepResult, Target, TypeMode, WaitCondition,
+    WaitParams,
 };
 
 pub const LEASE_TTL: Duration = Duration::from_secs(600);
@@ -131,6 +132,7 @@ pub enum Call {
     Shell(ShellParams),
     Setting(SettingParams),
     Logs(LogsParams),
+    Record(RecordParams),
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
@@ -171,9 +173,40 @@ pub fn spawn(id: String, source: Arc<dyn DeviceSource>, home: PathBuf) -> mpsc::
         guard_view: None,
         reshaped: None,
         names: Arc::default(),
+        recording: None,
     };
     tokio::spawn(actor.run(rx));
     tx
+}
+
+/// A recording in progress: its file, when it began, and how many actions are in its steps file.
+struct Taping {
+    path: PathBuf,
+    began: Instant,
+    steps: u32,
+}
+
+impl Taping {
+    fn steps_path(&self) -> PathBuf {
+        let mut name = self.path.clone().into_os_string();
+        name.push(".steps.jsonl");
+        PathBuf::from(name)
+    }
+
+    /// Adds an action that began at `at` to the steps file. The summary never holds typed text.
+    fn step(&mut self, at: Instant, summary: &str) {
+        use std::io::Write;
+        let line =
+            json!({"t_ms": at.duration_since(self.began).as_millis() as u64, "summary": summary});
+        let written = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.steps_path())
+            .and_then(|mut file| writeln!(file, "{line}"));
+        if written.is_ok() {
+            self.steps += 1;
+        }
+    }
 }
 
 struct Lease {
@@ -276,6 +309,7 @@ struct Actor {
     /// The tree the agent was last shown, to tell whether an action changed anything before a frame says so.
     shown: Mutex<Option<RawTree>>,
     names: Arc<Mutex<HashMap<String, String>>>,
+    recording: Option<Taping>,
 }
 
 async fn next_signal(live: &mut Option<Live>) -> Signal {
@@ -590,6 +624,7 @@ impl Actor {
             Call::Shell(p) => to_value(self.shell(s, p).await?),
             Call::Setting(p) => self.setting(s, p).await?,
             Call::Logs(p) => self.logs(s, p).await?,
+            Call::Record(p) => self.record(p).await?,
             Call::Health => self.health().await?,
             Call::Release | Call::Leased => json!({}),
         };
@@ -765,6 +800,80 @@ impl Actor {
             ms,
             action,
         })
+    }
+
+    /// Starts or stops a recording of the screen (decision D59). The device writes the file; the daemon keeps the
+    /// actions done meanwhile beside it.
+    async fn record(&mut self, p: RecordParams) -> Result<Value, Error> {
+        let device = self.device()?;
+        match p.action {
+            RecordAction::Start => {
+                let path = p.path.unwrap_or_else(|| self.tmp_file("mp4"));
+                if let Some(dir) = path.parent() {
+                    std::fs::create_dir_all(dir).map_err(|e| Error::Transport {
+                        detail: format!("cannot create {}: {e}", dir.display()),
+                    })?;
+                }
+                device
+                    .record_start(&path)
+                    .await
+                    .map_err(|e| match (e, &self.recording) {
+                        (Error::Refused { .. }, Some(running)) => Error::Refused {
+                            detail: format!(
+                                "a recording is already running to {}; `record stop` ends it",
+                                running.path.display()
+                            ),
+                        },
+                        (e, _) => e,
+                    })?;
+                self.recording = Some(Taping {
+                    path: path.clone(),
+                    began: Instant::now(),
+                    steps: 0,
+                });
+                Ok(json!({"path": path}))
+            }
+            RecordAction::Stop => {
+                let Some(taping) = self.recording.take() else {
+                    return Err(Error::Refused {
+                        detail: "no recording is running; `record start` begins one".into(),
+                    });
+                };
+                let Some(done) = device.record_stop().await? else {
+                    return Err(Error::Refused {
+                        detail: format!(
+                            "the recording ended when the connection to the device did; {} holds the video up to then",
+                            taping.path.display()
+                        ),
+                    });
+                };
+                let bytes = std::fs::metadata(&done.path).map(|m| m.len()).unwrap_or(0);
+                let mut reply = json!({
+                    "path": done.path,
+                    "ms": done.ms,
+                    "frames": done.frames,
+                    "width": done.width,
+                    "height": done.height,
+                    "bytes": bytes,
+                    "steps": taping.steps,
+                });
+                if taping.steps > 0 {
+                    reply["steps_path"] = json!(taping.steps_path());
+                }
+                if let Some(why) = done.early {
+                    reply["early"] = json!(why);
+                }
+                Ok(reply)
+            }
+        }
+    }
+
+    /// A new file name under this device's folder in the daemon's `tmp`.
+    fn tmp_file(&self, extension: &str) -> PathBuf {
+        self.home
+            .join("tmp")
+            .join(self.id.replace([':', '/', '\\'], "_"))
+            .join(format!("{}.{extension}", ulid::Ulid::generate()))
     }
 
     /// The last lines an app logged, the app in front unless one is named, and its last crash (decision D58).
@@ -1073,12 +1182,9 @@ impl Actor {
             image.bytes = drawn.0;
             marked = Some(drawn.1 as u32);
         }
-        let dir = self
-            .home
-            .join("tmp")
-            .join(self.id.replace([':', '/', '\\'], "_"));
-        let path = dir.join(format!("{}.png", ulid::Ulid::generate()));
-        std::fs::create_dir_all(&dir)
+        let path = self.tmp_file("png");
+        path.parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|()| std::fs::write(&path, &image.bytes))
             .map_err(|e| Error::Transport {
                 detail: format!("cannot write {}: {e}", path.display()),
@@ -1749,6 +1855,9 @@ impl Actor {
             self.awake = None;
         }
         let mut result = acted?;
+        if let Some(taping) = &mut self.recording {
+            taping.step(began, &result.summary);
+        }
         result.woke = woke;
         result.unlocked = unlocked;
         if let Some(app) = front.filter(|_| !leaves && result.observation.kind == Kind::Full) {

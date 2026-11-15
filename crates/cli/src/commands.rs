@@ -401,6 +401,16 @@ pub(crate) enum Verb {
         #[arg(long)]
         secret: bool,
     },
+    /// Record the screen to an MP4 file (Android): `record start`, the actions to show, then `record stop`, which
+    /// prints the file and, beside it, a `.steps.jsonl` file of the actions done meanwhile with their times.
+    Record {
+        /// What to do: `start` or `stop`.
+        #[arg(value_parser = ["start", "stop"])]
+        action: String,
+        /// With `start`: write the video to this path on the daemon's machine instead of under its `tmp` folder.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
     /// Print the last log lines of the app in front, or of the named app, and its last crash (Android).
     Logs {
         /// The app's name or id; the default is the app in front.
@@ -968,6 +978,26 @@ pub(crate) async fn execute_with(
             let r = client.call("shell", with(p)).await?;
             show_shell(&r, g.json)
         }
+        Verb::Record { action, output } => {
+            let mut params = json!({"action": action});
+            if let Some(out) = output {
+                if action == "stop" {
+                    return Err(Failure::Local(
+                        "`record stop` takes no file: the recording goes where `record start` said"
+                            .into(),
+                    ));
+                }
+                let path = std::path::absolute(&out).map_err(|e| {
+                    Failure::Local(format!("cannot resolve {}: {e}", out.display()))
+                })?;
+                params["path"] = json!(path);
+            }
+            let r = client.call("record", with(params)).await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_record(&r))
+        }
         Verb::Logs {
             app,
             grep,
@@ -1495,6 +1525,37 @@ pub(crate) fn show_shell(result: &Value, json: bool) -> Result<String, Failure> 
     Ok(out)
 }
 
+/// `record`: where a started recording goes, or the finished file with its length, size and steps file.
+pub(crate) fn show_record(result: &Value) -> String {
+    let path = result["path"].as_str().unwrap_or_default();
+    let Some(ms) = result["ms"].as_u64() else {
+        return format!("recording the screen to {path}; `phonedriver record stop` ends it");
+    };
+    let bytes = result["bytes"].as_u64().unwrap_or(0);
+    let size = if bytes >= 1_000_000 {
+        format!("{:.1} MB", bytes as f64 / 1e6)
+    } else {
+        format!("{} kB", bytes.div_ceil(1000))
+    };
+    let mut out = format!(
+        "{path}\n{:.1} s, {}x{}, {} frames, {size}",
+        ms as f64 / 1000.0,
+        result["width"],
+        result["height"],
+        result["frames"],
+    );
+    if let Some(steps) = result["steps_path"].as_str() {
+        out.push_str(&format!(
+            "\nsteps: {} with their times in {steps}",
+            result["steps"]
+        ));
+    }
+    if let Some(why) = result["early"].as_str() {
+        out.push_str(&format!("\nended early: {why}"));
+    }
+    out
+}
+
 /// `logs`: the crash first, then how many earlier lines were left out, then the lines.
 pub(crate) fn show_logs(result: &Value, seconds: u64) -> String {
     let app = result["app"].as_str().unwrap_or_default();
@@ -1931,6 +1992,29 @@ mod tests {
         assert!(
             shown.contains("\ncrashed: com.example stopped during this action: java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)\nhint: `phonedriver logs com.example` prints its last log lines"),
             "{shown}"
+        );
+    }
+
+    #[test]
+    fn record_prints_where_it_writes_then_the_finished_file() {
+        assert_eq!(
+            show_record(&json!({"path": "/t/a.mp4"})),
+            "recording the screen to /t/a.mp4; `phonedriver record stop` ends it"
+        );
+        assert_eq!(
+            show_record(&json!({
+                "path": "/t/a.mp4", "ms": 12340, "frames": 345, "width": 1080, "height": 2424,
+                "bytes": 2_140_000, "steps": 4, "steps_path": "/t/a.mp4.steps.jsonl",
+                "early": "the screen changed size or turned"
+            })),
+            "/t/a.mp4\n12.3 s, 1080x2424, 345 frames, 2.1 MB\nsteps: 4 with their times in /t/a.mp4.steps.jsonl\nended early: the screen changed size or turned"
+        );
+        assert_eq!(
+            show_record(&json!({
+                "path": "/t/a.mp4", "ms": 900, "frames": 3, "width": 360, "height": 800,
+                "bytes": 41_200, "steps": 0
+            })),
+            "/t/a.mp4\n0.9 s, 360x800, 3 frames, 42 kB"
         );
     }
 
