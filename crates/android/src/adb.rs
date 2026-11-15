@@ -87,6 +87,11 @@ impl Adb {
         }
     }
 
+    /// True for the default server on this machine, false for one named by `ADB_SERVER_SOCKET`.
+    pub fn is_local(&self) -> bool {
+        matches!(self.server, Server::Local { .. })
+    }
+
     pub fn local(addr: &str, adb_program: &str) -> Adb {
         Adb {
             addr: addr.to_string(),

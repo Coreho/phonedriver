@@ -139,6 +139,11 @@ pub enum Button {
     Lock,
     VolumeUp,
     VolumeDown,
+    /// A touch of the fingerprint sensor by the finger a test enrolled. Only an emulator has a sensor that can
+    /// be touched from outside.
+    Fingerprint,
+    /// A touch by a finger that is not enrolled.
+    WrongFingerprint,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

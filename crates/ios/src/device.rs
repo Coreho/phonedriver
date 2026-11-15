@@ -479,6 +479,12 @@ impl Device for IosDevice {
                     reason: "iOS has no recents button",
                 });
             }
+            Button::Fingerprint | Button::WrongFingerprint => {
+                return Err(Error::Unsupported {
+                    op: Op::Button,
+                    reason: "Face ID and Touch ID are not simulated here; only an Android emulator's fingerprint sensor is",
+                });
+            }
         };
         self.input(Op::Button, json!({"op": "button", "name": name}))
             .await?;

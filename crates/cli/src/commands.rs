@@ -464,6 +464,8 @@ pub(crate) enum Verb {
         text: Option<String>,
     },
     /// Press a button or key: home, back, recents, notifications, lock, volume-up, volume-down, enter, hide-keyboard.
+    /// On an Android emulator, `fingerprint` touches the fingerprint sensor with the enrolled finger and
+    /// `wrong-fingerprint` with another.
     Press {
         /// The key or button.
         key: String,

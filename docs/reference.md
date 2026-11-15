@@ -245,6 +245,10 @@ $ phonedriver replay run.steps --from 4
 
 Text typed with `--secret` is never in the file; a replay stops at that step for you to type it. Other typed text is in the file. In MCP, `replay` takes `file`, `from` and `save: true`. Decision D60.
 
+### Fingerprint on an emulator
+
+On an Android emulator, `phonedriver press fingerprint` touches the fingerprint sensor with the finger a test enrolls, and `phonedriver press wrong-fingerprint` with another. Enroll by opening fingerprint setup in Settings and pressing `fingerprint` until it says the fingerprint was added; after that the same key passes a fingerprint prompt or unlocks the emulator, and `wrong-fingerprint` fails it. phonedriver has to run on the machine that runs the emulator. A physical phone answers that its sensor takes its owner's finger. Decision D63.
+
 ### Recording the screen
 
 On Android, `phonedriver record start` begins a video of the screen and `phonedriver record stop` finishes it and prints the file:

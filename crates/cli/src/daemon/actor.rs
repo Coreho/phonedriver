@@ -1723,6 +1723,10 @@ impl Actor {
             }
         }
         if state.locked {
+            if matches!(action, Action::Press { key } if key == "fingerprint" || key == "wrong-fingerprint")
+            {
+                return Ok((woke, false));
+            }
             if state.secure {
                 return Err(Error::NeedsUser {
                     action: UserAction::UnlockDevice,
@@ -4029,6 +4033,8 @@ async fn press(device: &dyn Device, key: &str) -> Result<Option<&'static str>, E
             "volume-down".into(),
             "enter".into(),
             "hide-keyboard".into(),
+            "fingerprint".into(),
+            "wrong-fingerprint".into(),
         ],
     })
 }

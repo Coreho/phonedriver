@@ -18,6 +18,7 @@ use tokio::sync::{broadcast, watch};
 
 use crate::adb::Adb;
 use crate::agent::{Agent, AgentLog, Launched};
+use crate::console;
 use crate::control::Control;
 use crate::logs;
 use crate::map;
@@ -25,6 +26,10 @@ use crate::settings;
 
 const FIRST_FRAME_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 /// A screenshot proves the stream is current within this: one control round trip and the barrier's way back.
+/// The finger `press fingerprint` touches the sensor with, which is the one to enroll with, and one that is
+/// never enrolled.
+const ENROLLED_FINGER: u32 = 1;
+const OTHER_FINGER: u32 = 2;
 const BARRIER_WAIT: std::time::Duration = std::time::Duration::from_millis(1500);
 const EVENT_BACKLOG: usize = 64;
 
@@ -115,6 +120,31 @@ impl AndroidDevice {
             .lines()
             .filter_map(|l| l.strip_prefix("package:").map(|p| p.trim().to_string()))
             .collect())
+    }
+
+    /// Touches the emulator's fingerprint sensor through its console (decision D63).
+    async fn touch_sensor(&self, finger: u32) -> Result<()> {
+        let unsupported = |reason| Error::Unsupported {
+            op: Op::Button,
+            reason,
+        };
+        let port = console::port(&self.serial).ok_or(unsupported(
+            "a phone's fingerprint sensor takes its owner's finger; only an emulator's can be touched from here",
+        ))?;
+        if !self.adb.is_local() {
+            return Err(unsupported(
+                "the emulator's console is on the machine that runs the emulator, and adb here is reached through ADB_SERVER_SOCKET; run phonedriver on that machine",
+            ));
+        }
+        let token = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .and_then(|home| {
+                let file = std::path::Path::new(&home).join(".emulator_console_auth_token");
+                std::fs::read_to_string(file).ok()
+            });
+        console::touch_sensor(&format!("127.0.0.1:{port}"), token.as_deref(), finger)
+            .await
+            .map_err(|detail| Error::Transport { detail })
     }
 
     async fn simple(&self, op: Op, req: Value) -> Result<Value> {
@@ -263,6 +293,11 @@ impl Device for AndroidDevice {
     }
 
     async fn button(&self, b: Button) -> Result<()> {
+        match b {
+            Button::Fingerprint => return self.touch_sensor(ENROLLED_FINGER).await,
+            Button::WrongFingerprint => return self.touch_sensor(OTHER_FINGER).await,
+            _ => {}
+        }
         match map::button_keycode(b) {
             Some(code) => self.press(Op::Button, code).await,
             None => {

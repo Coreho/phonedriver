@@ -2,6 +2,7 @@
 
 pub mod adb;
 pub mod agent;
+pub mod console;
 pub mod control;
 pub mod device;
 mod logs;

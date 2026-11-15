@@ -833,3 +833,17 @@ The first run is why the `shell` description no longer says to prefer it for set
 
 **Reopen if.** An agent run on a canvas app shows it still asks for screenshots (then the rule is too narrow); the pictures show up in a token audit of ordinary runs (then it is too wide).
 
+## D63. `press fingerprint` touches an Android emulator's fingerprint sensor
+
+**Choice.** `fingerprint` and `wrong-fingerprint` are keys of `press` (CLI, MCP and `batch`). On an Android emulator they touch the emulated sensor with finger 1 or finger 2 through the emulator's console (`crates/android/src/console.rs`: the port in the serial, `auth` with the token from `.emulator_console_auth_token`, `finger touch N`, `finger remove`). A test enrolls with `press fingerprint`, so finger 1 is the enrolled one and finger 2 never is. These two keys are also the only actions sent to a screen with a secure lock, since unlocking is what they are for. A physical phone answers `unsupported` (its sensor takes its owner's finger), and so does iOS.
+
+**Why.** The user asked for biometric simulation as a first-class tool. An app under test that asks for a fingerprint stops an agent dead: the prompt needs a person (architecture 14). On an emulator the sensor is a console command, which adb's own client reaches with `adb emu`; phonedriver speaks to the adb server itself (D11) and had no way to the console.
+
+**Rejected.** A new verb and MCP tool (`biometric match`): a touch of a sensor is a button press, `press` exists, and the two words cost 69 characters in its description against a tool of its own. The agent's shell on the device: the sensor is not reachable from inside the emulator without root. Reaching the console through a remote adb server: the console listens on the emulator's own machine only, so with `ADB_SERVER_SOCKET` the reply is `unsupported` and says to run phonedriver there. Face ID and Touch ID on the iOS Simulator (`notifyutil` notifications): not built, because nothing here could prove it against an app today.
+
+**Evidence.** win-pc, the daemon running on the emulator's own machine (Windows build), API 37 emulator, 2026-11-15. With a test PIN set by `locksettings set-pin`, fingerprint enrollment opened from Settings: three `phonedriver press fingerprint` calls took the screen from `Touch the sensor` through `progress "0%"` and `progress "50%"` to `Fingerprint added`. Then `press lock`: `dumpsys window policy` said `showing=true` and `dumpsys fingerprint` `"accept":0,"reject":0`. `press wrong-fingerprint` (which woke the screen first): `showing=true`, `"reject":1`. A tap was refused: `The device is locked`. `press fingerprint`: `showing=false`, `"accept":1`. Afterwards the PIN and the fingerprint were removed and the lock screen turned off again, as it had been. Tests: four for the console client against a fake console (the order of what it sends, no token when none is asked for, a refusal, a missing token) and `crates/cli/tests/fingerprint.rs` (the keys reach the device; they are sent to a locked screen that refuses `press home`).
+
+**Limits.** Emulators only, and only when phonedriver runs on the machine that runs the emulator. No app's own fingerprint prompt was tried, only enrollment and the lock screen: the testbed has no such prompt. One API level. No face unlock. Nothing for iOS.
+
+**Reopen if.** Someone tests an app's biometric prompt on the Simulator (then the `notifyutil` path, with a prompt in the iOS testbed to prove it); the emulator stops accepting `finger touch`.
+
