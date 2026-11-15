@@ -93,6 +93,58 @@ fn the_same_tab_at_twice_the_resolution_reads_the_lower_rows_too() {
     assert_finds(&found, &expected);
 }
 
+/// The reader `recognize` falls back to when Vision's Accurate level fails, on the same four pictures.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_quick_reader_reads_the_same_pictures_when_the_accurate_one_cannot() {
+    use phonedriver::ocr::recognize_quick;
+    let quick = |path: String, w: f32, h: f32| -> Vec<phonedriver_core::ocr::TextBox> {
+        recognize_quick(&read(&path), Size { w, h }).unwrap()
+    };
+    let words = |boxes: &[phonedriver_core::ocr::TextBox]| -> Vec<String> {
+        boxes.iter().map(|b| b.text.clone()).collect()
+    };
+    for file in [
+        format!("{ANDROID}testbed_taps.png"),
+        format!("{FIXTURES}testbed_taps_2x.png"),
+    ] {
+        let boxes = quick(file, 411.0, 923.0);
+        let found = words(&boxes);
+        assert_finds(&found, &["Taps", "Text", "Gestures", "Dark theme"]);
+        let labels = (0..24)
+            .filter(|i| found.iter().any(|f| *f == format!("b{i}")))
+            .count();
+        assert!(labels >= 19, "{labels} of 24 labels in {found:?}");
+        let dark = boxes
+            .iter()
+            .find(|b| b.text.contains("Dark theme"))
+            .expect("Dark theme");
+        assert!(
+            dark.bounds.x.abs() < 8.0 && (dark.bounds.y + dark.bounds.h / 2.0 - 116.0).abs() < 8.0,
+            "{dark:?}"
+        );
+    }
+    let settings = words(&quick(
+        format!("{ANDROID}real_settings_main.png"),
+        411.4,
+        923.4,
+    ));
+    assert_finds(
+        &settings,
+        &[
+            "Search Settings",
+            "Network & internet",
+            "Connected devices",
+            "Notification history, conversations",
+            "Do Not Disturb, Bedtime, Driving",
+            "Colors, themed icons, app grid",
+            "Storage",
+        ],
+    );
+    let ios = words(&quick(format!("{IOS}gestures.png"), 402.0, 874.0));
+    assert_finds(&ios, &["Gesture pad", "Gestures", "Secure", "Dialogs"]);
+}
+
 #[test]
 fn android_settings() {
     let found = texts(
