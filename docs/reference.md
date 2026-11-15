@@ -114,7 +114,7 @@ Tested on an iPhone 13 Pro Max (iOS 27.0.1) on one network. An iPhone 14 Plus (i
 | `PHONEDRIVER_IOS_TIER` | `runner` | `coredevice` selects the CoreDevice tier on iOS 27 devices. Experimental. |
 | `PHONEDRIVER_GUARD` | on | `off` stops phonedriver asking the human before a tap that spends money or cannot be undone (`Place order`, `Pay`, `Delete account`). Set it for `phonedriver mcp` or the CLI only when you grant the agent full autonomy. |
 | `PHONEDRIVER_ASK` | none | A comma list of more kinds of tap to ask the human about, besides payments and account deletion: `send` (Send, Reply, Post, Share), `delete` (Delete, Remove, Erase, Clear all) and `install` (Install, Uninstall). For example `PHONEDRIVER_ASK=send,delete`. Read by `phonedriver mcp` and the CLI; a name that is not one of these stops the command with exit code 2. `PHONEDRIVER_GUARD=off` and `autonomous: true` skip these questions too. |
-| `PHONEDRIVER_SECRET` | none | The text for `type --secret`, instead of stdin. |
+| `PHONEDRIVER_SECRET` | none | The text for `type --secret`, instead of stdin. The daemon shows it as `•••` wherever it later appears on a screen it reads or in a command's output, until the daemon stops; a screenshot still shows what the phone shows. |
 | `PHONEDRIVER_TRACE_FULL` | off | `1` keeps observation text and text targets in traces (the daemon reads it at start). |
 | `PHONEDRIVER_TRACE_SCREENS` | off | `1` copies every screenshot next to its trace file. |
 | `PHONEDRIVER_AGENT_JAR` | built by `android-agent/build.sh` | Build time only: use this prebuilt Android agent jar. |

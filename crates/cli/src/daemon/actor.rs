@@ -118,7 +118,6 @@ const COLD_APP_WINDOW: Duration = Duration::from_secs(30);
 const COLD_CHANGE_WAIT: Duration = Duration::from_millis(2000);
 /// How long a tap whose frames changed but whose elements did not waits for a page that starts late.
 const LATE_PAGE_WAIT: Duration = Duration::from_millis(600);
-const MASK: &str = "•••";
 
 pub enum Call {
     Snapshot(SnapshotParams),
@@ -839,11 +838,7 @@ impl Actor {
             p.grep.as_deref(),
             p.head.unwrap_or(shell::DEFAULT_HEAD),
         );
-        let output = if p.secret {
-            tidy.text.replace(p.command.as_str(), MASK)
-        } else {
-            tidy.text
-        };
+        let output = tidy.text;
         let action = if settle {
             let summary = if p.secret {
                 format!("ran a command ({} chars)", p.command.chars().count())
@@ -851,7 +846,7 @@ impl Actor {
                 "ran".to_string()
             };
             Some(
-                self.finish(s, true, cfg, started, summary, None, None, None)
+                self.finish(s, true, cfg, started, summary, None, None)
                     .await?,
             )
         } else {
@@ -1119,16 +1114,7 @@ impl Actor {
             }
         }
         let action = self
-            .finish(
-                s,
-                p.settle,
-                cfg,
-                started,
-                "set".to_string(),
-                None,
-                None,
-                None,
-            )
+            .finish(s, p.settle, cfg, started, "set".to_string(), None, None)
             .await?;
         if single {
             let (key, value) = done.remove(0);
@@ -1927,6 +1913,7 @@ impl Actor {
         let acted = self.act_now(s, p).await;
         if acted.is_err() {
             self.awake = None;
+            s.unsure = true;
         }
         let mut result = acted?;
         if let Some(taping) = &mut self.recording {
@@ -2082,7 +2069,7 @@ impl Actor {
                         .await?;
                 }
                 let r = self
-                    .finish(s, p.settle, cfg, started, summary.clone(), None, None, None)
+                    .finish(s, p.settle, cfg, started, summary.clone(), None, None)
                     .await?;
                 let ripple_only = r.settled
                     && r.changed
@@ -2112,7 +2099,7 @@ impl Actor {
                             still_changing,
                             elapsed: elapsed + Duration::from_millis(r.settle_ms.into()),
                         };
-                        self.report(s, st, probe, summary, None, None, None).await
+                        self.report(s, st, probe, summary, None, None).await
                     }
                     _ => Ok(r),
                 }
@@ -2147,7 +2134,7 @@ impl Actor {
                     .map(|l| format!(" from {}", short(&l)))
                     .unwrap_or_default();
                 let summary = format!("swiped {}{from_text}", direction.name());
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Drag { from, to } => {
@@ -2167,7 +2154,7 @@ impl Actor {
                     )
                 };
                 let summary = format!("dragged {} to {}", label(&a), label(&b));
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Pinch {
@@ -2197,7 +2184,7 @@ impl Actor {
                     .map(|l| format!(" on {}", short(&l)))
                     .unwrap_or_default();
                 let summary = format!("pinched {}{on}", if out { "out" } else { "in" });
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Gesture { fingers } => {
@@ -2222,7 +2209,7 @@ impl Actor {
                 let started = self.begin_action();
                 device.gesture(g).await?;
                 let summary = format!("gestured with {} fingers", fingers.len());
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Launch {
@@ -2289,7 +2276,7 @@ impl Actor {
                         found.name, front.0
                     );
                 }
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Open { url, app } => {
@@ -2322,7 +2309,7 @@ impl Actor {
                 self.lap("page", waited);
                 self.cold_until = Some(self.now() + COLD_APP_WINDOW);
                 let summary = format!("opened {url}");
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Scroll {
@@ -2354,22 +2341,14 @@ impl Actor {
                         elapsed: Duration::ZERO,
                     };
                     return self
-                        .report(
-                            s,
-                            st,
-                            None,
-                            "keyboard already hidden".into(),
-                            None,
-                            None,
-                            None,
-                        )
+                        .report(s, st, None, "keyboard already hidden".into(), None, None)
                         .await;
                 }
                 let started = self.begin_action();
                 let via = device.hide_keyboard().await?;
                 let summary = format!("hid the keyboard via {}", via.unwrap_or("back"));
                 let result = self
-                    .finish(s, p.settle, cfg, started, summary, via, None, None)
+                    .finish(s, p.settle, cfg, started, summary, via, None)
                     .await?;
                 if p.settle && result.observation.header.keyboard.is_some() {
                     return Err(Error::Unsupported {
@@ -2386,7 +2365,7 @@ impl Actor {
                     Some(how) => format!("pressed {key} via {how}"),
                     None => format!("pressed {key}"),
                 };
-                self.finish(s, p.settle, cfg, started, summary, via, None, None)
+                self.finish(s, p.settle, cfg, started, summary, via, None)
                     .await
             }
             Action::Clear { target } => {
@@ -2423,7 +2402,6 @@ impl Actor {
                     format!("cleared{label}"),
                     Some("set"),
                     Some(verify),
-                    None,
                 )
                 .await
             }
@@ -2489,7 +2467,7 @@ impl Actor {
                                 })
                                 .cloned()
                         };
-                        let known = s.last.as_ref().and_then(focused);
+                        let known = s.last.as_ref().filter(|_| !s.unsure).and_then(focused);
                         if known.is_some() {
                             (known, None)
                         } else {
@@ -2690,7 +2668,6 @@ impl Actor {
                     && !text.is_empty()
                     && field_ref.is_some_and(|r| s.last.as_ref().is_some_and(|l| l.in_web_view(r)));
                 let keys = rekey.then(|| text.clone());
-                let mask = secret.then_some(text);
                 let cfg = if submit || p.expect_change_ms.is_some() {
                     cfg
                 } else {
@@ -2709,7 +2686,6 @@ impl Actor {
                         summary.clone(),
                         Some(mode_name(mode)),
                         Some(verify.clone()),
-                        mask.clone(),
                     )
                     .await?;
                 let Some(keys) = keys.filter(|_| {
@@ -2731,7 +2707,6 @@ impl Actor {
                     summary,
                     Some("keys"),
                     Some(verify),
-                    mask,
                 )
                 .await
             }
@@ -2895,7 +2870,7 @@ impl Actor {
             self.lap("gesture", t);
             let summary = format!("scrolled {}", direction.name());
             return self
-                .finish(s, settle, cfg, started, summary, None, None, None)
+                .finish(s, settle, cfg, started, summary, None, None)
                 .await;
         };
         let mut gestures = 0u32;
@@ -2938,7 +2913,7 @@ impl Actor {
                             elapsed: Duration::ZERO,
                         },
                     };
-                    return self.report(s, st, None, summary, None, None, None).await;
+                    return self.report(s, st, None, summary, None, None).await;
                 }
                 Ok(_) | Err(Error::NotFound { .. } | Error::StaleRef { .. }) => {}
                 Err(Error::Ambiguous { query, matches }) => {
@@ -3034,7 +3009,6 @@ impl Actor {
         summary: String,
         via: Option<&'static str>,
         verify: Option<Verify>,
-        mask: Option<String>,
     ) -> Result<ActionResult, Error> {
         if !settle {
             self.unobserved = Some(started);
@@ -3050,7 +3024,7 @@ impl Actor {
         let t = Instant::now();
         let (st, probe) = self.settle_probing(cfg, started, true).await;
         self.lap("settle", t);
-        self.report(s, st, probe, summary, via, verify, mask).await
+        self.report(s, st, probe, summary, via, verify).await
     }
 
     /// The accessibility tree can lag the pixels: a dialog or an expanding card appears a moment after the screen went
@@ -3096,7 +3070,6 @@ impl Actor {
         mut summary: String,
         via: Option<&'static str>,
         verify: Option<Verify>,
-        mask: Option<String>,
     ) -> Result<ActionResult, Error> {
         let t = Instant::now();
         let (mut tree, agreed, read_at) = match probe {
@@ -3215,7 +3188,7 @@ impl Actor {
             Some(Verdict::Failed(u)) => Some(u),
             _ => None,
         };
-        let (kind, mut text) = match s.diff_for_reply(&rendered) {
+        let (kind, text) = match s.diff_for_reply(&rendered) {
             Some(DiffOrFull::Diff(changes)) => {
                 (Kind::Diff, DiffOrFull::Diff(changes).text(&rendered))
             }
@@ -3234,11 +3207,6 @@ impl Actor {
             _ => (false, false, 0, None),
         };
         let changed = changed_signal || kind == Kind::Full || !text.is_empty();
-        let mut elements = None;
-        if let Some(secret) = &mask {
-            text = text.replace(secret.as_str(), MASK);
-            elements = None::<Vec<Element>>;
-        }
         let observation = Observation {
             header: rendered.header.clone(),
             text,
@@ -3248,7 +3216,7 @@ impl Actor {
             settle_ms: ms,
             still_changing: still,
             loading: rendered.loading(),
-            elements,
+            elements: None,
             capture: None,
             empty: false,
         };

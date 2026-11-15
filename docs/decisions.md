@@ -931,3 +931,23 @@ The first run is why the `shell` description no longer says to prefer it for set
 
 **Reopen if.** A Touch ID Simulator shows the `fingerTouch` names are wrong; Apple renames the notifications in a later Xcode.
 
+## D70. A secret is masked wherever it comes back, for as long as the daemon runs
+
+**Choice.** The daemon remembers every text it is given with `secret: true` (the text of a `type`, alone or as a batch step, and the command of a `shell`) and replaces each with `•••` in every string of every reply and error it returns from then on, to every session, before the reply is traced (`daemon::secrets`, called once in `Daemon::call`). The memory is a list in the daemon's process, never written, gone when the daemon stops. A secret of fewer than four characters is masked only in the reply to the call that carried it. A screenshot's `data_b64` is skipped. The mask that was threaded through `finish` and `report` for one `type` reply, and the one in `shell`, are gone. Beside it: after an action fails, a `type` with no target reads the screen again before trusting which field is focused (`Session::unsure`), and `FakeDevice`'s call log holds a `ShellRequest`, whose `Debug` prints a length.
+
+**Why.** AGENTS.md promises that text passed with `--secret` never reaches logs, traces, errors or test output, and the reply already masked it, so the promise includes what the model reads. A property test of the real daemon against a fake phone with a note field and a password field (`crates/cli/tests/secret_property.rs`, 3,000 generated sessions) found four ways it broke:
+
+- F1. A secret typed into a field that shows its text (a username, an API key in a settings form, a card number) was masked in that one reply and then printed by the next `snapshot`, `find`, or any action's reply, and written to the trace file under `--trace-full`. 108 of 3,000 sessions leaked through a snapshot reply and 217 wrote a trace file holding one.
+- F2. A `type` with `secret` as a `batch` step was not masked at all: `[Type { flagged: true, into: Note, in_batch: true }]` returned `~ @e1 textbox "Note" "Ty0mW4zR8nB3c" focused`. The CLI and MCP refuse a secret in a batch, so only another client of the socket could reach it.
+- F3. A secret `type` into the password field tapped it, then the device failed the text. The session still held the screen from before the tap, so the next plain `type` with no target believed the note field was focused and pasted plain text into the password field, past D31's refusal. 1 of 3,000 sessions.
+- F4. `FakeDevice` logged a shell command as a `String`, so a failed assertion that printed the call log printed a `shell --secret` command.
+
+One mask at the one place every reply leaves through covers a reply shape nobody has written yet; the per-call mask covered one.
+
+**Rejected.** Masking element values when the screen is rendered: it misses errors, shell output and `logs`, and needs a call in every path that builds a screen. Remembering per session: a second session on the same phone (a person's terminal with `--share`) would be shown what the first typed. Remembering short secrets too: `12` would blank every label and count holding those digits, for every later call; four characters is where a PIN starts. Writing the list to disk so a restarted daemon still masks: that is a file of secrets. Refusing `secret` in a batch at the daemon: it is masked now, and the refusal already lives where the text is read.
+
+**Evidence.** Mac mini, 2026-11-15. Before: the property failed on its first case (F2), and the survey printed 18 kinds of leak. After: `cargo test --locked -p phonedriver --test secret_property -- --include-ignored`: `0 kinds of leak`, `4 passed`. Each of ten breaks of the product code makes the check fail (`.claude/skills/verify-secrets/SKILL.md` has the table).
+
+**Limits.** A fake phone with two fields; no real device. Pixels: a screenshot, a recording and a `--trace-screens` copy show what the phone shows. A secret under four characters shows on later screens. A device that prints a secret back changed (escaped, split over lines, cut short) is not matched. Text typed without `secret` is not a secret to the daemon, whatever it is. A label that happens to hold a remembered secret's characters is masked too. A daemon that restarts forgets, so a full trace written after a restart can hold a secret still on the screen.
+
+**Reopen if.** A real secret shows up in a reply in a changed form; masking a remembered secret hides something an agent needed to read.

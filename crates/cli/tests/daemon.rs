@@ -1176,6 +1176,84 @@ async fn secret_text_never_reaches_the_trace_the_reply_or_the_debug_output() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_secret_typed_into_a_plain_field_is_masked_in_a_batch_and_in_every_later_reply() {
+    let (source, fake) = FakeSource::polled(vec![field_tree("", false)]);
+    fake.on_text(|_| Some(vec![field_tree("hunter2", false)]));
+    let home = tempfile::tempdir().unwrap();
+    let d = Daemon::with_trace(
+        source,
+        Config {
+            home: home.path().to_path_buf(),
+        },
+        phonedriver::daemon::trace::TraceOptions {
+            full: true,
+            screens: false,
+        },
+    );
+    ok(&d, "default", "snapshot", json!({})).await;
+    let typed = json!({"kind": "type", "text": "hunter2", "into": {"ref": "e1"}, "secret": true});
+    let batch = ok(&d, "default", "batch", json!({"steps": [typed]})).await;
+    let shown = ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "release", json!({"device": "fake:1"})).await;
+    let found = ok(&d, "other", "find", json!({"text": "Field"})).await;
+    for reply in [&batch, &shown, &found] {
+        assert!(!reply.to_string().contains("hunter2"), "{reply}");
+    }
+    assert!(
+        shown["text"].as_str().unwrap().contains("\"•••\""),
+        "{shown}"
+    );
+    let trace = trace_text(home.path());
+    assert!(!trace.contains("hunter2"), "{trace}");
+}
+
+fn two_fields(password_focused: bool) -> RawTree {
+    let (note, password) = if password_focused {
+        ("vVeE", "vVeEPF")
+    } else {
+        ("vVeEF", "vVeEP")
+    };
+    let json = format!(
+        r#"{{"windows":[{{"id":1,"type":"application","package":"com.example","bounds":[0,0,360,800]}}],"nodes":[
+        {{"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"}},
+        {{"p":0,"w":1,"cls":"android.widget.EditText","text":"","desc":"Note","b":[0,100,360,160],"f":"{note}","a":["tap","set_text"]}},
+        {{"p":0,"w":1,"cls":"android.widget.EditText","text":"","desc":"Password","b":[0,200,360,260],"f":"{password}","a":["tap","set_text"]}}]}}"#
+    );
+    RawTree::from_android_json(&json, Scale { density: 1.0 }).unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn after_a_failed_action_the_focused_field_is_read_again_before_plain_text_goes_in() {
+    let (source, fake) = FakeSource::polled(vec![two_fields(false)]);
+    fake.on_gesture(|_| Some(vec![two_fields(true)]));
+    fake.fail_text(vec![Error::Transport {
+        detail: "the agent could not run text".into(),
+    }]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    err(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "hunter2", "into": {"ref": "e2"}, "secret": true}}),
+    )
+    .await;
+    let e = err(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "shopping list"}}),
+    )
+    .await;
+    assert_eq!(e.code, -32020, "{e:?}");
+    assert!(
+        !fake.calls().iter().any(|c| matches!(c, Call::Text(_))),
+        "{:?}",
+        fake.calls()
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn type_into_a_field_with_text_replaces_it_and_append_keeps_it() {
     use phonedriver_core::device::TextInput;
     let (source, fake) = FakeSource::with(vec![

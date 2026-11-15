@@ -13,6 +13,7 @@ pub mod journal;
 pub mod progress;
 pub mod rpc;
 pub mod secret_field;
+mod secrets;
 pub mod session;
 pub mod shell;
 pub mod socket;
@@ -106,6 +107,7 @@ pub struct Daemon {
     actors: Mutex<HashMap<String, mpsc::Sender<Job>>>,
     traces: Traces,
     told: Mutex<HashMap<String, String>>,
+    secrets: secrets::Secrets,
     agents: Mutex<std::collections::HashSet<String>>,
     connections: AtomicUsize,
     last_activity: Mutex<Instant>,
@@ -130,6 +132,7 @@ impl Daemon {
             home: config.home,
             actors: Mutex::default(),
             told: Mutex::default(),
+            secrets: secrets::Secrets::default(),
             agents: Mutex::default(),
             connections: AtomicUsize::new(0),
             last_activity: Mutex::new(Instant::now()),
@@ -154,12 +157,14 @@ impl Daemon {
     ) -> Result<Value, RpcError> {
         self.touch();
         let started = Instant::now();
-        let (result, phases) = PHASES
+        let secrets = self.secrets.with(secrets::carried(method, &params));
+        let (mut result, phases) = PHASES
             .scope(Default::default(), async {
                 let result = self.route(session, method, &params).await;
                 (result, PHASES.with(|p| p.take()))
             })
             .await;
+        secrets::hide(&mut result, &secrets);
         self.traces.record(
             session,
             method,

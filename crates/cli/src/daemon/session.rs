@@ -34,6 +34,8 @@ pub struct Session {
     /// The summary of the last action that settled with no change, and how many times in a row it has.
     pub idle: Option<(String, u32)>,
     pub journal: super::journal::Journal,
+    /// The last action failed, perhaps after its tap had moved the focus, so `last` may not be the device's screen.
+    pub unsure: bool,
 }
 
 /// How many dropped text fields a session remembers.
@@ -54,6 +56,7 @@ impl Session {
     /// Replaces the screen the agent was last shown, remembering the text fields it drops. A keyboard that opens
     /// shrinks a form's list, and the fields below it leave the tree while the agent still holds their refs.
     pub fn set_last(&mut self, next: Option<Rendered>) {
+        self.unsure = false;
         match (&self.last, &next) {
             (Some(prev), Some(now)) if prev.header.app == now.header.app => {
                 let dropped = prev

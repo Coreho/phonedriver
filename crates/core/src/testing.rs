@@ -33,7 +33,7 @@ pub enum Call {
     Install(std::path::PathBuf),
     AppOp(AppOp, AppId),
     Wake,
-    Shell(String),
+    Shell(ShellRequest),
 }
 
 pub struct FakeDevice {
@@ -53,6 +53,7 @@ pub struct FakeDevice {
     frames: watch::Sender<FrameRef>,
     shell: Mutex<ShellReply>,
     on_text: Mutex<Option<TextHook>>,
+    text_failures: Mutex<Vec<Error>>,
     on_gesture: Mutex<Option<GestureHook>>,
     hidden: Option<u32>,
     shot: Mutex<Option<Image>>,
@@ -99,6 +100,7 @@ impl FakeDevice {
             frames: watch::channel(FrameRef::default()).0,
             shell: Mutex::new(ShellReply::default()),
             on_text: Mutex::new(None),
+            text_failures: Mutex::new(Vec::new()),
             on_gesture: Mutex::new(None),
             hidden: None,
             shot: Mutex::new(None),
@@ -120,6 +122,11 @@ impl FakeDevice {
     /// The next `screenshot()` calls fail with these errors, in order, before one succeeds.
     pub fn fail_screenshots(&self, errors: Vec<Error>) {
         *lock(&self.shot_failures) = errors.into_iter().rev().collect();
+    }
+
+    /// The next `text()` calls fail with these errors, in order, before one succeeds.
+    pub fn fail_text(&self, errors: Vec<Error>) {
+        *lock(&self.text_failures) = errors.into_iter().rev().collect();
     }
 
     /// `"tree"` and `"screenshot"` in the order the device was asked, to tell what a screenshot was taken after.
@@ -329,6 +336,9 @@ impl Device for FakeDevice {
     }
 
     async fn text(&self, t: TextInput) -> Result<()> {
+        if let Some(e) = lock(&self.text_failures).pop() {
+            return Err(e);
+        }
         if let Some(trees) = lock(&self.on_text).as_ref().and_then(|f| f(&t)) {
             *lock(&self.trees) = trees.into_iter().rev().collect();
         }
@@ -467,7 +477,7 @@ impl Device for FakeDevice {
     }
 
     async fn shell(&self, req: &ShellRequest) -> Result<ShellReply> {
-        self.record(Call::Shell(req.command.clone()))?;
+        self.record(Call::Shell(req.clone()))?;
         Ok(lock(&self.shell).clone())
     }
 

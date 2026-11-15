@@ -55,7 +55,8 @@ type Target = {ref: string} | {point: {x: number, y: number}} | {id: string, tex
 type Action =
   | {kind: "tap", target: Target, count?: number, long?: number}   // long: hold ms; count taps are 80 ms apart
   | {kind: "type", text: string, into?: Target, mode?: "paste"|"set"|"keys", secret?: boolean, submit?: boolean, append?: boolean}
-    // the CLI reads secret text from stdin or PHONEDRIVER_SECRET and sends it here over the user-only socket
+    // the CLI reads secret text from stdin or PHONEDRIVER_SECRET and sends it here over the user-only socket;
+    // from then on the daemon replaces that text with ••• in every reply, error and trace line (decision D70)
   | {kind: "clear", target: Target}
   | {kind: "swipe", direction: Dir, from?: Target, distance?: number, fast?: boolean}
   | {kind: "drag", from: Target, to: Target}                       // press and hold, move, hold, lift
@@ -72,7 +73,7 @@ type WaitCondition = {appears: Target} | {gone: Target} | {settled: true}
 // target is a substring match, so `gone:Loading` is not gone while "Hide loading" is on screen. They fail `timeout`
 // (-32013) naming the condition.
 
-type Step = Action | {kind: "wait", condition: WaitCondition}   // `secret` text is for single `act` calls only
+type Step = Action | {kind: "wait", condition: WaitCondition}   // the CLI and MCP refuse `secret` text in a batch; the daemon masks it either way (D70)
 type BatchResult = {
   ok: boolean,
   steps: Array<{summary: string, verified?: boolean, unverified?: {shows, hint}}>,   // the steps that ran and succeeded
