@@ -15,29 +15,45 @@ use phonedriver_core::ocr::TextBox;
 
 /// Recognizes text in `png`, a screenshot of a screen `screen` points large.
 ///
-/// Reads at Vision's Accurate level and, when that fails, at its Fast level ([`recognize_quick`]).
+/// Reads at Vision's Accurate level. Once that level has refused a picture the Fast level could read, this process
+/// reads at the Fast level only.
 #[cfg(target_os = "macos")]
 pub fn recognize(png: &[u8], screen: Size) -> Result<Vec<TextBox>, Error> {
+    use std::sync::atomic::{AtomicBool, Ordering};
     // On macOS 27.0.1, on a Mac where `~/Library/Caches/<program>/com.apple.e5rt.e5bundlecache` is never written
     // (a Mac mini with 3 GB of disk free: every program's was empty), the Accurate level reads until the process
     // has been idle for 8 s and from then on fails every call with `CRImageReaderError 1` under an e5rt error
     // (`create_precompiled_compute_operation`, code 13): three probe runs and three whole test runs on 2026-11-15.
-    // A failed call returns in 10 ms, and the Fast level read every frame the Accurate level refused.
-    vision(png, screen, false).or_else(|_| vision(png, screen, true))
+    // Later that day it refused from a process's first call, and a refusal took seconds, not 10 ms: 33 reads took
+    // 222 s. It was never seen to recover inside a process, so one refusal ends the asking. The Fast level read
+    // every frame the Accurate level refused.
+    static ACCURATE_REFUSES: AtomicBool = AtomicBool::new(false);
+    if !ACCURATE_REFUSES.load(Ordering::Relaxed)
+        && let Ok(boxes) = recognize_at(png, screen, Level::Accurate)
+    {
+        return Ok(boxes);
+    }
+    let boxes = recognize_at(png, screen, Level::Fast)?;
+    ACCURATE_REFUSES.store(true, Ordering::Relaxed);
+    Ok(boxes)
 }
 
-/// Recognizes text in `png` at Vision's Fast level, which does not load the model the Accurate level needs.
-///
-/// Measured on the testbed's taps tab at one pixel per point (24 two-character button labels and 6 words): the
-/// Fast level reads 20 strings as they are, 26 enlarged twice and 28 enlarged three times (the Accurate level
-/// reads 30), so a picture is enlarged to about three pixels a point first. A frame takes about 40 ms.
+/// How hard Vision looks.
 #[cfg(target_os = "macos")]
-pub fn recognize_quick(png: &[u8], screen: Size) -> Result<Vec<TextBox>, Error> {
-    vision(png, screen, true)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Level {
+    /// Vision's Accurate level, revision 2: all 30 strings of the testbed's taps tab at one pixel a point, in
+    /// about 45 ms.
+    Accurate,
+    /// Vision's Fast level, which does not load the model the Accurate level needs. On the same tab it reads 20
+    /// strings as the picture comes, 26 enlarged twice and 28 enlarged three times, so the picture is enlarged to
+    /// about three pixels a point first. About 40 ms a frame.
+    Fast,
 }
 
+/// Recognizes text in `png` at one of Vision's levels, with no fallback to the other.
 #[cfg(target_os = "macos")]
-fn vision(png: &[u8], screen: Size, quick: bool) -> Result<Vec<TextBox>, Error> {
+pub fn recognize_at(png: &[u8], screen: Size, level: Level) -> Result<Vec<TextBox>, Error> {
     use objc2::AnyThread;
     use objc2::rc::{Retained, autoreleasepool};
     use objc2::runtime::AnyObject;
@@ -58,7 +74,7 @@ fn vision(png: &[u8], screen: Size, quick: bool) -> Result<Vec<TextBox>, Error> 
         request.setUsesLanguageCorrection(false);
         let data = NSData::with_bytes(png);
         let options: Retained<NSDictionary<_, AnyObject>> = NSDictionary::new();
-        let handler = if quick {
+        let handler = if level == Level::Fast {
             request.setRecognitionLevel(VNRequestTextRecognitionLevel::Fast);
             let image = unsafe { CIImage::imageWithData(&data) }.ok_or(UNREADABLE)?;
             let across = unsafe { image.extent() }.size.width.max(1.0);

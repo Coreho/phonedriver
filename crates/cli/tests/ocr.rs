@@ -131,10 +131,26 @@ fn tesseract_reads_the_taps_tab_light_and_dark_at_one_and_two_pixels_per_point()
     }
 }
 
+/// What Vision's Accurate level reads, or `None` after saying so on a Mac where that level refuses to run (see
+/// the note in `recognize`): there `recognize` answers from the Fast level, which the test below covers.
+#[cfg(target_os = "macos")]
+fn accurate(png: &[u8], w: f32, h: f32) -> Option<Vec<String>> {
+    use phonedriver::ocr::{Level, recognize_at};
+    match recognize_at(png, Size { w, h }, Level::Accurate) {
+        Ok(boxes) => Some(boxes.into_iter().map(|b| b.text).collect()),
+        Err(e) => {
+            eprintln!("Vision's Accurate level refuses on this Mac ({e}); nothing checked");
+            None
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn the_android_testbed_taps_tab_at_one_pixel_per_point() {
-    let found = texts(&read(&format!("{ANDROID}testbed_taps.png")), 411.0, 923.0);
+    let Some(found) = accurate(&read(&format!("{ANDROID}testbed_taps.png")), 411.0, 923.0) else {
+        return;
+    };
     let mut expected = vec!["Taps", "Text", "List", "Gestures", "Busy", "Dark theme"];
     let buttons: Vec<String> = (1..12).map(|i| format!("b{i}")).collect();
     expected.extend(buttons.iter().map(String::as_str));
@@ -147,11 +163,13 @@ fn the_same_tab_at_twice_the_resolution_reads_the_lower_rows_too() {
     if hosted_runner() {
         return;
     }
-    let found = texts(
+    let Some(found) = accurate(
         &read(&format!("{FIXTURES}testbed_taps_2x.png")),
         411.0,
         923.0,
-    );
+    ) else {
+        return;
+    };
     let mut expected = vec!["Taps", "Text", "List", "Gestures", "Dark theme"];
     let buttons: Vec<String> = [
         0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23,
@@ -167,9 +185,9 @@ fn the_same_tab_at_twice_the_resolution_reads_the_lower_rows_too() {
 #[cfg(target_os = "macos")]
 #[test]
 fn the_quick_reader_reads_the_same_pictures_when_the_accurate_one_cannot() {
-    use phonedriver::ocr::recognize_quick;
+    use phonedriver::ocr::{Level, recognize_at};
     let quick = |path: String, w: f32, h: f32| -> Vec<phonedriver_core::ocr::TextBox> {
-        recognize_quick(&read(&path), Size { w, h }).unwrap()
+        recognize_at(&read(&path), Size { w, h }, Level::Fast).unwrap()
     };
     let words = |boxes: &[phonedriver_core::ocr::TextBox]| -> Vec<String> {
         boxes.iter().map(|b| b.text.clone()).collect()
