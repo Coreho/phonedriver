@@ -5,4 +5,5 @@ pub mod agent;
 pub mod control;
 pub mod device;
 pub mod map;
+mod settings;
 pub mod wireless;

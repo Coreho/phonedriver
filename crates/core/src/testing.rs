@@ -13,6 +13,7 @@ use crate::device::{
 use crate::error::{Error, Op};
 use crate::geometry::Size;
 use crate::raw::RawTree;
+use crate::settings::{SettingOp, SettingReply, SettingsIndex};
 
 /// One input the fake received, in order.
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +26,7 @@ pub enum Call {
     Launch(AppId),
     Grant(AppId, Vec<String>),
     Revoke(AppId, Vec<String>),
+    Setting(SettingOp),
     Install(std::path::PathBuf),
     AppOp(AppOp, AppId),
     Wake,
@@ -53,8 +55,10 @@ pub struct FakeDevice {
     shot: Mutex<Option<Image>>,
     shot_failures: Mutex<Vec<Error>>,
     order: Mutex<Vec<&'static str>>,
+    settings: Mutex<Option<FakeSettings>>,
 }
 
+type FakeSettings = (std::sync::Arc<SettingsIndex>, Vec<(String, String)>);
 type TextHook = Box<dyn Fn(&TextInput) -> Option<Vec<RawTree>> + Send + Sync>;
 type GestureHook = Box<dyn Fn(&Gesture) -> Option<Vec<RawTree>> + Send + Sync>;
 
@@ -95,6 +99,7 @@ impl FakeDevice {
             shot: Mutex::new(None),
             shot_failures: Mutex::new(Vec::new()),
             order: Mutex::new(Vec::new()),
+            settings: Mutex::new(None),
         }
     }
 
@@ -175,6 +180,15 @@ impl FakeDevice {
                 system: false,
             })
             .collect();
+    }
+
+    /// The device has these settings, with these values by key. A write is kept; a write of `"refuse"` fails.
+    pub fn with_settings(&self, index: SettingsIndex, values: &[(&str, &str)]) {
+        let values = values
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        *lock(&self.settings) = Some((std::sync::Arc::new(index), values));
     }
 
     /// What `shell()` answers from now on.
@@ -328,6 +342,41 @@ impl Device for FakeDevice {
 
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.record(Call::Revoke(app.clone(), permissions.to_vec()))
+    }
+
+    async fn setting(&self, op: SettingOp) -> Result<SettingReply> {
+        let mut settings = lock(&self.settings);
+        let Some((index, values)) = settings.as_mut() else {
+            return Err(Error::Unsupported {
+                op: Op::Setting,
+                reason: "this fake has no settings",
+            });
+        };
+        lock(&self.calls).push(Call::Setting(op.clone()));
+        let read = |values: &[(String, String)], key: &str| {
+            values
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| SettingReply::Value {
+                    value: v.clone(),
+                    hint: None,
+                })
+                .ok_or(Error::Refused {
+                    detail: format!("the device reported no value for {key}"),
+                })
+        };
+        match op {
+            SettingOp::Index => Ok(SettingReply::Index(index.clone())),
+            SettingOp::Get(key) => read(values, &key),
+            SettingOp::Set { key, value } if value == "refuse" => Err(Error::Refused {
+                detail: format!("{key} was not set: Preference not enabled"),
+            }),
+            SettingOp::Set { key, value } => {
+                values.retain(|(k, _)| *k != key);
+                values.push((key.clone(), value));
+                read(values, &key)
+            }
+        }
     }
 
     async fn foreground(&self) -> Result<Option<AppId>> {

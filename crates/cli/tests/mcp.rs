@@ -130,6 +130,7 @@ async fn tools_list_is_the_tools_with_short_descriptions_and_the_cli_required_ar
         ("batch", vec!["steps"]),
         ("clipboard", vec![]),
         ("shell", vec!["command"]),
+        ("setting", vec![]),
     ]
     .into_iter()
     .map(|(n, r)| (n.to_string(), r.into_iter().map(String::from).collect()))
@@ -877,6 +878,58 @@ async fn apps_grant_and_revoke_take_permissions_and_say_what_they_did() {
         serde_json::to_string(apps).unwrap().contains("revoke"),
         "{apps:?}"
     );
+}
+
+#[tokio::test]
+async fn setting_finds_reads_and_writes_a_setting_by_key() {
+    use phonedriver_core::settings::{SettingItem, SettingScreen, SettingsIndex};
+    const KEY: &str = "dark_ui_mode/dark_ui_activated";
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.with_settings(
+        SettingsIndex {
+            screens: vec![SettingScreen {
+                key: "dark_ui_mode".into(),
+                about: "Dark theme.".into(),
+                link: None,
+            }],
+            items: vec![SettingItem {
+                key: KEY.into(),
+                purpose: "Whether the system dark theme is manually enabled".into(),
+                values: "true | false".into(),
+                writable: true,
+                confirm: false,
+                screen: 0,
+            }],
+        },
+        &[(KEY, "false")],
+    );
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("setting", json!({"find": "dark theme"})).await;
+    assert_eq!(
+        texts(&r),
+        [format!(
+            "{KEY}  [true | false]  Whether the system dark theme is manually enabled"
+        )]
+    );
+    let r = rig.call("setting", json!({"find": "teapot"})).await;
+    assert!(
+        texts(&r)[0].starts_with("no setting matches \"teapot\""),
+        "{r:?}"
+    );
+    let r = rig.call("setting", json!({"key": KEY})).await;
+    assert_eq!(texts(&r), [format!("{KEY} = false")]);
+    let r = rig
+        .call("setting", json!({"key": KEY, "value": "true"}))
+        .await;
+    assert_eq!(texts(&r), [format!("ok {KEY} = true")]);
+    let r = rig.call("setting", json!({"values": {KEY: "false"}})).await;
+    assert_eq!(texts(&r), [format!("ok {KEY} = false")]);
+    let r = rig.call("setting", json!({"value": "true"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    let r = rig.call("setting", json!({"find": "a", "open": "b"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
 }
 
 fn test_socket(home: &std::path::Path, name: &str) -> std::path::PathBuf {

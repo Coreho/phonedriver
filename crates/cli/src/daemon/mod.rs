@@ -41,7 +41,9 @@ tokio::task_local! {
     static PHASES: std::cell::RefCell<Phases>;
 }
 use self::trace::{TraceOptions, Traces};
-use crate::wire::{ActParams, Action, BatchParams, Common, DeviceEntry, Step, VERSION};
+use crate::wire::{
+    ActParams, Action, BatchParams, Common, DeviceEntry, SettingParams, Step, VERSION,
+};
 
 const IDLE_EXIT: Duration = Duration::from_secs(15 * 60);
 const SHUTDOWN_GRACE: Duration = Duration::from_millis(500);
@@ -204,7 +206,7 @@ impl Daemon {
                 Ok(json!({"same": last.as_deref() == Some(line.as_str())}))
             }
             "release" | "snapshot" | "screenshot" | "act" | "wait" | "batch" | "find" | "apps"
-            | "app" | "clipboard" | "health" | "shell" => {
+            | "app" | "clipboard" | "health" | "shell" | "setting" => {
                 let common: Common = rpc::params(params)?;
                 if method == "release" && common.device.is_none() {
                     self.release_everywhere(session).await;
@@ -220,6 +222,21 @@ impl Daemon {
                     "health" => Call::Health,
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
                     "shell" => Call::Shell(rpc::params(params)?),
+                    "setting" => {
+                        let p: SettingParams = rpc::params(params)?;
+                        let asked = [
+                            p.find.is_some(),
+                            p.key.is_some(),
+                            p.values.as_ref().is_some_and(|v| !v.is_empty()),
+                            p.open.is_some(),
+                        ];
+                        if asked.iter().filter(|a| **a).count() != 1 {
+                            return Err(RpcError::invalid_params(
+                                "setting needs one of `find` (words), `key` (with `value` to write), `values` ({key: value}) or `open` (a screen's key)",
+                            ));
+                        }
+                        Call::Setting(p)
+                    }
                     "act" => {
                         let act: ActParams = serde_json::from_value(params.clone())
                             .map_err(|e| act_error(&e, params))?;

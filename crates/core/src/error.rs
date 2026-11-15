@@ -187,6 +187,7 @@ pub enum Op {
     App,
     Shell,
     Display,
+    Setting,
 }
 
 impl Op {
@@ -207,6 +208,7 @@ impl Op {
             Op::App => "app",
             Op::Shell => "shell",
             Op::Display => "display",
+            Op::Setting => "setting",
         }
     }
 }
@@ -430,6 +432,9 @@ pub enum Error {
     AutomationConflict { holder: String },
     #[error("connection error: {detail}")]
     Transport { detail: String },
+    /// The device answered and did not do what was asked; `detail` is the whole message.
+    #[error("{detail}")]
+    Refused { detail: String },
 }
 
 fn no_device(requested: Option<&str>, connected: &[DeviceSummary]) -> String {
@@ -504,6 +509,7 @@ impl Error {
             Error::SecretField { .. } => -32020,
             Error::NotFocused { .. } => -32023,
             Error::PointOffScreen { .. } => -32024,
+            Error::Refused { .. } => -32025,
         }
     }
 
@@ -662,6 +668,7 @@ impl Error {
                 format!("Stop {holder}, then retry the command.")
             }
             Error::Transport { .. } => "Run `phonedriver doctor` to check the connection.".into(),
+            Error::Refused { .. } => "Check what the message names and run the command again; nothing was changed.".into(),
         }
     }
 
@@ -903,6 +910,10 @@ mod tests {
             Error::Transport {
                 detail: "adb server closed the stream".into(),
             },
+            Error::Refused {
+                detail: "battery_saver_screen/battery_saver was not set: Preference not enabled"
+                    .into(),
+            },
         ];
         v.extend(
             all_user_actions()
@@ -937,6 +948,7 @@ mod tests {
             Error::SecretField { .. } => (-32020, "secret_field"),
             Error::NotFocused { .. } => (-32023, "not_focused"),
             Error::PointOffScreen { .. } => (-32024, "point_off_screen"),
+            Error::Refused { .. } => (-32025, "refused"),
         }
     }
 

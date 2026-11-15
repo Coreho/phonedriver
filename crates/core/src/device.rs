@@ -8,6 +8,7 @@ use tokio::sync::{broadcast, watch};
 use crate::error::{DeviceId, Error, Op};
 use crate::geometry::{Point, Rect, Size};
 use crate::raw::RawTree;
+use crate::settings::{SettingOp, SettingReply};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -288,6 +289,14 @@ pub trait Device: Send + Sync {
         Err(Error::Unsupported {
             op: Op::App,
             reason: "this device cannot revoke permissions",
+        })
+    }
+    /// System settings as typed reads and writes: the index of what there is, one value, or a write (which answers
+    /// with the value afterwards).
+    async fn setting(&self, _op: SettingOp) -> Result<SettingReply> {
+        Err(Error::Unsupported {
+            op: Op::Setting,
+            reason: "this device has no settings to read or write by key (Android 17 has them); use `shell`, or the Settings app",
         })
     }
     /// Installs the app file at `path` (on the daemon's machine). Returns the new app's id when it can tell.

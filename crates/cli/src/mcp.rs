@@ -1,6 +1,7 @@
 //! `phonedriver mcp`: the CLI verbs as MCP tools over stdio (architecture 10.2). A tool maps its arguments onto the
 //! verb of the same name and returns the text the verb prints; nothing else happens here.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -78,6 +79,18 @@ struct AppsArgs {
     action: Option<String>,
     app: Option<String>,
     permissions: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct SettingArgs {
+    device: Option<String>,
+    find: Option<String>,
+    key: Option<String>,
+    value: Option<String>,
+    values: Option<BTreeMap<String, String>>,
+    open: Option<String>,
+    /// Write a setting the user must confirm, on a physical device; only when the user asked for exactly that.
+    force: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -1072,7 +1085,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Run a device shell command: exit code, output, screen change. Prefer it for settings: `cmd uimode night yes`, `settings put system screen_brightness 20`, `am start -a android.intent.action.VIEW -d <url>`. Simulator: `simctl ui appearance dark`. A physical iPhone has no shell.",
+        description = "Run a device shell command: exit code, output, screen change. For intents, keys and state, and for settings where `setting` is unsupported: `am start -a android.intent.action.VIEW -d <url>`, `input keyevent 3`, `cmd uimode night yes`. Simulator: `simctl ui appearance dark`. A physical iPhone has no shell.",
         annotations(
             title = "Run a shell command",
             read_only_hint = false,
@@ -1099,6 +1112,41 @@ impl Mcp {
         globals.no_settle = a.settle == Some(false);
         self.run_with(globals, verb, secret.then_some(a.command))
             .await
+    }
+
+    #[tool(
+        description = "System settings by key, with no screens to tap (Android 17+; elsewhere it answers unsupported: use `shell`). `find` lists keys and accepted values (`dark theme|media volume` for several); `values` {key: value} writes; `key` reads one; `open` shows the `screen` with that key.",
+        annotations(
+            title = "Read or change a setting",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn setting(&self, Parameters(a): Parameters<SettingArgs>) -> CallToolResult {
+        let values = a.values.filter(|v| !v.is_empty());
+        let (action, args) = match (a.find, a.key, a.value, values, a.open) {
+            (Some(words), None, None, None, None) => ("find", vec![words]),
+            (None, Some(key), None, None, None) => ("get", vec![key]),
+            (None, Some(key), Some(value), None, None) => ("set", vec![key, value]),
+            (None, None, None, Some(values), None) => (
+                "set",
+                values.into_iter().flat_map(|(k, v)| [k, v]).collect(),
+            ),
+            (None, None, None, None, Some(screen)) => ("open", vec![screen]),
+            _ => {
+                return bad(
+                    "give one of `find` (words), `key` (with `value` to write), `values` ({key: value}) or `open` (a screen key)",
+                );
+            }
+        };
+        let verb = Verb::Setting {
+            action: action.to_string(),
+            args,
+            force: a.force.unwrap_or(false),
+        };
+        self.run(a.device, verb, None).await
     }
 
     #[tool(
@@ -1393,7 +1441,7 @@ impl Mcp {
 
 #[tool_handler(
     name = "phonedriver",
-    instructions = "Operate an Android or iOS device. System settings: `shell`. App UI: `launch` takes an app name (no `devices` or `apps` first), then `snapshot` once and act on its @refs; each action returns what changed. A path of taps you can predict goes in one `tap` with `then`. Send calls one at a time on the shared screen. If an error needs the user to act on the device, say so and go on when they are done. Passwords, payments, sending and deleting need the user's word for this task."
+    instructions = "Operate an Android or iOS device. System settings: `setting` first; `shell` where it is unsupported. App UI: `launch` takes an app name (no `devices` or `apps` first), then `snapshot` once and act on its @refs; each action returns what changed. A path of taps you can predict goes in one `tap` with `then`. Send calls one at a time on the shared screen. If an error needs the user to act on the device, say so and go on when they are done. Passwords, payments, sending and deleting need the user's word for this task."
 )]
 impl ServerHandler for Mcp {
     async fn call_tool(

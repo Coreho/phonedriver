@@ -183,6 +183,21 @@ It lists the phone's addresses (`wlan0 (Wi-Fi)`, `tun0 (Tailscale)`), stops if t
 
 This is opt-in on purpose. adb then listens on port 5555 on every network the phone joins, until it reboots. A new computer still has to be allowed on the phone's screen, but do this only on networks you trust, or with Tailscale on both ends and the phone's other networks untrusted. `adb -s <ip>:5555 usb` or a reboot turns it off. See decision D30.
 
+### Settings by key
+
+On Android 17, the Settings app answers the shell user's `cmd app_function` calls, and phonedriver uses them so an agent can change a setting without opening its screen:
+
+```
+phonedriver setting find dark theme                          # keys, what each accepts, and screens
+phonedriver setting get dark_ui_mode/dark_ui_activated       # dark_ui_mode/dark_ui_activated = false
+phonedriver setting set dark_ui_mode/dark_ui_activated true  # ok dark_ui_mode/dark_ui_activated = true
+phonedriver setting find "dark theme|media volume"           # several searches in one call
+phonedriver setting set <key> <value> <key> <value>          # several writes in one call
+phonedriver setting open dark_ui_mode                        # shows that settings screen
+```
+
+The API 37 emulator lists 182 settings on 196 screens; 105 can be written. A write answers with the value the device reports afterwards, and a refusal carries the device's reason. On a physical device, a setting the device marks as needing its user's confirmation (NFC, mobile data, the camera and microphone switches) is refused without `--force`. Older Android, iOS and the Simulator answer that the device has no settings by key: use `shell` there. Decision D57.
+
 ### Shell
 
 `phonedriver shell "cmd uimode night yes"` runs a command on the device and prints the exit code, the output (cut at 40 lines; `--grep`, `--head`) and what changed on screen. On Android it runs in the agent already on the device, not in a new `adb shell`. On an iOS Simulator it runs through `simctl spawn`, and `shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands. A physical iPhone has no shell. A physical device refuses wipes and removing apps phonedriver did not install unless you pass `--force`. See `docs/bench/history/shell.md` and decision D21.

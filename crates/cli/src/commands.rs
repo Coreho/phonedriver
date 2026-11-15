@@ -401,6 +401,21 @@ pub(crate) enum Verb {
         #[arg(long)]
         secret: bool,
     },
+    /// A system setting without its screen (Android 17): `setting find dark` lists keys and what each accepts
+    /// (`find "dark theme|media volume"` runs several searches), `setting get <key>` reads one,
+    /// `setting set <key> <value> [<key> <value>...]` writes and prints the values afterwards, and
+    /// `setting open <screen key>` shows a settings screen.
+    Setting {
+        /// What to do: `find`, `get`, `set` or `open`.
+        #[arg(value_parser = ["find", "get", "set", "open"])]
+        action: String,
+        /// Words to look for, the key, keys each followed by its new value, or the screen's key.
+        #[arg(required = true)]
+        args: Vec<String>,
+        /// Write a setting the device marks as one its user must confirm, on a physical device.
+        #[arg(long)]
+        force: bool,
+    },
     /// Print the device clipboard, or set it with `clipboard set <text>`.
     Clipboard {
         /// `get` (the default) or `set`.
@@ -939,6 +954,41 @@ pub(crate) async fn execute_with(
             let r = client.call("shell", with(p)).await?;
             show_shell(&r, g.json)
         }
+        Verb::Setting {
+            action,
+            args,
+            force,
+        } => {
+            let mut p = match (action.as_str(), args.as_slice()) {
+                ("find", words) => json!({"find": words.join(" ")}),
+                ("get", [key]) => json!({"key": key}),
+                ("set", [key, value]) => json!({"key": key, "value": value, "force": force}),
+                ("set", pairs) if pairs.len() % 2 == 0 => {
+                    let values: serde_json::Map<String, Value> = pairs
+                        .chunks(2)
+                        .map(|pair| (pair[0].clone(), json!(pair[1])))
+                        .collect();
+                    json!({"values": values, "force": force})
+                }
+                ("open", [screen]) => json!({"open": screen}),
+                ("get", _) => return Err(Failure::Local("setting get takes one key".into())),
+                ("set", _) => {
+                    return Err(Failure::Local(
+                        "setting set takes keys, each followed by its value\nexample: phonedriver setting set dark_ui_mode/dark_ui_activated true".into(),
+                    ));
+                }
+                _ => return Err(Failure::Local("setting open takes one screen key".into())),
+            };
+            p["settle"] = json!(!g.no_settle);
+            if let Some(t) = g.timeout {
+                p["timeout_ms"] = json!(t);
+            }
+            if let Some(t) = g.expect_change {
+                p["expect_change_ms"] = json!(t);
+            }
+            let r = client.call("setting", with(p)).await?;
+            show_setting(&r, &args.join(" "), g.json)
+        }
         Verb::Batch { steps } => {
             let steps = steps
                 .iter()
@@ -1410,6 +1460,59 @@ pub(crate) fn show_shell(result: &Value, json: bool) -> Result<String, Failure> 
             .collect();
         out.push_str("\nscreen: ");
         out.push_str(&seen.join("\n"));
+    }
+    Ok(out)
+}
+
+/// `setting`: the matching lines of a search, `key = value` for a read, `ok key = value` and the screen change for
+/// a write, or the action line of an opened screen.
+pub(crate) fn show_setting(result: &Value, asked: &str, json: bool) -> Result<String, Failure> {
+    if json {
+        return Ok(result.to_string());
+    }
+    if let Some(lines) = result["lines"].as_array() {
+        let mut out: Vec<String> = lines
+            .iter()
+            .filter_map(|l| l.as_str().map(String::from))
+            .collect();
+        if out.is_empty() {
+            return Ok(format!(
+                "no setting matches {asked:?}; try one other word, or `shell`"
+            ));
+        }
+        match result["more"].as_u64() {
+            Some(n) if n > 0 => out.push(format!("… {n} more; add a word to narrow")),
+            _ => {}
+        }
+        return Ok(out.join("\n"));
+    }
+    let mut out = if let Some(values) = result["values"].as_object() {
+        values
+            .iter()
+            .map(|(k, v)| format!("ok {k} = {}", v.as_str().unwrap_or_default()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else if let Some(key) = result["key"].as_str() {
+        let value = result["value"].as_str().unwrap_or_default();
+        if result.get("action").is_none() {
+            return Ok(match result["hint"].as_str() {
+                Some(hint) => format!("{key} = {value}\nnote: {hint}"),
+                None => format!("{key} = {value}"),
+            });
+        }
+        format!("ok {key} = {value}")
+    } else {
+        return show_action(result, false);
+    };
+    let Some(action) = result.get("action") else {
+        return Ok(out);
+    };
+    let action: ActionResult = decode(action)?;
+    if action.changed {
+        let seen = show_action(&serde_json::to_value(&action).unwrap_or_default(), false)?;
+        let seen = seen.strip_prefix("ok set").unwrap_or(&seen);
+        out.push_str("\nscreen: ");
+        out.push_str(seen.trim_start_matches(" · "));
     }
     Ok(out)
 }

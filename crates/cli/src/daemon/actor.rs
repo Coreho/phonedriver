@@ -22,6 +22,7 @@ use phonedriver_core::raw::{NodeFlags, RawTree};
 use phonedriver_core::render::{
     AppLine, DeviceLine, Filters, Header, Orientation, Rendered, SettleLine, plural, quote,
 };
+use phonedriver_core::settings::{SettingOp, SettingReply};
 use phonedriver_core::settle::{Config, Detector, Input, State};
 use phonedriver_core::similar::{SUGGEST_WITHIN, normalized_distance};
 use serde_json::{Value, json};
@@ -37,8 +38,8 @@ use super::{guard, secret_field};
 use crate::wire::{
     ActParams, Action, ActionResult, AppParams, Approval, BatchParams, BatchResult,
     ClipboardParams, FindParams, Kind, Observation, PinchDirection, ScreenshotParams,
-    ScreenshotResult, ShellParams, ShellResult, SnapshotParams, Step, StepFailure, StepResult,
-    Target, TypeMode, WaitCondition, WaitParams,
+    ScreenshotResult, SettingParams, ShellParams, ShellResult, SnapshotParams, Step, StepFailure,
+    StepResult, Target, TypeMode, WaitCondition, WaitParams,
 };
 
 pub const LEASE_TTL: Duration = Duration::from_secs(600);
@@ -48,6 +49,8 @@ pub const LEASE_TTL: Duration = Duration::from_secs(600);
 /// The device stays connected, so the terminal's next command is not a cold start.
 pub const TERMINAL_HOLD: Duration = Duration::from_secs(30);
 const TICK: Duration = Duration::from_millis(5);
+const SETTING_LINES: usize = 12;
+const SETTING_LINES_OF_MANY: usize = 4;
 const SCREEN_WAIT: Duration = Duration::from_secs(3);
 const KEYGUARD_WAIT: Duration = Duration::from_millis(1000);
 const WAIT_DEBOUNCE: Duration = Duration::from_millis(100);
@@ -122,6 +125,7 @@ pub enum Call {
     App(AppParams),
     Clipboard(ClipboardParams),
     Shell(ShellParams),
+    Setting(SettingParams),
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
@@ -579,6 +583,7 @@ impl Actor {
                 }
             }
             Call::Shell(p) => to_value(self.shell(s, p).await?),
+            Call::Setting(p) => self.setting(s, p).await?,
             Call::Health => self.health().await?,
             Call::Release | Call::Leased => json!({}),
         };
@@ -754,6 +759,165 @@ impl Actor {
             ms,
             action,
         })
+    }
+
+    /// Finds, reads, writes or opens a system setting by key (decision D57). A write settles and reports the
+    /// screen change, as `shell` does.
+    async fn setting(&mut self, s: &mut Session, p: SettingParams) -> Result<Value, Error> {
+        let device = self.device()?;
+        let SettingReply::Index(index) = device.setting(SettingOp::Index).await? else {
+            return Err(Error::Transport {
+                detail: "the device answered a settings index request with a value".into(),
+            });
+        };
+        if let Some(query) = &p.find {
+            let searches: Vec<&str> = query.split('|').filter(|q| !q.trim().is_empty()).collect();
+            let (limit, screens) = if searches.len() > 1 {
+                (SETTING_LINES_OF_MANY, 1)
+            } else {
+                (SETTING_LINES, 3)
+            };
+            let mut lines: Vec<String> = Vec::new();
+            let mut more = 0;
+            for search in searches {
+                let found = index.find(search, limit, screens);
+                more += found.more;
+                for line in found.lines {
+                    if !lines.contains(&line) {
+                        lines.push(line);
+                    }
+                }
+            }
+            return Ok(json!({"lines": lines, "more": more}));
+        }
+        if let Some(screen) = p.open {
+            let link = match index.screen(&screen) {
+                None => Err(format!(
+                    "no settings screen has the key {screen:?}; `find` lists screens as `screen <key>`"
+                )),
+                Some(found) => found.link.clone().ok_or(format!(
+                    "the settings screen {screen} cannot be opened by key: it shows one item (an app, a SIM) the device must be told"
+                )),
+            }
+            .map_err(|detail| Error::Refused { detail })?;
+            let act = ActParams {
+                action: Action::Open {
+                    url: link,
+                    app: None,
+                },
+                approval: None,
+                ask: Vec::new(),
+                settle: p.settle,
+                timeout_ms: p.timeout_ms,
+                expect_change_ms: p.expect_change_ms,
+            };
+            let mut result = self.act(s, act).await?;
+            result.summary = format!("opened the settings screen {screen}");
+            return Ok(to_value(result));
+        }
+        let unknown = |key: &str| {
+            let found = index.find(&key.replace(['/', '_'], " "), 3, 0);
+            let close: Vec<&str> = found
+                .lines
+                .iter()
+                .filter_map(|l| l.split_whitespace().next())
+                .collect();
+            Error::Refused {
+                detail: if close.is_empty() {
+                    format!("no setting has the key {key:?}; `find` with a word lists keys")
+                } else {
+                    format!(
+                        "no setting has the key {key:?}; closest: {}",
+                        close.join(", ")
+                    )
+                },
+            }
+        };
+        let single = p.values.is_none();
+        let writes: Vec<(String, String)> = match (p.values, p.key, p.value) {
+            (Some(values), _, _) => values.into_iter().collect(),
+            (None, Some(key), Some(value)) => vec![(key, value)],
+            (None, key, _) => {
+                let key = key.unwrap_or_default();
+                if index.item(&key).is_none() {
+                    return Err(unknown(&key));
+                }
+                let SettingReply::Value { value, hint } =
+                    device.setting(SettingOp::Get(key.clone())).await?
+                else {
+                    return Err(Error::Transport {
+                        detail: "the device answered a settings read with an index".into(),
+                    });
+                };
+                return Ok(json!({"key": key, "value": value, "hint": hint}));
+            }
+        };
+        for (key, _) in &writes {
+            let item = index.item(key).ok_or_else(|| unknown(key))?;
+            if !item.writable {
+                return Err(Error::Refused {
+                    detail: format!("{key} is read-only"),
+                });
+            }
+            if item.confirm && self.physical() && !p.force {
+                return Err(Error::Unsupported {
+                    op: Op::Setting,
+                    reason: "the device marks this setting as one its user must confirm; pass `force` only when the user asked for exactly this change",
+                });
+            }
+        }
+        let mut cfg = Config::action();
+        cfg.expect_change = Some(Duration::from_millis(p.expect_change_ms.unwrap_or(250)));
+        if let Some(t) = p.timeout_ms {
+            cfg.timeout = Duration::from_millis(t);
+        }
+        if p.settle && s.last.is_none() {
+            let now = self.fresh(s).await?;
+            s.set_last(Some(now));
+        }
+        let started = self.begin_action();
+        let mut done: Vec<(String, String)> = Vec::new();
+        for (key, value) in writes {
+            let op = SettingOp::Set {
+                key: key.clone(),
+                value,
+            };
+            match device.setting(op).await {
+                Ok(SettingReply::Value { value, .. }) => done.push((key, value)),
+                Ok(SettingReply::Index(_)) => {
+                    return Err(Error::Transport {
+                        detail: "the device answered a settings write with an index".into(),
+                    });
+                }
+                Err(Error::Refused { detail }) if !done.is_empty() => {
+                    let before: Vec<String> =
+                        done.iter().map(|(k, v)| format!("{k} = {v}")).collect();
+                    return Err(Error::Refused {
+                        detail: format!("{detail}; already set: {}", before.join(", ")),
+                    });
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        let action = self
+            .finish(
+                s,
+                p.settle,
+                cfg,
+                started,
+                "set".to_string(),
+                None,
+                None,
+                None,
+            )
+            .await?;
+        if single {
+            let (key, value) = done.remove(0);
+            return Ok(json!({"key": key, "value": value, "action": action}));
+        }
+        let values: serde_json::Map<String, Value> =
+            done.into_iter().map(|(k, v)| (k, json!(v))).collect();
+        Ok(json!({"values": values, "action": action}))
     }
 
     /// Everything but an emulator or a Simulator belongs to a person.

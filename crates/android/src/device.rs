@@ -9,6 +9,7 @@ use phonedriver_core::device::{
 use phonedriver_core::error::{Error, Op};
 use phonedriver_core::geometry::{Rect, Size};
 use phonedriver_core::raw::{NodeFlags, RawTree};
+use phonedriver_core::settings::{SettingOp, SettingReply, SettingsIndex};
 use phonedriver_video::frame_store::FrameStore;
 use phonedriver_video::image::{encode_png, scaled_size};
 use phonedriver_video::stream::VideoStream;
@@ -19,6 +20,7 @@ use crate::adb::Adb;
 use crate::agent::{Agent, AgentLog, Launched};
 use crate::control::Control;
 use crate::map;
+use crate::settings;
 
 const FIRST_FRAME_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 /// A screenshot proves the stream is current within this: one control round trip and the barrier's way back.
@@ -36,6 +38,7 @@ pub struct AndroidDevice {
     events: broadcast::Sender<DeviceEvent>,
     log: AgentLog,
     _launched: Launched,
+    settings: tokio::sync::OnceCell<std::sync::Arc<SettingsIndex>>,
 }
 
 impl AndroidDevice {
@@ -79,6 +82,7 @@ impl AndroidDevice {
             events,
             log,
             _launched: launched,
+            settings: tokio::sync::OnceCell::new(),
         })
     }
 
@@ -125,6 +129,30 @@ impl AndroidDevice {
         Ok(())
     }
 
+    /// Runs one of the Settings app's functions and returns its JSON. Older Android has no `app_function`
+    /// service; a build whose Settings lacks the function answers "App function not found".
+    async fn settings_function(&self, function: &str, parameters: &Value) -> Result<String> {
+        let out = self
+            .adb
+            .shell(&self.serial, &settings::command(function, parameters))
+            .await?;
+        let text = out.stdout_text();
+        if text.trim_start().starts_with('{') {
+            return Ok(text);
+        }
+        let said = format!("{text}{}", String::from_utf8_lossy(&out.stderr));
+        if said.contains("Can't find service") || said.contains("App function not found") {
+            return Err(Error::Unsupported {
+                op: Op::Setting,
+                reason: "this device has no settings to read or write by key (Android 17 has them); use `shell`, or the Settings app",
+            });
+        }
+        let first = said.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        Err(Error::Refused {
+            detail: format!("the Settings app did not run {function}: {}", first.trim()),
+        })
+    }
+
     async fn pm_permissions(&self, verb: &str, app: &AppId, permissions: &[String]) -> Result<()> {
         let package_ok = !app.0.is_empty()
             && app
@@ -166,7 +194,7 @@ impl AndroidDevice {
             .stdout_text();
         for permission in &full {
             if let Some(why) = unapplied(&dump, verb, permission) {
-                return Err(Error::Transport {
+                return Err(Error::Refused {
                     detail: format!("`pm {verb} {} {permission}` changed nothing: {why}", app.0),
                 });
             }
@@ -309,6 +337,58 @@ impl Device for AndroidDevice {
 
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.pm_permissions("revoke", app, permissions).await
+    }
+
+    async fn setting(&self, op: SettingOp) -> Result<SettingReply> {
+        match op {
+            SettingOp::Index => {
+                let index = self
+                    .settings
+                    .get_or_try_init(|| async {
+                        let reply = self
+                            .settings_function(settings::INDEX_FUNCTION, &json!({}))
+                            .await?;
+                        settings::index(&reply)
+                            .map(std::sync::Arc::new)
+                            .map_err(|detail| Error::Refused {
+                                detail: format!(
+                                    "the Settings app's index could not be read: {detail}"
+                                ),
+                            })
+                    })
+                    .await?;
+                Ok(SettingReply::Index(index.clone()))
+            }
+            SettingOp::Get(key) => {
+                for function in settings::STATE_FUNCTIONS {
+                    let reply = match self.settings_function(function, &json!({})).await {
+                        Ok(reply) => reply,
+                        Err(Error::Refused { .. } | Error::Unsupported { .. }) => continue,
+                        Err(e) => return Err(e),
+                    };
+                    if let Some((value, hint)) = settings::value(&reply, &key) {
+                        return Ok(SettingReply::Value { value, hint });
+                    }
+                }
+                Err(Error::Refused {
+                    detail: format!("the device reported no value for {key}"),
+                })
+            }
+            SettingOp::Set { key, value } => {
+                let reply = self
+                    .settings_function(
+                        settings::WRITE_FUNCTION,
+                        &settings::write_parameters(&key, &value),
+                    )
+                    .await?;
+                match settings::written(&reply) {
+                    Ok(value) => Ok(SettingReply::Value { value, hint: None }),
+                    Err(why) => Err(Error::Refused {
+                        detail: format!("{key} was not set: {why}"),
+                    }),
+                }
+            }
+        }
     }
 
     async fn foreground(&self) -> Result<Option<AppId>> {

@@ -726,3 +726,31 @@ Over USB the HONOR's median tap is 456 ms before and 471 ms now, which is noise.
 **Evidence.** iPhone 13 Pro Max, iOS 27.0.1, Wi-Fi, Auto-Lock 30 s, Settings in front (the testbed disables the idle timer itself, so it proves nothing here). With the shipped code a snapshot every 10 s still read Settings at 102 s. After `phonedriver release` and 65 s with no call, the next snapshot answered `The device is locked`. In the testbed's text screen, three nudges passed with the keyboard up: the header still said `keyboard shown`, and `abc` then `def` reached the app as `abcdef`.
 
 **Cost.** A phone someone left with a session, or after one terminal command with no `release`, stays awake and unlocked for up to 10 minutes. The simulator gets the same key event and ignores it.
+
+## D57. Settings by key, through the Settings app's own functions
+
+**Choice.** `setting` finds, reads, writes and opens system settings by key (CLI verb, MCP tool, daemon method, `Device::setting`). On Android 17 the Settings app publishes them as device-state app functions, and `cmd app_function execute-app-function` runs those for the shell user, which is the user our agent already is. The index (`getDeviceStateMetadata`) is read once per connection and searched on the host: every word of the query must appear in a setting's purpose, key or screen description, in that order of weight, and a search prints at most 12 settings and 3 screens. `find` takes several searches separated by `|` (4 settings and 1 screen each) and `values` takes several writes, so two calls change any number of settings. A write (`setDeviceStateItem`) answers with the value the device reports afterwards. A screen is opened with the `intent:` link the index gives for it, which made the agent's `open` accept `intent:` links in general.
+
+**Why.** The user asked for typed calls that skip the screen (2026-11-15). The research behind that: a command-line route beat the GUI route on AndroidWorld (71.8% against 69.3%, arXiv 2606.19388), and MAS-Bench measured 44.6% to 64.1% when agents had shortcuts. `shell` already covers the settings a model knows a command for. This covers the ones it does not: the API 37 emulator lists 182 settings on 196 screens, 105 writable, each with a purpose written for a model and the values it accepts. Raw, the index is 272 KB of JSON and `shell` cuts output at 40 lines, so the functions were not usable through `shell`.
+
+**Rules.** A key that is not in the index, a read-only key and a write the device declines are `refused` (-32025, new: the device answered and did not do it), with the device's reason and, for an unknown key, the three closest keys. The device marks some settings `REQUIRES_CONFIRMATION` (NFC, mobile data, the camera and microphone switches; 18 on the emulator): on a physical device those need `force`, as D21's refusals do. An emulator takes them.
+
+**Rejected.** A general `functions` tool that lists and runs any app function: 19 of the emulator's 29 functions are device-state ones, the one launcher function tried failed with "Unable to instantiate class", and a listing is 205 KB. Teaching `cmd app_function` in the skill instead (the plan's first idea): the output does not fit `shell`. Reading one key with `getDeviceStateItem`: it fails on API 37 with "No valid executor found for GET_DEVICE_STATE", so a read asks the six bulk functions in turn (0.2 to 1.4 s each on the emulator). Itemized settings (one app's notifications, one SIM): the index lists them, nothing here fills in the item, so their screens have no link and their keys are untested.
+
+**Evidence.** API 37 emulator, 2026-11-15, each change read back from the system and not from our reply: `setting set dark_ui_mode/dark_ui_activated false` then `true` moved `cmd uimode night` from `yes` to `no` and back; `setting set sound_screen/media_volume 4` then `5` moved `cmd media_session volume --stream 3 --get` from 5 to 4 and back; `setting open dark_ui_mode` returned the Dark theme screen. Refusals seen: `99` for the volume (`Error with code 8 due to Request is invalid. (it is 5)`), Battery Saver while plugged in (`Preference not enabled`), the hotspot name (`read-only`).
+
+**Agent runs.** One task, `claude -p` with Sonnet 5.5 on the subscription, the emulator reset before each run and its state read with `cmd uimode night`, `cmd media_session volume --stream 3 --get` and `settings get system status_bar_show_battery_percent`: "turn the dark theme off, set the media volume to 9, and turn on showing the battery percentage in the status bar".
+
+| Run | Tool calls | Turns | Cache-read tokens | State after |
+|---|---|---|---|---|
+| `setting` present, first wording (`shell` said "Prefer it for settings") | 12, none to `setting` | 13 | 55,498 | volume 9, percentage on (dark theme not read) |
+| `setting` present, wording as shipped, three runs | 2, 2, 2 | 3, 3, 3 | 12,626, 15,959, 15,971 | all three settings changed (dark theme read in the third run only) |
+| `setting` disallowed | 1 | 2 | 5,816 | volume still 5; the agent said it had set it |
+
+The first run is why the `shell` description no longer says to prefer it for settings: the agent never tried `setting`, and spent ten calls on the volume because `cmd media_session volume --set` changes nothing on API 37. The control run failed the same way and reported success. Five runs, one task, one model: a direction, not a rate.
+
+**Cost.** The tool adds 482 characters to what a model reads of the tool list on every turn (15 tools, 4,596 characters). A search answers in up to 15 lines.
+
+**Limits.** Android 17 only, and only where the shell user may run app functions: seen on a userdebug emulator image, not on a retail phone. The other packages with the same functions (Play services, Digital Wellbeing) are not indexed. Values are the device's strings, passed through. The sensitivity mark `MUST_PROVIDE_UNDO` (airplane mode, Bluetooth, the hotspot; 4 settings) is not acted on.
+
+**Reopen if.** A retail Android 17 phone refuses the shell user; `getDeviceStateItem` starts working (a read becomes one call); third-party apps publish functions worth a general tool.

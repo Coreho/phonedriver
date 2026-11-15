@@ -7,10 +7,12 @@ description: "Use when the task needs a phone, tablet, iPhone, iPad, Android dev
 
 phonedriver shows an Android or iOS device's screen as text and operates it. The MCP tools (`snapshot`, `tap`, `type`, ...) and the command line (`phonedriver <verb>`) return the same text. Each tool's description holds its details; this file holds the strategy across tools.
 
-## Settings and system actions: `shell` first
+## Settings and system actions: `setting` and `shell` first
 
-Run a setting, intent or key with `shell`: one call returns the exit code, the output and what changed on screen, with no screens to tap through.
+Change a setting, send an intent or press a key without tapping through screens.
 
+- `setting` first (Android 17 and later): two calls change any number of settings. `find "dark theme|media volume"` lists settings as `key  [accepted values]  purpose`, one search per `|`; `values {"<key>": "<value>", ...}` writes them and returns the values the device now reports. `key` alone reads one; `open` shows a settings screen by its `screen` key. A refusal carries the device's reason (`Preference not enabled`).
+- `shell` for everything else, and where `setting` answers unsupported (older Android, the Simulator). One call returns the exit code, the output and what changed on screen.
 - Android: `cmd uimode night yes`, `settings put system screen_brightness 20`, `am start -a android.intent.action.VIEW -d <url>`, `input keyevent 3`, `dumpsys window | grep mCurrentFocus`.
 - iOS Simulator: `simctl ui appearance dark`, `simctl openurl <url>`, `simctl privacy grant photos <bundle id>`, `simctl location set <lat>,<lon>`.
 - A physical iPhone has no shell. A physical Android refuses wipes and removing apps phonedriver did not install; pass `force` only when the user asked for exactly that.
@@ -75,4 +77,4 @@ Each error has a hint that names the next step; follow it.
 
 ## Verbs
 
-`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `batch`, `clipboard`. The command line also has `find`, `clear`, `open <url>`, `gesture` and `release`.
+`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `batch`, `clipboard`. The command line also has `find`, `clear`, `open <url>`, `gesture` and `release`.

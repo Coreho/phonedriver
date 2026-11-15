@@ -294,6 +294,23 @@ pub struct AppParams {
     pub permissions: Vec<String>,
 }
 
+/// A system setting by key (`docs/protocol.md`, `setting`): `find` searches (`a|b` for several searches), `key`
+/// reads, `key` with `value` writes, `values` writes several, `open` shows the settings screen with that key.
+#[derive(Debug, Deserialize)]
+pub struct SettingParams {
+    pub find: Option<String>,
+    pub key: Option<String>,
+    pub value: Option<String>,
+    pub values: Option<std::collections::BTreeMap<String, String>>,
+    pub open: Option<String>,
+    #[serde(default)]
+    pub force: bool,
+    #[serde(default = "yes")]
+    pub settle: bool,
+    pub timeout_ms: Option<u64>,
+    pub expect_change_ms: Option<u64>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct FindParams {
     pub text: String,

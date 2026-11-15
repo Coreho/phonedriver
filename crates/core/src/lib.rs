@@ -13,6 +13,7 @@ pub mod prune;
 pub mod raw;
 pub mod refs;
 pub mod render;
+pub mod settings;
 pub mod settle;
 pub mod similar;
 #[cfg(any(test, feature = "testing"))]

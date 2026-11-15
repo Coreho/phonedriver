@@ -16,6 +16,7 @@ const HIDDEN: &[(&str, &[&str])] = &[
     ("scroll", &["in", "max"]),
     ("shell", &["grep", "head", "settle", "force", "secret"]),
     ("batch", &["timeout_ms"]),
+    ("setting", &["force"]),
 ];
 
 pub fn lean(tool: &str, schema: &mut Map<String, Value>) {
