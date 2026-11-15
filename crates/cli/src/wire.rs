@@ -200,6 +200,9 @@ pub struct ActionResult {
     pub settled: bool,
     pub settle_ms: u32,
     pub changed: bool,
+    /// How many times in a row this same action has settled with no change, from the third time on.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub unchanged_repeats: Option<u32>,
     /// The screen was off and the action woke it first.
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub woke: bool,

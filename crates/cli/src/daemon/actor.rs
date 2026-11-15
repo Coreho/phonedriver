@@ -1509,6 +1509,13 @@ impl Actor {
         let mut result = acted?;
         result.woke = woke;
         result.unlocked = unlocked;
+        // Run i18: after a launch that changed nothing, an agent tapped the same icon again and again.
+        s.idle = match s.idle.take() {
+            _ if !result.settled || result.changed => None,
+            Some((summary, n)) if summary == result.summary => Some((summary, n + 1)),
+            _ => Some((result.summary.clone(), 1)),
+        };
+        result.unchanged_repeats = s.idle.as_ref().map(|(_, n)| *n).filter(|n| *n >= 3);
         Ok(result)
     }
 
@@ -2803,6 +2810,7 @@ impl Actor {
         s.set_last(Some(rendered));
         self.lap("render", render);
         Ok(ActionResult {
+            unchanged_repeats: None,
             ok: true,
             summary,
             via: via.map(str::to_string),
@@ -2893,6 +2901,7 @@ impl Actor {
                 };
                 s.set_last(Some(rendered));
                 ActionResult {
+                    unchanged_repeats: None,
                     ok: true,
                     summary: String::new(),
                     via: None,
@@ -3000,6 +3009,7 @@ impl Actor {
                 };
                 s.set_last(Some(rendered));
                 return Ok(ActionResult {
+                    unchanged_repeats: None,
                     ok: true,
                     summary,
                     via: None,
@@ -3098,6 +3108,7 @@ impl Actor {
         };
         s.set_last(Some(rendered));
         Ok(ActionResult {
+            unchanged_repeats: None,
             ok: true,
             summary: "screen settled".into(),
             via: None,
@@ -3339,6 +3350,7 @@ fn scroll_container(now: &Rendered, direction: Direction) -> Option<&Element> {
 /// The reply to an input sent with `settle: false`: delivered, nothing observed.
 fn delivered(s: &Session, summary: String, via: Option<&'static str>) -> ActionResult {
     ActionResult {
+        unchanged_repeats: None,
         ok: true,
         summary,
         via: via.map(str::to_string),

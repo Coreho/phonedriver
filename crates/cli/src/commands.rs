@@ -1459,7 +1459,9 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
         out.push('\n');
         out.push_str(&r.observation.text);
     }
-    if r.settled && !r.changed {
+    if let Some(n) = r.unchanged_repeats {
+        out.push_str(&format!("\nhint: this action has changed nothing {n} times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"));
+    } else if r.settled && !r.changed {
         out.push_str("\nhint: nothing changed; the tap may have missed, or changed only what the element list does not show (a web checkbox): `phonedriver screenshot` shows the picture");
     }
     if let Some(u) = &r.unverified {
@@ -1734,6 +1736,22 @@ mod tests {
         let hint = shown.lines().find(|l| l.starts_with("hint: ")).unwrap();
         assert!(!hint.contains("wait settled"), "{hint}");
         assert!(hint.contains("`phonedriver screenshot`"), "{hint}");
+    }
+
+    #[test]
+    fn the_third_action_that_changed_nothing_is_told_to_stop_repeating_it() {
+        let mut v = action(false, "diff", "");
+        v["settle_ms"] = json!(502);
+        v["unchanged_repeats"] = json!(3);
+        let shown = show_action(&v, false).unwrap();
+        let hints: Vec<&str> = shown.lines().filter(|l| l.starts_with("hint: ")).collect();
+        assert_eq!(
+            hints,
+            [
+                "hint: this action has changed nothing 3 times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"
+            ],
+            "{shown}"
+        );
     }
 
     #[test]

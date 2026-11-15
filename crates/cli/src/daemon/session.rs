@@ -31,6 +31,8 @@ pub struct Session {
     pub guard_allowed: Vec<Category>,
     /// Text fields the agent was shown that later screens dropped, newest last, with the ref they had.
     gone: Vec<Element>,
+    /// The summary of the last action that settled with no change, and how many times in a row it has.
+    pub idle: Option<(String, u32)>,
 }
 
 /// How many dropped text fields a session remembers.

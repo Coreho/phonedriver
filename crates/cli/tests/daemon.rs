@@ -659,6 +659,56 @@ async fn act_on_a_screen_that_never_changes_reports_no_change_after_500_ms() {
     assert_eq!(r["observation"]["text"], "");
 }
 
+#[tokio::test(start_paused = true)]
+async fn the_third_identical_action_that_changes_nothing_says_so() {
+    let (source, _) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    for n in 1..=2 {
+        let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+        assert_eq!(r["changed"], false, "tap {n}: {r}");
+        assert!(r.get("unchanged_repeats").is_none(), "tap {n}: {r}");
+    }
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["unchanged_repeats"], 3, "{r}");
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["unchanged_repeats"], 4, "{r}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_different_action_starts_the_count_of_unchanged_repeats_again() {
+    let (source, _) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    ok(&d, "default", "act", tap_point(50.0, 50.0)).await;
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert!(r.get("unchanged_repeats").is_none(), "{r}");
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["unchanged_repeats"], 3, "{r}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_action_that_changed_the_screen_starts_the_count_of_unchanged_repeats_again() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    let emitter = fake.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        emitter.set_tree(tree(&["Other"]));
+        emitter.emit(DeviceEvent::WindowChanged { package: None });
+    });
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["changed"], true, "{r}");
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert!(r.get("unchanged_repeats").is_none(), "{r}");
+}
+
 #[tokio::test]
 async fn a_window_change_event_counts_as_the_first_change() {
     let (source, fake) = FakeSource::with(vec![tree(&["One"]), tree(&["Other"])]);

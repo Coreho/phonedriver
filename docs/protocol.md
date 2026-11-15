@@ -97,6 +97,7 @@ type ActionResult = {
   unverified?: {shows: string, hint: string},  // with verified: false: what the field shows and a hint for that cause
   settled: boolean, settle_ms: number,
   changed: boolean,               // pixels or windows changed, or the diff is not empty
+  unchanged_repeats?: number,     // from 3: this same action has settled with no change that many times in a row
   woke?: true,                    // the screen was off and the action woke it first
   unlocked?: true,                // a swipe-only lock screen was swiped away first
   observation: Observation       // kind "diff" with empty text when nothing changed
