@@ -730,6 +730,13 @@ impl Device for IosDevice {
             ClipboardOp::Get => Ok(Some(simctl(&["pbpaste", &self.udid]).await?)),
             ClipboardOp::Set(text) => {
                 simctl_with_input(&["pbcopy", &self.udid], Some(&text)).await?;
+                // Seen on a Mac mini with Xcode 27, 2026-11-16: `simctl pbcopy` exited 0 on every booted simulator
+                // and `pbpaste` stayed empty, also after the simulator was shut down and booted again.
+                if simctl(&["pbpaste", &self.udid]).await? != text {
+                    return Err(Error::Refused {
+                        detail: "the Simulator's clipboard did not take the text: `xcrun simctl pbcopy` reported success and `pbpaste` gives something else".into(),
+                    });
+                }
                 Ok(None)
             }
         }

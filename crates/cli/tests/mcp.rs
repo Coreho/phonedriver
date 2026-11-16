@@ -640,6 +640,43 @@ async fn devices_with_boot_starts_a_device_or_says_it_is_on_and_a_wrong_name_nam
 }
 
 #[tokio::test]
+async fn an_argument_no_tool_has_is_refused_with_the_ones_it_has() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    for (tool, args, has) in [
+        ("clipboard", json!({"action": "set", "text": "x"}), "`set`"),
+        ("screenshot", json!({"mark": true}), "`marks`"),
+        ("devices", json!({"start": "Fake"}), "`boot`"),
+        ("snapshot", json!({"search": "One"}), "`find`"),
+        ("apps", json!({"name": "Fake"}), "`app`"),
+    ] {
+        let reply = rig
+            .client
+            .call_tool(
+                CallToolRequestParams::new(tool).with_arguments(args.as_object().unwrap().clone()),
+            )
+            .await;
+        let said = match reply {
+            Ok(r) => {
+                assert_eq!(r.is_error, Some(true), "{tool}: {r:?}");
+                texts(&r).join("\n")
+            }
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            said.contains("unknown field") && said.contains(has),
+            "{tool}: {said}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_empty_clipboard_is_said_in_words() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("clipboard", json!({})).await;
+    assert_eq!(texts(&r), vec!["the clipboard is empty"]);
+}
+
+#[tokio::test]
 async fn a_batch_over_mcp_runs_the_steps_and_returns_one_numbered_reply() {
     let rig = rig(vec![field_tree("", false), field_tree("hi", false)]).await;
     rig.call("snapshot", json!({})).await;

@@ -74,6 +74,7 @@ impl Told {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct BatchArgs {
     device: Option<String>,
     steps: Vec<serde_json::Value>,
@@ -81,6 +82,7 @@ struct BatchArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct AppsArgs {
     device: Option<String>,
     action: Option<String>,
@@ -89,6 +91,7 @@ struct AppsArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct LogsArgs {
     device: Option<String>,
     app: Option<String>,
@@ -98,6 +101,7 @@ struct LogsArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SettingArgs {
     device: Option<String>,
     find: Option<String>,
@@ -110,6 +114,7 @@ struct SettingArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct DevicesArgs {
     device: Option<String>,
     release: Option<bool>,
@@ -118,6 +123,7 @@ struct DevicesArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ScreenshotArgs {
     device: Option<String>,
     marks: Option<bool>,
@@ -139,6 +145,7 @@ struct ReplayArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ClipboardArgs {
     device: Option<String>,
     set: Option<String>,
@@ -162,6 +169,7 @@ struct ShellArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SnapshotArgs {
     device: Option<String>,
     /// Print only what changed since the last observation.
@@ -1277,11 +1285,21 @@ impl Mcp {
         )
     )]
     async fn clipboard(&self, Parameters(a): Parameters<ClipboardArgs>) -> CallToolResult {
+        let reading = a.set.is_none();
         let verb = Verb::Clipboard {
             action: a.set.as_ref().map(|_| "set".to_string()),
             text: a.set,
         };
-        self.run(a.device, verb, None).await
+        let reply = self.run(a.device, verb, None).await;
+        let blank = reply
+            .content
+            .first()
+            .and_then(|c| c.as_text())
+            .is_some_and(|t| t.text.is_empty());
+        if reading && reply.is_error != Some(true) && blank {
+            return CallToolResult::success(vec![ContentBlock::text("the clipboard is empty")]);
+        }
+        reply
     }
 
     #[tool(
