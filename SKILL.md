@@ -50,6 +50,7 @@ A permission sheet, an "isn't responding" box or another system dialog shows in 
 - `scroll down` reveals more of a list; `scroll down --until "Row 640"` reaches a known row. `swipe` is for other gestures: pulling a sheet, reordering with `to`, zooming with `pinch`.
 - A line ending in `under-keyboard` is hidden by the keyboard: `press hide-keyboard`, then tap.
 - `screenshot` (with `marks` to box each tappable element with its ref) covers what the snapshot lacks: a map, a drawing, a photo, a game. Look at the image before tapping a point on it. A reply for a screen with no element list at all brings its picture with it (MCP).
+- To see what an action changed on a screen you read by picture, without a second picture: `screenshot shot.png`, act, `compare shot.png` (MCP: `screenshot`, act, `screenshot` with `compare: true`). The reply is `same`, or the texts that changed with their points.
 - A task that worked and will be asked again: `save <file>` (MCP: `replay` with `save: true`) writes your steps, and `replay <file>` runs them in one call next time. When a replay stops at a step, do that step, then replay from the next one (`--from N`, MCP `from`).
 - A fingerprint prompt on an Android emulator: `press fingerprint` passes it once a fingerprint is enrolled (enroll in Settings with the same key), `press wrong-fingerprint` fails it. On an iOS Simulator the same keys answer Face ID; if the app says Face ID is not set up, press `fingerprint` once and ask again. On a phone, tell the user: it needs their finger or face.
 - Asked for a video of what you do (Android, iOS Simulator): `record start`, the actions, then `record stop` (MCP: `screenshot` with `record: "start"`, then `"stop"`). The reply names the MP4 file and a list of your actions with their times.
@@ -84,4 +85,4 @@ Each error has a hint that names the next step; follow it.
 
 ## Verbs
 
-`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `batch`, `clipboard`, `replay`. The command line also has `find`, `page`, `clear`, `open <url>`, `gesture` and `release`.
+`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `batch`, `clipboard`, `replay`. The command line also has `find`, `page`, `clear`, `open <url>`, `gesture`, `compare` and `release`.

@@ -25,6 +25,11 @@ use crate::client::{Client, Failure};
 use crate::commands::{Globals, Verb, ask_env, execute_with, run_batch};
 use crate::wire::{Approval, ScreenshotResult};
 
+struct Shot {
+    device: Option<String>,
+    png: Vec<u8>,
+}
+
 #[derive(Clone)]
 pub struct Mcp {
     socket: Option<PathBuf>,
@@ -34,6 +39,8 @@ pub struct Mcp {
     ask: Vec<Category>,
     held: Arc<Mutex<Option<Held>>>,
     told: Told,
+    /// The last screenshot this server returned, for `compare`.
+    last_shot: Arc<Mutex<Option<Shot>>>,
 }
 
 /// The question a 2026-07-28 call returned: the call it belongs to, the batch step it holds and what it asked.
@@ -112,6 +119,8 @@ struct DevicesArgs {
 struct ScreenshotArgs {
     device: Option<String>,
     marks: Option<bool>,
+    /// Reply with what changed since your last screenshot, as text and no image.
+    compare: Option<bool>,
     /// `start`, later `stop` (Android, iOS Simulator).
     record: Option<String>,
 }
@@ -476,6 +485,7 @@ impl Mcp {
             ask: Vec::new(),
             held: Arc::default(),
             told: Told::default(),
+            last_shot: Arc::default(),
         }
     }
 
@@ -1321,7 +1331,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Image of the screen, for what the snapshot lacks (canvas, map, photo). `marks` boxes tappable elements with their @ref. `record` saves a video of the screen instead, with the actions done meanwhile.",
+        description = "Image of the screen, for what the snapshot lacks (canvas, map, photo). `marks` boxes tappable elements with their @ref. `compare` replies with what changed since your last screenshot, as text. `record` saves a video of the screen instead, with the actions done meanwhile.",
         annotations(title = "Screenshot", read_only_hint = true, open_world_hint = true)
     )]
     async fn screenshot(&self, Parameters(a): Parameters<ScreenshotArgs>) -> CallToolResult {
@@ -1335,8 +1345,9 @@ impl Mcp {
             };
             return self.run(a.device, verb, None).await;
         }
-        let marks = a.marks.unwrap_or(false);
-        let globals = self.globals(a.device);
+        let compare = a.compare.unwrap_or(false);
+        let marks = a.marks.unwrap_or(false) && !compare;
+        let globals = self.globals(a.device.clone());
         let shot = match self.shot(&globals, marks).await {
             Ok(s) => s,
             Err(f) => return failure(&f),
@@ -1344,6 +1355,32 @@ impl Mcp {
         let Some(data) = shot.data_b64 else {
             return bad("the daemon sent no image data");
         };
+        if !marks {
+            let Ok(now) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &data)
+            else {
+                return bad("the daemon sent bad image data");
+            };
+            let last = self.last_shot.lock().await.replace(Shot {
+                device: a.device.clone(),
+                png: now.clone(),
+            });
+            if compare {
+                let Some(before) = last.filter(|s| s.device == a.device).map(|s| s.png) else {
+                    return bad(
+                        "`compare` needs an earlier screenshot of this device: take one, act, then compare",
+                    );
+                };
+                let report = tokio::task::spawn_blocking(move || {
+                    crate::commands::compared(&before, &now, None)
+                })
+                .await;
+                return match report {
+                    Ok(Ok(text)) => CallToolResult::success(vec![ContentBlock::text(text)]),
+                    Ok(Err(why)) => bad(&why),
+                    Err(e) => bad(&format!("the comparison failed: {e}")),
+                };
+            }
+        }
         CallToolResult::success(vec![
             ContentBlock::image(data, "image/png"),
             ContentBlock::text(match shot.marks {

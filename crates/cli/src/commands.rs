@@ -539,6 +539,18 @@ pub(crate) enum Verb {
         #[arg(long)]
         register_only: bool,
     },
+    /// Say what changed between two screenshots, as text.
+    ///
+    /// With one file, the screen now is compared with it. Prints `same`, or the regions whose pixels differ and the text that differs in them (`~ "Save" → "Saved" at 130,208`), with the point to tap. Text is read from the pictures, so it works for any app.
+    Compare {
+        /// The earlier screenshot (PNG).
+        before: PathBuf,
+        /// The later screenshot. Without it, the screen now.
+        after: Option<PathBuf>,
+        /// Also write the later picture with the changed regions boxed.
+        #[arg(long)]
+        image: Option<PathBuf>,
+    },
     /// Serve the tools over MCP on stdio.
     Mcp,
     /// Print SKILL.md, the instructions an agent reads before it uses phonedriver.
@@ -604,6 +616,26 @@ pub fn run(cli: Cli) -> ExitCode {
         #[cfg(feature = "android")]
         Verb::Untether => crate::wireless::untether(cli.device.as_deref()),
         Verb::Mcp => crate::mcp::run(cli.device),
+        Verb::Compare {
+            before,
+            after: Some(after),
+            image,
+        } => {
+            let compared = read_picture(&before).and_then(|b| {
+                let a = read_picture(&after)?;
+                compared(&b, &a, image.as_deref())
+            });
+            match compared {
+                Ok(text) => {
+                    println!("{text}");
+                    ExitCode::SUCCESS
+                }
+                Err(why) => {
+                    eprintln!("error: {why}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         Verb::Init {
             dry_run,
             register_only,
@@ -977,6 +1009,21 @@ pub(crate) async fn execute_with(
                 None => format!("{path} {}x{}", shot.width, shot.height),
             })
         }
+        Verb::Compare {
+            before,
+            after: _,
+            image,
+        } => {
+            let before = read_picture(&before).map_err(Failure::Local)?;
+            let result = client
+                .call("screenshot", with(json!({"marks": false, "inline": true})))
+                .await?;
+            let shot: ScreenshotResult = decode(&result)?;
+            let now = base64::engine::general_purpose::STANDARD
+                .decode(shot.data_b64.unwrap_or_default())
+                .map_err(|e| Failure::Local(format!("the daemon sent bad image data: {e}")))?;
+            compared(&before, &now, image.as_deref()).map_err(Failure::Local)
+        }
         Verb::Wait { condition } => {
             let mut p = json!({"condition": wait_condition(&condition)});
             if let Some(t) = g.timeout {
@@ -1266,6 +1313,38 @@ pub(crate) async fn execute_with(
         | Verb::Skill
         | Verb::Version => Ok(String::new()),
     }
+}
+
+fn read_picture(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))
+}
+
+/// The report on two screenshots, and with `image` the later one written with its changed regions boxed.
+pub(crate) fn compared(
+    before: &[u8],
+    after: &[u8],
+    image: Option<&std::path::Path>,
+) -> Result<String, String> {
+    let report = crate::compare::compare(before, after)?;
+    let mut text = crate::compare::render(&report);
+    if let Some(path) = image.filter(|_| !report.regions.is_empty()) {
+        let marks: Vec<phonedriver_video::marks::Mark> = report
+            .regions
+            .iter()
+            .enumerate()
+            .map(|(i, r)| phonedriver_video::marks::Mark {
+                label: (i + 1).to_string(),
+                x: r.x,
+                y: r.y,
+                w: r.w,
+                h: r.h,
+            })
+            .collect();
+        let boxed = phonedriver_video::marks::draw_marks(after, &marks)?;
+        std::fs::write(path, boxed).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        text.push_str(&format!("\n{}", path.display()));
+    }
+    Ok(text)
 }
 
 fn wait_condition(condition: &str) -> Value {

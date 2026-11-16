@@ -209,6 +209,24 @@ async fn screenshot_is_one_png_image_block_and_one_text_block_with_size_and_scal
     assert_eq!(texts(&r), vec!["360x800 at scale 1".to_string()]);
 }
 
+#[tokio::test]
+async fn compare_needs_an_earlier_screenshot_and_then_answers_in_text_with_no_image() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("screenshot", json!({"compare": true})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    assert_eq!(
+        texts(&r),
+        vec![
+            "`compare` needs an earlier screenshot of this device: take one, act, then compare"
+                .to_string()
+        ]
+    );
+    let r = rig.call("screenshot", json!({"compare": true})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+    assert_eq!(texts(&r), vec!["same".to_string()]);
+}
+
 async fn remote(rig: &Rig) -> PathBuf {
     use interprocess::local_socket::traits::tokio::Listener as _;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, split};

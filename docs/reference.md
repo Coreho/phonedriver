@@ -255,6 +255,25 @@ iOS devices and the Simulator answer that logs cannot be read. Decision D58.
 
 A web view with accessibility off, a Flutter screen or a game gives no list of elements. phonedriver then reads the screenshot's text on the machine the daemon runs on and adds the lines it finds, marked `(ocr)`; `tap "Send"` taps one. `snapshot --pixels` asks for this on any screen. macOS and Windows use the text recognition the system ships. Linux uses Tesseract when the `tesseract` program is on the `PATH` (`apt install tesseract-ocr`); without it, `--pixels` answers that pixels cannot be read and names the package. Decisions D61, D64 and D65.
 
+### What changed between two screenshots
+
+On a screen with no element list, looking again costs a second picture. `compare` answers in text:
+
+```console
+$ phonedriver screenshot before.png
+$ phonedriver tap "Auto-Capitalisation"
+$ phonedriver compare before.png
+changed: 1 region, 0.6% of the screen
+region 304,592 64x40 (no text changed)
+$ phonedriver tap "Auto-Capitalisation"
+$ phonedriver compare before.png
+same
+```
+
+That is a switch that moved and moved back. Where text differs, the reply has a line for each text that changed (`~ "Will turn on when Bedtime starts" → "Will never turn off automatically" at 132,545`), appeared (`+ "General" at 203,86`) or went (`- "Settings" at 84,143`), with the point to tap. At most twelve lines, then `and 14 more`. With one file the screen now is compared with it; with two files nothing is asked of a device. `--image out.png` also writes the later picture with the regions boxed. Over MCP, `screenshot` with `compare: true` compares the screen with the last screenshot that call returned for the same device and sends no image.
+
+The text is read from the pictures by the same recognition as above, so it can misread small or stylized type, and a status bar's clock or signal that changed is reported like any other text. Both pictures must be the same size; take them without `--native` so that the points can be tapped. Decision D76.
+
 ### Reading a web page
 
 On Android, `phonedriver page` prints the text of the web page in front, whole, without scrolling:

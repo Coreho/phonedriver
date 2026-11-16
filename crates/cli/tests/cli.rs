@@ -36,6 +36,47 @@ fn the_version_flag_prints_the_same_line_as_the_version_verb() {
 }
 
 #[test]
+fn compare_of_two_files_needs_no_device_and_says_why_a_pair_cannot_be_compared() {
+    let dir = tempfile::tempdir().unwrap();
+    let small = dir.path().join("small.png");
+    std::fs::write(&small, fakes::PNG).unwrap();
+    let wide = dir.path().join("wide.png");
+    let mut png = Vec::new();
+    let mut encoder = png::Encoder::new(&mut png, 2, 1);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&[0, 0])
+        .unwrap();
+    std::fs::write(&wide, png).unwrap();
+    let text = dir.path().join("notes.txt");
+    std::fs::write(&text, "not a picture").unwrap();
+    let boxed = dir.path().join("boxed.png");
+    let compare = |a: &PathBuf, b: &PathBuf| {
+        let mut c = Command::cargo_bin("phonedriver").unwrap();
+        c.env("PHONEDRIVER_HOME", dir.path())
+            .arg("compare")
+            .arg(a)
+            .arg(b)
+            .arg("--image")
+            .arg(&boxed);
+        c.assert()
+    };
+    compare(&small, &small).success().stdout("same\n");
+    assert!(!boxed.exists(), "nothing changed, so nothing is drawn");
+    compare(&small, &wide)
+        .code(1)
+        .stderr("error: the pictures are 1x1 and 2x1; compare two screenshots of one device\n");
+    let out = compare(&small, &text).code(1);
+    let err = String::from_utf8_lossy(&out.get_output().stderr).to_string();
+    assert!(
+        err.starts_with("error: the second picture cannot be read: "),
+        "{err}"
+    );
+}
+
+#[test]
 fn no_args_prints_usage_and_exits_2() {
     let out = Command::cargo_bin("phonedriver").unwrap().assert().code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();

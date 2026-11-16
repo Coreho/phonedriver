@@ -2,6 +2,7 @@
 
 pub mod client;
 pub mod commands;
+pub mod compare;
 pub mod daemon;
 #[cfg(windows)]
 mod detach;
