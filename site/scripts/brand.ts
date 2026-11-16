@@ -75,6 +75,26 @@ function figure(): Buffer {
   return shoot(html, FIGURE.w, FIGURE.h, 2, ["--use-angle=metal", "--enable-webgl", "--ignore-gpu-blocklist", "--virtual-time-budget=8000"]);
 }
 
+function ico(files: string[]) {
+  const imgs = files.map((f) => readFileSync(f));
+  const head = Buffer.alloc(6 + 16 * imgs.length);
+  head.writeUInt16LE(1, 2);
+  head.writeUInt16LE(imgs.length, 4);
+  let at = head.length;
+  imgs.forEach((img, i) => {
+    const o = 6 + 16 * i;
+    const side = img.readUInt32BE(16);
+    head.writeUInt8(side, o);
+    head.writeUInt8(side, o + 1);
+    head.writeUInt16LE(1, o + 4);
+    head.writeUInt16LE(32, o + 6);
+    head.writeUInt32LE(img.length, o + 8);
+    head.writeUInt32LE(at, o + 12);
+    at += img.length;
+  });
+  return Buffer.concat([head, ...imgs]);
+}
+
 function png(svg: string, w: number, h: number, out: string) {
   write(out, shoot(`<!doctype html><meta charset="utf-8"><body style="margin:0;background:transparent">${svg}</body>`, w, h, 1));
 }
@@ -98,6 +118,7 @@ const small = join(tmpdir(), "phonedriver-icon-small.png");
 png(mark("micro", PAINT.icon, 512), 512, 512, small);
 for (const [n, from] of [
   [180, join(LOGO, "png/icon-512.png")],
+  [48, small],
   [32, small],
   [16, small],
 ] as const) {
@@ -106,6 +127,8 @@ for (const [n, from] of [
   console.log("wrote", out.replace(ROOT + "/", ""));
 }
 rmSync(small);
+write(join(SITE, "public/favicon.ico"), ico([16, 32, 48].map((n) => join(LOGO, `png/icon-${n}.png`))));
+write(join(SITE, "public/apple-touch-icon.png"), readFileSync(join(LOGO, "png/icon-180.png")));
 write(join(ASSETS, "banner-light.svg"), banner("light"));
 write(join(ASSETS, "banner-dark.svg"), banner("dark"));
 const drawn = figure();

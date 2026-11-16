@@ -12,7 +12,13 @@ const jetbrains = localFont({ src: "./fonts/jetbrains-mono.woff2", weight: "100 
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  icons: { icon: { url: "/favicon.svg", type: "image/svg+xml" } },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
