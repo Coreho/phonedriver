@@ -61,7 +61,9 @@ export function mountJourney(root: HTMLElement): () => void {
   const dock = root.querySelector<HTMLElement>(".dock");
   const hero = root.querySelector<HTMLElement>(".hx");
   const canvas = root.querySelector<HTMLCanvasElement>(".weave");
-  const marks = dock ? [...dock.querySelectorAll<HTMLAnchorElement>(".dock-map a")] : [];
+  const sheet = root.querySelector<HTMLElement>(".stops");
+  const maps = [".dock-map a", ".stops ol a"].map((s) => [...root.querySelectorAll<HTMLAnchorElement>(s)]);
+  const name = dock?.querySelector<HTMLElement>(".dock-name"), count = dock?.querySelector<HTMLElement>(".dock-n"), bar = dock?.querySelector<HTMLElement>(".dock-bar");
   const stops: Stop[] = [...root.querySelectorAll<HTMLElement>(".stop")].map((el) => {
     const svg = el.querySelector<SVGSVGElement>(".rt")!;
     return {
@@ -99,7 +101,7 @@ export function mountJourney(root: HTMLElement): () => void {
   const family = getComputedStyle(root).getPropertyValue("--jb") || "monospace";
   const weave = canvas ? createWeave(canvas, family, getComputedStyle(root).getPropertyValue("--or").trim() || "#ff5b14") : null;
   const mouse = { x: -9999, y: -9999, z: 0, tz: 0 };
-  let W = 0, vh = 0, last = 0, at = -1, drawn = false, born = 0, lastY = -1, lastDraw = 0;
+  let W = 0, vh = 0, last = 0, at = -1, drawn = false, born = 0, lastY = -1, lastDraw = 0, gone = -1;
 
   function geometry(s: Stop) {
     const box = s.el.getBoundingClientRect(), t = s.land.getBoundingClientRect();
@@ -256,6 +258,10 @@ export function mountJourney(root: HTMLElement): () => void {
       bands.push({ x: 0, y: top, h: s.air * BAND, enter: s.shown, twist: reduce ? 0 : -top / vh, ink: s.ink, clear: s.clear });
       if (top - s.air * 0.4 < vh && top + s.air * BAND > 0) moving = true;
     });
+    if (dock && y !== lastY) {
+      const p = Math.round(clamp(y / Math.max(1, root.scrollHeight - vh)) * 1000) / 10;
+      if (bar && p !== gone) bar.style.clipPath = `inset(0 ${100 - (gone = p)}% 0 0)`;
+    }
     const still = y === lastY && now - lastDraw < 15;
     lastY = y;
     if (weave && (moving || drawn) && !still) {
@@ -266,15 +272,28 @@ export function mountJourney(root: HTMLElement): () => void {
     }
     if (here !== at) {
       at = here;
-      marks.forEach((a, n) => {
-        a.toggleAttribute("data-past", n < here);
-        if (n === here) a.setAttribute("aria-current", "true");
-        else a.removeAttribute("aria-current");
-      });
+      for (const marks of maps) {
+        marks.forEach((a, n) => {
+          a.toggleAttribute("data-past", n < here);
+          if (n === here) a.setAttribute("aria-current", "true");
+          else a.removeAttribute("aria-current");
+        });
+      }
+      const label = maps[0][Math.max(0, here)]?.textContent?.trim();
+      if (name && count && label && label !== name.textContent) {
+        name.textContent = label;
+        count.textContent = `${Math.max(0, here) + 1}/${stops.length}`;
+        if (!reduce) name.animate([{ opacity: 0, translate: "0 7px" }, { opacity: 1, translate: "0 0" }], { duration: 260, easing: "cubic-bezier(.23,1,.32,1)" });
+      }
     }
   }
 
   const cleanups: (() => void)[] = [];
+  if (sheet) {
+    const close = (e: Event) => (e.target as HTMLElement).closest("a") && sheet.hidePopover();
+    sheet.addEventListener("click", close);
+    cleanups.push(() => sheet.removeEventListener("click", close));
+  }
   const io = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {

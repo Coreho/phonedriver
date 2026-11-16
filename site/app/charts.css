@@ -33,8 +33,10 @@
 .jump{display:flex;flex-wrap:wrap;gap:8px;margin:28px 0 0;padding:0;list-style:none;font:500 14px/1 var(--jb);letter-spacing:-.02em}
 .jump a{position:relative;z-index:0;display:block;padding:10px 12px;background:var(--well);text-decoration:none;transition:color .15s var(--out)}
 .jump a::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--or);scale:0 1;transform-origin:0 50%;transition:scale .22s var(--out)}
-.jump a:hover{background:var(--well);color:#0b0b0c}
-.jump a:hover::before,.jump a:focus-visible::before{scale:1 1}
+.jump a:focus-visible::before{scale:1 1}
+@media (hover:hover){.jump a:hover{background:var(--well);color:#0b0b0c}.jump a:hover::before{scale:1 1}}
+@media (hover:none){.jump a:active{background:var(--well);color:#0b0b0c}.jump a:active::before{scale:1 1;transition-duration:.04s}}
+@media (pointer:coarse){.jump a{padding:15px 14px}}
 @media (prefers-reduced-motion:reduce){.jump a::before{transition:none}}
 @media (max-width:759px){
 .tk thead{display:none}

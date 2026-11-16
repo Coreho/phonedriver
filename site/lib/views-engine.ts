@@ -22,10 +22,11 @@ export function mountViews(el: HTMLElement): () => void {
   const screen = el.querySelector<HTMLElement>(".tv-screen")!;
   const img = screen.querySelector("img")!;
   const fx = el.querySelector<HTMLCanvasElement>(".tv-fx")!;
-  const pane = el.querySelector<HTMLElement>(".pane")!;
+  const pane = el.querySelector<HTMLElement>(".tv-text .pane")!;
   const note = pane.querySelector<HTMLElement>(".pane-head span:last-child")!;
   const noted = note.textContent!;
   const path = el.querySelector<SVGPathElement>(".tv-link path")!;
+  const readout = el.querySelector<HTMLElement>(".tv-readout")!;
   const rows = [...lines.children] as HTMLElement[];
   const count = lines.querySelectorAll("[data-i]").length;
   const rest = Number(el.dataset.on);
@@ -48,6 +49,14 @@ export function mountViews(el: HTMLElement): () => void {
   const set = (i: number) => {
     on = i;
     for (const n of el.querySelectorAll<HTMLElement>("[data-i]")) n.toggleAttribute("data-on", Number(n.dataset.i) === i);
+    const line = lines.querySelector<HTMLElement>(`[data-i="${i}"]`)!.cloneNode(true) as HTMLElement;
+    line.querySelector(".tv-peek")?.remove();
+    if (readout.innerHTML !== line.innerHTML) {
+      readout.innerHTML = line.innerHTML;
+      delete readout.dataset.new;
+      void readout.offsetWidth;
+      readout.dataset.new = "";
+    }
     draw();
   };
   const stop = () => {
@@ -214,7 +223,8 @@ export function mountViews(el: HTMLElement): () => void {
   };
   const pick = (e: Event) => {
     const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-i]");
-    if (!hit || "run" in el.dataset) return;
+    if (!hit || (e.type === "pointerover" && ((e as PointerEvent).pointerType !== "mouse" || "run" in el.dataset))) return;
+    if ("run" in el.dataset) stop();
     set(Number(hit.dataset.i));
   };
   const onKey = (e: KeyboardEvent) => {

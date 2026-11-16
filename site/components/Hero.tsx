@@ -38,7 +38,7 @@ export function Hero() {
   const jobs = board();
   const fewer = ratio(jobs.total("mobile-mcp").tokens / jobs.total("phonedriver").tokens);
   return (
-    <section className="hx" aria-labelledby="hx-title" data-run={PLAYER}>
+    <section className="hx" aria-labelledby="hx-title" data-run={PLAYER} data-early="">
       <canvas className="hx-weave" aria-hidden="true" />
       <div className="hx-copy">
         <h1 id="hx-title">
