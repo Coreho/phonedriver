@@ -86,7 +86,7 @@ Each screen arrives as a short numbered list. This is the Settings app on an And
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings) · keyboard hidden
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"

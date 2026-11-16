@@ -388,12 +388,10 @@ impl Rendered {
             }
             .into(),
         );
-        if let Some(s) = h.settle {
-            parts.push(if s.settled {
-                format!("settled in {}ms", s.ms)
-            } else {
-                format!("not settled after {}ms", s.ms)
-            });
+        match h.settle {
+            Some(s) if !s.settled => parts.push(format!("not settled after {}ms", s.ms)),
+            Some(s) if s.ms > 0 => parts.push(format!("settled in {}ms", s.ms)),
+            _ => {}
         }
         if self.loading() {
             parts.push("loading".into());
@@ -974,6 +972,22 @@ mod tests {
             "real_dialog",
             real(include_str!("../tests/fixtures/android/real_dialog.json"))
         );
+    }
+
+    #[test]
+    fn a_screen_that_was_already_still_says_nothing_about_settling() {
+        let line = |settled: bool, ms: u32| {
+            let mut r = settings();
+            r.header.settle = Some(SettleLine { settled, ms });
+            let text = r.text(&Filters::default()).unwrap();
+            text.lines().nth(1).unwrap().to_string()
+        };
+        assert_eq!(
+            line(true, 0),
+            "app com.android.settings (Settings) · keyboard hidden"
+        );
+        assert!(line(true, 12).ends_with("keyboard hidden · settled in 12ms"));
+        assert!(line(false, 0).ends_with("keyboard hidden · not settled after 0ms"));
     }
 
     #[test]

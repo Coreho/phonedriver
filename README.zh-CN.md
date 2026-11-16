@@ -86,7 +86,7 @@ token 是智能体用量上限所消耗的单位。我用 Claude Sonnet 5.5 和�
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings) · keyboard hidden
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"

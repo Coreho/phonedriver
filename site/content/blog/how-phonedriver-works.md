@@ -26,7 +26,7 @@ The agent asks for a screen and gets a numbered list. This is Settings on an And
 
 ```screen
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings) · keyboard hidden
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"

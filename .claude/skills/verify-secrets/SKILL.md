@@ -28,12 +28,12 @@ All checks are in `crates/cli/tests/secret_property.rs`. The fake phone there (`
 
 Three unit tests in `daemon/secrets.rs` cover what the property's fixed secrets cannot: a secret inside a longer one, a secret under four characters, and a screenshot's `data_b64` left alone.
 
-**Sync commit: `7369a14`** (it added the `page` call and its step in the test; `3cdf18b` before it fixed F5).
+**Sync commit: `4810ba8`** (read on 2026-11-16: since `7369a14`, which added the `page` call, the covered files gained the `boot` method, whose reply leaves through `Daemon::call` and which takes no secret, two more buttons, and a locked phone's answer in hidden mode; none takes or writes secret text).
 
 When you finish a change, run:
 
 ```
-git diff --stat 7369a14 -- crates/cli/src/daemon/secrets.rs crates/cli/src/daemon/mod.rs crates/cli/src/daemon/trace.rs crates/cli/src/daemon/actor.rs crates/cli/src/daemon/session.rs crates/cli/src/daemon/journal.rs crates/cli/src/wire.rs crates/core/src/device.rs crates/core/src/testing.rs
+git diff --stat 4810ba8 -- crates/cli/src/daemon/secrets.rs crates/cli/src/daemon/mod.rs crates/cli/src/daemon/trace.rs crates/cli/src/daemon/actor.rs crates/cli/src/daemon/session.rs crates/cli/src/daemon/journal.rs crates/cli/src/wire.rs crates/core/src/device.rs crates/core/src/testing.rs
 ```
 
 Empty output means the check still describes the code. Otherwise read the diff for: a new method or action that takes secret text (add it to `secrets::carried` and to `Step` in the test); a new place the daemon writes (a file, a log line, a new process: F5 was one, and such a place must mask with `Secrets::masked` itself); a reply that leaves by another door than `Daemon::call`; a new string field whose content must not be masked (as `data_b64` is skipped); a change to when plain text is refused. Run the check. When it passes and you have confirmed the generators still reach the changed code, move the sync commit to the new hash. Do not move it only because the test passes: a new secret-carrying call the generators never send passes too.
@@ -98,7 +98,7 @@ Found on the first run, 2026-11-15, and fixed in the sync commit (decision D70 h
 
 - Pixels: a screenshot, a recording, and the screenshot copies of `--trace-screens` show what the phone shows.
 - A secret under four characters after its own call; a secret the device prints back changed (escaped, wrapped, cut short); a later call that itself carries the same text without `secret`.
-- The CLI and the MCP server: how they read the secret (stdin, `PHONEDRIVER_SECRET`), their own error text, and the refusal of a secret on argv or in a batch. `tests/e2e.rs` and `tests/mcp.rs` have example tests for those.
+- The CLI and the MCP server: how they read the secret (stdin, `PHONEDRIVER_SECRET`), their own error text, the refusal of a secret on argv and in a batch on the command line, and how the MCP server passes a `type` step's `secret` in a `batch` or before a `then`. `tests/e2e.rs` and `tests/mcp.rs` have example tests for those; the daemon's side of a secret batch step is in the property.
 - The on-device agent (Java) and what Android or iOS log about a paste; the clipboard after a secret paste.
 - `clipboard`, `logs`, `setting`, `wait`, `app` and `screenshot` calls are not generated. Their replies leave through the same `Daemon::call`, so the mask applies, but no session here proves it.
 - More than one device, a daemon restart (the list of secrets is in memory only), two calls at once.

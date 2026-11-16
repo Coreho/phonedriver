@@ -334,15 +334,10 @@ impl TapArgs {
 }
 
 impl TypeArgs {
-    fn chain(&mut self) -> Option<Result<Vec<serde_json::Value>, &'static str>> {
+    fn chain(&mut self) -> Option<Vec<serde_json::Value>> {
         let then = self.then.take().filter(|t| !t.is_empty())?;
-        if self.secret.unwrap_or(false) {
-            return Some(Err(
-                "`then` does not go with `secret`: type the secret in its own call",
-            ));
-        }
-        let first = json!({"tool": "type", "text": self.text, "into": self.into, "mode": self.mode, "submit": self.submit, "append": self.append});
-        Some(Ok(chained(first, then)))
+        let first = json!({"tool": "type", "text": self.text, "into": self.into, "mode": self.mode, "submit": self.submit, "append": self.append, "secret": self.secret});
+        Some(chained(first, then))
     }
 
     fn type_verb(&self) -> Verb {
@@ -421,8 +416,8 @@ impl LaunchArgs {
     }
 }
 
-/// A step of `batch`: `tool` and that tool's arguments, as the same verb the tool runs. Secret text is refused,
-/// because a batch's text goes through the daemon's trace like any other and a secret must be typed alone.
+/// A step of `batch`: `tool` and that tool's arguments, as the same verb the tool runs. A `type` step keeps its
+/// `secret`: the daemon masks a step's secret as it masks one typed alone (decision D70).
 fn step_verb(step: serde_json::Value) -> Result<Verb, String> {
     let serde_json::Value::Object(mut fields) = step else {
         return Err("a step is an object with a `tool`".into());
@@ -463,18 +458,13 @@ fn step_verb(step: serde_json::Value) -> Result<Verb, String> {
                     None => Err("to clear a field pass `into`: the field to empty".into()),
                 };
             }
-            if a.secret.unwrap_or(false) {
-                return Err(
-                    "secret text cannot go in a batch; call `type` with secret on its own".into(),
-                );
-            }
             Ok(Verb::Type {
                 text: Some(a.text),
                 into: a.into,
                 mode: a.mode,
                 submit: a.submit.unwrap_or(false),
                 append: a.append.unwrap_or(false),
-                secret: false,
+                secret: a.secret.unwrap_or(false),
                 autonomous: false,
             })
         }
@@ -813,8 +803,7 @@ impl Mcp {
             let secret = a.secret.unwrap_or(false);
             let (device, autonomous) = (a.device.clone(), a.autonomous.unwrap_or(false));
             match a.chain() {
-                Some(Ok(steps)) => self.chain(channel, device, steps).await,
-                Some(Err(why)) => Outcome::Done(bad(why)),
+                Some(steps) => self.chain(channel, device, steps).await,
                 None => {
                     let text = secret.then(|| a.text.clone());
                     self.guarded(channel, key, device, || a.type_verb(), text, autonomous)
@@ -1086,6 +1075,10 @@ fn for_mcp(hint: &str) -> String {
         (
             "`--secret` (the text on stdin or in PHONEDRIVER_SECRET)",
             "`secret: true`",
+        ),
+        (
+            " A batch on the command line cannot carry secret text: run that `type` on its own.",
+            " It works on a `type` call and on a `type` step of a batch.",
         ),
         (
             "`--grep words` keeps only the lines with them, `--all` prints everything",
@@ -1471,15 +1464,11 @@ impl Mcp {
         Parameters(mut a): Parameters<TypeArgs>,
     ) -> CallToolResult {
         let secret = a.secret.unwrap_or(false);
-        match a.chain() {
-            Some(Ok(steps)) => {
-                return self
-                    .chain(Channel::Peer(&peer), a.device, steps)
-                    .await
-                    .complete();
-            }
-            Some(Err(why)) => return bad(why),
-            None => {}
+        if let Some(steps) = a.chain() {
+            return self
+                .chain(Channel::Peer(&peer), a.device, steps)
+                .await
+                .complete();
         }
         if a.text.is_empty() && !secret {
             return match a.into {
@@ -1779,6 +1768,10 @@ mod tests {
             (
                 "then type it on its own with `--secret` (the text on stdin or in PHONEDRIVER_SECRET); a batch cannot carry secret text.",
                 "then type it on its own with `secret: true`; a batch cannot carry secret text.",
+            ),
+            (
+                "Use `--secret` (the text on stdin or in PHONEDRIVER_SECRET). A batch on the command line cannot carry secret text: run that `type` on its own.",
+                "Use `secret: true`. It works on a `type` call and on a `type` step of a batch.",
             ),
             (
                 "Pass `--device <id>` with one of: a, b.",

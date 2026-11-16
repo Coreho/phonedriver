@@ -177,6 +177,26 @@ impl RefTable {
             }
         }
 
+        // Seen on an iOS 26.5 simulator, 2026-11-16: the buttons of a SwiftUI tab bar had no identifier in the first
+        // read and `person` and `list.bullet`, the names of their images, after the first tap on an element.
+        for (i, n) in nodes.iter().enumerate() {
+            if out[i].is_some() || n.label.is_none() {
+                continue;
+            }
+            let center = n.bounds.center();
+            let found = self.last.iter().enumerate().position(|(j, s)| {
+                !claimed.contains(&j)
+                    && s.role == n.role
+                    && s.label == n.label
+                    && s.key.id.is_none() != n.id.is_none()
+                    && s.center.distance(center) < SAME_PLACE_PT
+            });
+            if let Some(j) = found {
+                claimed.insert(j);
+                out[i] = Some(self.last[j].r);
+            }
+        }
+
         let mut taken: HashSet<Ref> = out.iter().flatten().copied().collect();
         for place_only in [false, true] {
             for (i, n) in nodes.iter().enumerate() {
@@ -320,6 +340,29 @@ mod tests {
         let before = assign_labels(&mut t, &ios(&[("status", "Last tap: none", 100.0)]));
         let after = assign_labels(&mut t, &ios(&[("status", "Last tap: b17", 100.0)]));
         assert_eq!(after[0].1, before[0].1);
+    }
+
+    #[test]
+    fn an_element_that_gains_or_loses_its_app_id_in_place_keeps_its_ref() {
+        let mut t = RefTable::default();
+        let before = assign_labels(&mut t, &ios(&[("", "Login", 100.0), ("", "Items", 140.0)]));
+        let named = assign_labels(
+            &mut t,
+            &ios(&[("person", "Login", 100.0), ("list.bullet", "Items", 140.0)]),
+        );
+        assert_eq!(named, before);
+        let bare = assign_labels(&mut t, &ios(&[("", "Login", 100.0), ("", "Items", 140.0)]));
+        assert_eq!(bare, before);
+        let other = assign_labels(
+            &mut t,
+            &ios(&[("", "Login", 400.0), ("crash", "Items", 140.0)]),
+        );
+        assert_ne!(
+            other[0].1, before[0].1,
+            "the same label elsewhere is another element"
+        );
+        let renamed = assign_labels(&mut t, &ios(&[("bolt", "Items", 140.0)]));
+        assert_ne!(renamed[0].1, other[1].1, "another id is another element");
     }
 
     #[test]

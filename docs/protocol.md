@@ -75,7 +75,7 @@ type WaitCondition = {appears: Target} | {gone: Target} | {settled: true}
 // target is a substring match, so `gone:Loading` is not gone while "Hide loading" is on screen. They fail `timeout`
 // (-32013) naming the condition.
 
-type Step = Action | {kind: "wait", condition: WaitCondition}   // the CLI and MCP refuse `secret` text in a batch; the daemon masks it either way (D70)
+type Step = Action | {kind: "wait", condition: WaitCondition}   // the CLI refuses `secret` text in a batch, the MCP server passes it (D85); the daemon masks it either way (D70)
 type BatchResult = {
   ok: boolean,
   steps: Array<{summary: string, verified?: boolean, unverified?: {shows, hint}}>,   // the steps that ran and succeeded

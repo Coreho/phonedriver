@@ -86,7 +86,7 @@ Android エミュレーターを起動するか、USB デバッグを有効に�
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings) · keyboard hidden
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"

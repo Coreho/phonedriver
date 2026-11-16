@@ -150,7 +150,7 @@ Each decision records the choice, the alternatives it beat, and the evidence tha
 
 **Why.** The agent audit found that calls, not snapshot tokens, are the cost (each call re-reads 6k to 28k tokens of context) and that 7 of 9 agents sent dependent calls in parallel. A client-side loop over single calls would return one reply per step (or discard the intermediate diffs while still paying for them) and could not keep the steps inside one lease and one baseline.
 
-**Rejected.** Running steps without settling between them: a later step would resolve its target on a stale screen. A step list that carries refs only: refs from a screen the earlier step replaces go stale, so the failure is reported by step and the agent re-reads. Secret text in a batch: the trace and the reply paths for secrets are written for a single `type`.
+**Rejected.** Running steps without settling between them: a later step would resolve its target on a stale screen. A step list that carries refs only: refs from a screen the earlier step replaces go stale, so the failure is reported by step and the agent re-reads. Secret text in a batch: the trace and the reply paths for secrets are written for a single `type`. (Since D70 the daemon masks a batch step's secret too, and since D85 the MCP `batch` tool passes one.)
 
 **Reopen if.** Agents use batches of one step, or a batch that fails halfway too often to be worth the saved calls.
 
@@ -1179,3 +1179,28 @@ These two were published on `main` as D70 and D71 while this branch had its own 
 **Rejected.** Signing again a day early: Xcode keeps a profile that is still valid, so the build would repeat on every command of the last day. A background timer that signs while nobody uses the phone: it would build and install on a phone nobody asked it to touch.
 
 **Reopen if.** A free Apple ID's build after expiry fails where the paid team's did not (then the fix for that failure goes here), or people lose sessions in a profile's last hour.
+
+## D85. What a run of simulator-use's benchmark steps changed: late ids, row ids, the app node, a zero settle time, and a secret in an MCP batch
+
+**Choice.** Five changes, each from a line that phonedriver printed and should not have, found by running the steps of simulator-use's published benchmark (its `bench/run.mjs`, its `examples/swiftui-demo` app) through `phonedriver mcp` with `bench/simulator-use/probe.py`.
+(1) An element with a label that gains or loses its app id where it stands keeps its ref (`core::refs::assign`). (2) A row with no id of its own that takes its words from one text takes that text's id (`core::prune`). (3) iOS's application node is not listed. (4) A snapshot's header says `settled in Nms` only when N is more than zero. (5) The MCP `batch` tool passes a `type` step's `secret` to the daemon, and `type` with `secret` takes `then`; the command line still refuses a secret in a batch, because a secret never goes on argv.
+
+**Why.** On an iPhone 17 Simulator (iOS 26.5) the first tap by ref on the demo's sign-in screen answered `- @e8 @e10 @e11` / `+ @e12 cell "Invalid email or password"` / `+ @e13 button "Login" selected` / `+ @e14 button "Items"`: the two tab-bar buttons had gained the identifiers `person` and `list.bullet` since the first read, and the status row, a `Form` cell around `Text(message).accessibilityIdentifier("status")`, had no id because the id sits on the text the row absorbs. With (1) and (2) the reply is `~ @e8 cell "Not signed in" → "Invalid email or password"`. Every iOS screen began `@e1 group "<app name>"` with everything else one level in, which the header's `app` line already says. A batch that fills a sign-in form and submits it is the commonest batch there is, and it was refused at its password step; the daemon has masked a batch step's secret since D70 and its property test generates that step, so only the MCP server's refusal stood in the way.
+
+**Measured.** Same Simulator, debug build, Mac mini, 2026-11-16, tokens as characters / 4, medians: 20 reads, 20 taps, 10 types, 10 sign-ins of each kind, every one checked by its text.
+
+| Step | Before | After | simulator-use 0.15.1, its page |
+|---|---|---|---|
+| Read the screen | 82 tokens, 0.17 s | 69 tokens, 0.12 s | 72 tokens, 0.30 s |
+| Tap, result shown | 41 tokens, 0.91 s | 28 tokens, 0.83 s | 17 tokens, 0.72 s |
+| Type an email, text shown | 60 tokens, 1.32 s | 38 tokens, 1.33 s | 14 tokens, 1.21 s |
+| Sign in, five calls | 300 tokens, 4.06 s | 254 tokens, 4.03 s | 194 tokens, 4.28 s |
+| Sign in, batched | refused at the password | 247 tokens, 4.04 s | 179 tokens, 3.62 s |
+| Tool list and instructions | 1,914 tokens | 1,914 tokens | 2,443 tokens |
+
+**Limits.** The last column is from simulator-use.dev/benchmarks as read on 2026-11-16 (their run of 2026-11-06 on a virtual M4 with iOS 27.0), not a run of that tool here, so its times are not comparable with these and only its token counts are. This is not the published comparison: that needs their harness run whole, with phonedriver as one more tool, on one machine, after the release. phonedriver still answers an action with more text than simulator-use does: the summary line with its place and settle time, the keyboard, and what the keyboard covers. A password field's change is still two lines (`secure field changed` and its focus). Rule (1) is for elements with a label; an unlabeled element that gains an id still gets a new ref. Rule (2) gives an Android row the resource id of its one text, which many rows share; nothing uses a shared id to match. The Android emulator suite was not run on these changes: win-pc's emulator stopped answering `adb shell` under that machine's other builds. In an MCP batch the secret is in the tool call's arguments, as it is for a `type` on its own.
+
+**Rejected.** Dropping `under-keyboard` from the children of a covered group, and dropping the changed field's own line after a verified `type`: both save tokens on this benchmark and both take away something an agent uses on other screens. Letting the command line's `batch` carry a secret: its steps are arguments, and arguments show in `ps`.
+
+**Reopen if.** A label that repeats at one place under two different owners trades refs because of rule (1), or the full harness run puts phonedriver's sign-in above 250 tokens.
+

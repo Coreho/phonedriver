@@ -86,7 +86,7 @@ Android 에뮬레이터를 실행하거나, USB 디버깅을 켠 Android 스마�
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings) · keyboard hidden
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"

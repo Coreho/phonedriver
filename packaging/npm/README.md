@@ -45,7 +45,7 @@ A screen arrives as a short numbered list, not a screenshot and not XML:
 
 ```console
 $ npx -y phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings) · keyboard hidden
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"

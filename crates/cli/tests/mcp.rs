@@ -764,21 +764,43 @@ async fn typing_with_then_types_and_taps_the_texts_after_it() {
 }
 
 #[tokio::test]
-async fn then_is_refused_with_a_secret_before_anything_is_typed() {
-    let rig = rig(vec![field_tree("", false)]).await;
+async fn a_secret_typed_as_a_batch_step_or_before_a_then_reaches_no_reply_and_no_file() {
+    let rig = rig(vec![field_tree("", false), field_tree("hunter2", false)]).await;
     rig.call("snapshot", json!({})).await;
+    let r = rig
+        .call(
+            "batch",
+            json!({"steps": [
+                {"tool": "type", "text": "hunter2", "into": "@e1", "secret": true},
+                {"tool": "press", "key": "enter"}
+            ]}),
+        )
+        .await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    let all = serde_json::to_string(&r).unwrap();
+    assert!(!all.contains("hunter2"), "{all}");
+    assert!(all.contains("1. typed 7 chars into @e1"), "{all}");
     let r = rig
         .call(
             "type",
             json!({"text": "hunter2", "into": "@e1", "secret": true, "then": ["@e1"]}),
         )
         .await;
-    assert_eq!(r.is_error, Some(true), "{r:?}");
-    let text = texts(&r).join("\n");
-    assert!(
-        text.contains("`then`") && !text.contains("hunter2"),
-        "{text}"
-    );
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    let all = serde_json::to_string(&r).unwrap();
+    assert!(!all.contains("hunter2"), "{all}");
+    assert!(all.contains("2. tapped @e1"), "{all}");
+    for f in files(rig.home.path()) {
+        if f.extension().is_some_and(|e| e == "sock") {
+            continue;
+        }
+        let text = std::fs::read(&f).unwrap();
+        assert!(
+            !String::from_utf8_lossy(&text).contains("hunter2"),
+            "{} holds the secret",
+            f.display()
+        );
+    }
 }
 
 #[tokio::test]
@@ -803,13 +825,9 @@ async fn a_failing_batch_step_is_an_error_naming_the_step_with_hints_in_tool_wor
 }
 
 #[tokio::test]
-async fn a_batch_refuses_secrets_unknown_tools_and_unknown_arguments_before_acting() {
+async fn a_batch_refuses_unknown_tools_and_unknown_arguments_before_acting() {
     let rig = rig(vec![field_tree("", false)]).await;
     for (step, why) in [
-        (
-            json!({"tool": "type", "text": "hunter2", "secret": true}),
-            "secret",
-        ),
         (json!({"tool": "snapshot"}), "cannot be a step"),
         (
             json!({"tool": "tap", "target": "@e1", "colour": "red"}),
@@ -826,7 +844,6 @@ async fn a_batch_refuses_secrets_unknown_tools_and_unknown_arguments_before_acti
         assert_eq!(r.is_error, Some(true), "{why}: {r:?}");
         let text = texts(&r).join("\n");
         assert!(text.starts_with("step 2:") && text.contains(why), "{text}");
-        assert!(!text.contains("hunter2"), "{text}");
     }
 }
 

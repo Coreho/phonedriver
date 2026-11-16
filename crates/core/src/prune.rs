@@ -230,7 +230,8 @@ pub fn prune(tree: &RawTree) -> Vec<Node> {
             || node.role == Role::Keyboard
             || node.role == Role::WebView
             || scrollable;
-        if !keep {
+        // The header's `app` line names the app, so iOS's application node, whose label is that name, says nothing.
+        if !keep || (node.class == "XCUIElementTypeApplication" && node.actions.is_empty()) {
             continue;
         }
         // iOS lists every disabled row chevron as a button named "chevron" after its row.
@@ -264,7 +265,13 @@ pub fn prune(tree: &RawTree) -> Vec<Node> {
             label,
             value: node.value.clone(),
             hint,
-            id: node.resource_id.clone(),
+            id: node
+                .resource_id
+                .clone()
+                .or_else(|| match merged[i].as_slice() {
+                    [only] => tree.nodes[*only].resource_id.clone(),
+                    _ => None,
+                }),
             bounds,
             state: if role == Role::ProgressIndicator && node.shows_amount() {
                 state_of(node.flags) | ElementState::DETERMINATE
@@ -974,6 +981,56 @@ mod tests {
     }
 
     #[test]
+    fn the_ios_application_node_is_not_listed_because_the_header_names_the_app() {
+        let json = r#"{"app":{"bundle_id":"x","pid":1},"nodes":[
+            {"p":-1,"cls":"XCUIElementTypeApplication","text":"Demo","b":[0,0,400,800],"f":"vVe"},
+            {"p":0,"cls":"XCUIElementTypeStaticText","text":"Sign In","b":[16,100,200,140],"f":"vVe"},
+            {"p":0,"cls":"XCUIElementTypeOther","text":"Tab Bar","b":[0,700,400,800],"f":"vVe"},
+            {"p":2,"cls":"XCUIElementTypeButton","text":"Login","a":["tap"],"b":[100,710,200,790],"f":"vVe"}
+        ]}"#;
+        let nodes = prune(&RawTree::from_ios_json(json).unwrap());
+        let shape: Vec<(&str, usize, Option<usize>)> = nodes
+            .iter()
+            .map(|n| (n.label.as_deref().unwrap_or_default(), n.depth, n.parent))
+            .collect();
+        assert_eq!(
+            shape,
+            [
+                ("Sign In", 0, None),
+                ("Tab Bar", 0, None),
+                ("Login", 1, Some(1))
+            ]
+        );
+    }
+
+    #[test]
+    fn a_row_named_by_one_text_has_that_texts_id() {
+        let json = r#"{"app":{"bundle_id":"x","pid":1},"nodes":[
+            {"p":-1,"cls":"XCUIElementTypeOther","b":[0,0,400,800],"f":"vVe"},
+            {"p":0,"cls":"XCUIElementTypeCell","a":["tap"],"b":[0,100,400,150],"f":"vVe"},
+            {"p":1,"cls":"XCUIElementTypeStaticText","id":"status","text":"Not signed in","b":[16,100,350,150],"f":"vVe"},
+            {"p":0,"cls":"XCUIElementTypeCell","a":["tap"],"b":[0,200,400,250],"f":"vVe"},
+            {"p":3,"cls":"XCUIElementTypeStaticText","id":"title","text":"Wi-Fi","b":[16,200,200,250],"f":"vVe"},
+            {"p":3,"cls":"XCUIElementTypeStaticText","id":"detail","text":"Home","b":[200,200,350,250],"f":"vVe"},
+            {"p":0,"cls":"XCUIElementTypeCell","id":"row","a":["tap"],"b":[0,300,400,350],"f":"vVe"},
+            {"p":6,"cls":"XCUIElementTypeStaticText","id":"name","text":"About","b":[16,300,350,350],"f":"vVe"}
+        ]}"#;
+        let nodes = prune(&RawTree::from_ios_json(json).unwrap());
+        let ids: Vec<(&str, Option<&str>)> = nodes
+            .iter()
+            .map(|n| (n.label.as_deref().unwrap_or_default(), n.id.as_deref()))
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                ("Not signed in", Some("status")),
+                ("Wi-Fi", None),
+                ("About", Some("row"))
+            ]
+        );
+    }
+
+    #[test]
     fn an_ios_cell_and_its_same_label_button_are_one_button() {
         let json = r#"{"app":{"bundle_id":"x","pid":1},"nodes":[
             {"p":-1,"cls":"XCUIElementTypeOther","b":[0,0,400,800],"f":"vVe"},
@@ -1246,15 +1303,14 @@ mod tests {
         assert_eq!(
             shown,
             [
-                (0, Role::Other, "Safari".to_string()),
-                (1, Role::WebView, String::new()),
-                (2, Role::Other, "Ada Lovelace - Wikipedia".to_string()),
-                (3, Role::Text, "Augusta Ada King".to_string()),
-                (1, Role::Button, "Back".to_string())
+                (0, Role::WebView, String::new()),
+                (1, Role::Other, "Ada Lovelace - Wikipedia".to_string()),
+                (2, Role::Text, "Augusta Ada King".to_string()),
+                (0, Role::Button, "Back".to_string())
             ],
             "{nodes:#?}"
         );
-        assert_eq!(nodes[1].value.as_deref(), Some("8 pages"));
+        assert_eq!(nodes[0].value.as_deref(), Some("8 pages"));
     }
 
     #[test]
