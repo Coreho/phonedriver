@@ -2,6 +2,36 @@
 
 Every release of phonedriver, newest first. Binaries and checksums for each version are on [GitHub Releases](https://github.com/hridaya423/phonedriver/releases).
 
+## 0.1.5
+
+Not released yet.
+
+- **`phonedriver init`** adds phonedriver to the agents installed on this machine (Claude Code, Codex, Cursor, VS Code and Gemini CLI) and then runs the doctor checks.
+- **`phonedriver boot <name>`** starts an iOS Simulator or an Android virtual device that is off and waits until it has booted. With nothing connected, the error names what can be started.
+- **Saved runs**: `phonedriver save run.steps` writes what the session did, and `phonedriver replay run.steps` does it again with no model. It stops at the first step that fails and shows the screen.
+- **`phonedriver page`** prints the web page in front as text, whole, without scrolling. On Android, it works in Chrome and in the web views of debug builds.
+- **`phonedriver record start` and `record stop`** save an MP4 of the screen on Android and on the iOS Simulator, with a file of the actions done during it.
+- **Settings by key on Android 17**: `phonedriver setting find`, `get` and `set` change a setting without opening its screen.
+- **App permissions**: `phonedriver apps grant <app> <permission>` and `revoke` work without launching the app.
+- **Crashes**: an action during which the app crashed says so in its reply, and `phonedriver logs` prints the app's last lines and its last crash.
+- **Several agents on one Android phone**: a device id that ends in `+a`, `+b` and so on gives each agent a hidden screen of its own (Android 13 and later).
+- **Fingerprint and Face ID**: `press fingerprint` and `press wrong-fingerprint` on an Android emulator and on an iOS Simulator.
+- **`press landscape` and `press portrait`** turn the screen.
+- **`phonedriver compare a.png b.png`** says in text what changed between two screenshots.
+- **Screens with no element list** are read from the screenshot on Windows and Linux hosts too, not only on a Mac.
+- **An iPhone's signature renews itself**: when the runner's signing has run out (7 days with a free Apple ID), the next command signs it again and installs it. `doctor` shows when it runs out.
+- **Passwords**: text typed with `secret` is masked as `•••` in every later reply, error and trace line. An MCP `batch` can now carry a `type` step with `secret`, so one call fills a sign-in form and submits it.
+- **Fewer tokens on iOS**: a snapshot no longer starts with a line naming the app, buttons that get their identifier late keep their refs, a row whose text changes is one `~` line, and a snapshot of a still screen no longer ends with `settled in 0ms`. On simulator-use's sign-in benchmark, phonedriver reads the screen in 69 tokens and signs in with 254 (it was 300).
+- **Fixed on iOS**: a system permission prompt over the home screen was listed twice, so `tap "Don’t Allow"` matched two elements.
+- **Fixed on iPhone**: `launch Settings` matched CarPlay's hidden settings app as well on iOS 27. Apps that iOS hides from the home screen are no longer listed.
+- **Fixed on Android**: a screenshot taken right after an action could show the screen from before it.
+- **Fixed on Android**: with `PHONEDRIVER_DISPLAY=hidden` on a locked phone, `launch` waited 9 s and blamed the app, and opening the hidden screen turned the phone's screen on. It now says the phone is locked and leaves it asleep. The hidden screen works only while the phone is unlocked: taps there do not keep the phone's own screen on. Tested on a HONOR X8.
+- **Fixed on Android**: a request the phone never answered waited ten minutes. It now ends as a lost device.
+- The third action in a row that changes nothing says so and tells the agent to stop repeating it.
+- `launch` waits for an app that is slow to start, and a submit that left the keyboard up says so.
+- Every MCP tool refuses an argument it does not know, so a misspelled argument is an error, not silently ignored.
+- `phonedriver screenshot shot.png` takes its file as a plain argument.
+
 ## 0.1.4
 
 Released 14 November 2026.
