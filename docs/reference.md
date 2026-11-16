@@ -123,7 +123,7 @@ phonedriver runs the SDK's `emulator` program (from `ANDROID_HOME`, `ANDROID_SDK
 
 ### iPhone or iPad
 
-A physical iOS device needs the runner signed with your Apple developer team (a free Apple ID works and expires every 7 days). Plug the device in, unlock it, then:
+A physical iOS device needs the runner signed with your Apple developer team (a free Apple ID works; its signature lasts 7 days, and the next command after that signs the runner again by itself). Plug the device in, unlock it, then:
 
 ```sh
 phonedriver ios setup                  # signing team, pairing, Developer Mode, developer disk image, then the runner

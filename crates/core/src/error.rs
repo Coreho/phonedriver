@@ -230,7 +230,6 @@ pub enum UserAction {
     TrustComputer,
     EnableDeveloperMode,
     MountDeveloperImage,
-    ResignRunner,
     SetSigningTeam,
     ChooseSigningTeam { teams: Vec<String> },
     RegisterDevice,
@@ -255,9 +254,6 @@ impl UserAction {
             UserAction::EnableDeveloperMode => "Developer Mode is off on the device.".into(),
             UserAction::MountDeveloperImage => {
                 "The Developer Disk Image is not mounted on the device.".into()
-            }
-            UserAction::ResignRunner => {
-                "The PhonedriverRunner on the device has an expired or missing signature.".into()
             }
             UserAction::SetSigningTeam => {
                 "Running on an iPhone or iPad needs an Apple developer team to sign the runner. This Mac has no valid Apple Development certificate, and PHONEDRIVER_TEAM is not set."
@@ -294,9 +290,6 @@ impl UserAction {
                 "Turn on Settings > Privacy & Security > Developer Mode, then restart the device."
             }
             UserAction::MountDeveloperImage => "Run `phonedriver ios setup` to mount the image.",
-            UserAction::ResignRunner => {
-                "Run `phonedriver doctor` to re-sign and reinstall the runner."
-            }
             UserAction::SetSigningTeam => {
                 "Open Xcode > Settings > Accounts, sign in with your Apple Account, then choose Manage Certificates and add an Apple Development certificate. phonedriver reads the team from it. To name a team yourself, set PHONEDRIVER_TEAM to its ID (ten letters and digits, under Membership details on developer.apple.com/account), export it in the shell that starts the daemon and run `phonedriver daemon stop` if one is already running. `phonedriver ios setup` checks all of this."
             }
@@ -792,7 +785,6 @@ mod tests {
             UserAction::TrustComputer,
             UserAction::EnableDeveloperMode,
             UserAction::MountDeveloperImage,
-            UserAction::ResignRunner,
             UserAction::SetSigningTeam,
             UserAction::ChooseSigningTeam {
                 teams: vec!["TEAMONE".into(), "TEAMTWO".into()],

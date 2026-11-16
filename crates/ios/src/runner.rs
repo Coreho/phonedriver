@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use phonedriver_core::error::{Error, Op, UserAction};
 use serde::Deserialize;
@@ -241,12 +241,14 @@ pub struct Build {
 
 static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Builds the runner for the Simulator once per source hash, under `<home>/runner/<hash>`, and removes older builds.
+/// Builds the runner for the Simulator once per source hash, under `<home>/runner/<hash>`, and removes the builds
+/// of other sources.
 pub async fn build(home: &Path) -> Result<Build> {
     build_for(home, None).await
 }
 
-/// With `team`, builds for physical devices signed with that Apple developer team, under `<home>/runner/<hash>-device`.
+/// With `team`, builds for physical devices signed with that Apple developer team, under `<home>/runner/<hash>-device`,
+/// and builds again when the signing profile of that build has run out.
 pub async fn build_for(home: &Path, team: Option<&str>) -> Result<Build> {
     build_signed(home, team, None).await
 }
@@ -267,7 +269,7 @@ async fn build_signed(home: &Path, team: Option<&str>, register: Option<&str>) -
     });
     let products = dir.join("dd").join("Build").join("Products");
     if register.is_none()
-        && let Some(xctestrun) = find_xctestrun(&products)
+        && let Some(xctestrun) = reusable(&products, team.is_some(), SystemTime::now())
     {
         return Ok(Build {
             xctestrun,
@@ -350,17 +352,72 @@ async fn build_signed(home: &Path, team: Option<&str>, register: Option<&str>) -
             products.display()
         ),
     })?;
-    for entry in std::fs::read_dir(&root).into_iter().flatten().flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name != hash && name.len() == 16 && name.chars().all(|c| c.is_ascii_hexdigit()) {
-            let _ = std::fs::remove_dir_all(entry.path());
-        }
+    for stale in stale_builds(&root, &hash) {
+        let _ = std::fs::remove_dir_all(stale);
     }
     Ok(Build {
         xctestrun,
         hash,
         built: true,
     })
+}
+
+/// Where a device build keeps its signing profile, under its build products.
+pub const DEVICE_PROFILE: &str =
+    "Debug-iphoneos/PhonedriverRunner-Runner.app/embedded.mobileprovision";
+
+/// The `ExpirationDate` of a signing profile as the file writes it, `2027-11-12T20:35:22Z`. The file is a signed
+/// envelope with its property list inside as plain text.
+pub fn profile_expiry(profile: &Path) -> Option<String> {
+    let bytes = std::fs::read(profile).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
+    let after = text.split("<key>ExpirationDate</key>").nth(1)?;
+    let date = after.split("<date>").nth(1)?.split("</date>").next()?;
+    Some(date.to_string())
+}
+
+fn unix_seconds(date: &str) -> Option<u64> {
+    let (day, time) = date.strip_suffix('Z')?.split_once('T')?;
+    let mut ymd = day.split('-').map(|n| n.parse::<i64>().ok());
+    let (y, m, d) = (ymd.next()??, ymd.next()??, ymd.next()??);
+    let mut hms = time.split(':').map(|n| n.parse::<i64>().ok());
+    let (h, min, sec) = (hms.next()??, hms.next()??, hms.next()??);
+    let y = if m <= 2 { y - 1 } else { y };
+    let year_of_era = y.rem_euclid(400);
+    let day_of_year = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = y.div_euclid(400) * 146_097 + day_of_era - 719_468;
+    u64::try_from(days * 86_400 + h * 3600 + min * 60 + sec).ok()
+}
+
+/// True when `date`, a profile's `ExpirationDate`, is `now` or earlier.
+pub fn expired(date: &str, now: SystemTime) -> bool {
+    let now = now.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    unix_seconds(date).is_some_and(|end| now >= end)
+}
+
+/// The build under `products`, unless it is signed and its profile has run out. A free Apple ID's profile lasts
+/// seven days and a paid team's a year; building again signs the runner with a new one.
+fn reusable(products: &Path, signed: bool, now: SystemTime) -> Option<PathBuf> {
+    let xctestrun = find_xctestrun(products)?;
+    let run_out = signed
+        && profile_expiry(&products.join(DEVICE_PROFILE)).is_some_and(|date| expired(&date, now));
+    (!run_out).then_some(xctestrun)
+}
+
+/// The builds under `root` made from other sources than `hash`, for the Simulator and for devices.
+fn stale_builds(root: &Path, hash: &str) -> Vec<PathBuf> {
+    std::fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let sources = name.strip_suffix("-device").unwrap_or(&name);
+            sources != hash && sources.len() == 16 && sources.chars().all(|c| c.is_ascii_hexdigit())
+        })
+        .map(|entry| entry.path())
+        .collect()
 }
 
 fn find_xctestrun(products: &Path) -> Option<PathBuf> {
@@ -688,6 +745,73 @@ mod tests {
             blocked("Test Case '-[PhonedriverRunnerTests testServe]' started."),
             None
         );
+    }
+
+    const PROFILE: &str = "Debug-iphoneos/PhonedriverRunner-Runner.app/embedded.mobileprovision";
+
+    fn products_with_profile(expires: Option<&str>) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Runner_iphoneos27.0-arm64.xctestrun"), "").unwrap();
+        if let Some(expires) = expires {
+            let profile = dir.path().join(PROFILE);
+            std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+            let mut bytes = vec![0x30, 0x82, 0xff, 0xfe, 0x06, 0x09];
+            bytes.extend_from_slice(
+                format!("<plist><dict>\n\t<key>ExpirationDate</key>\n\t<date>{expires}</date>\n</dict></plist>")
+                    .as_bytes(),
+            );
+            bytes.extend_from_slice(&[0xa0, 0x82, 0x00, 0xff]);
+            std::fs::write(profile, bytes).unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn a_date_in_a_profile_is_read_as_seconds_since_1970() {
+        assert_eq!(unix_seconds("2027-11-12T20:35:22Z"), Some(1_826_051_722));
+        assert_eq!(unix_seconds("2024-02-29T23:59:59Z"), Some(1_709_251_199));
+        assert_eq!(unix_seconds("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(unix_seconds("next week"), None);
+    }
+
+    #[test]
+    fn a_signed_build_is_used_again_until_its_profile_runs_out() {
+        let at = |secs: u64| std::time::UNIX_EPOCH + Duration::from_secs(secs);
+        let week = products_with_profile(Some("2026-11-16T00:00:00Z"));
+        assert_eq!(
+            profile_expiry(&week.path().join(PROFILE)).as_deref(),
+            Some("2026-11-16T00:00:00Z")
+        );
+        assert!(reusable(week.path(), true, at(1_794_787_199)).is_some());
+        assert!(reusable(week.path(), true, at(1_794_787_200)).is_none());
+        assert!(
+            reusable(week.path(), false, at(1_794_787_200)).is_some(),
+            "a Simulator build is not signed"
+        );
+        let unreadable = products_with_profile(None);
+        assert!(reusable(unreadable.path(), true, at(1_794_787_200)).is_some());
+        assert!(reusable(&unreadable.path().join("missing"), true, at(0)).is_none());
+    }
+
+    #[test]
+    fn builds_of_other_sources_are_stale_for_the_simulator_and_for_devices() {
+        let root = tempfile::tempdir().unwrap();
+        for name in [
+            "0f8c198b18fb0011",
+            "0f8c198b18fb0011-device",
+            "4aa8a282c62f4dee",
+            "4aa8a282c62f4dee-device",
+            "00008110-001E04900239801E.log",
+            "notes",
+        ] {
+            std::fs::create_dir(root.path().join(name)).unwrap();
+        }
+        let mut stale: Vec<String> = stale_builds(root.path(), "4aa8a282c62f4dee")
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        stale.sort();
+        assert_eq!(stale, ["0f8c198b18fb0011", "0f8c198b18fb0011-device"]);
     }
 
     #[test]

@@ -611,44 +611,36 @@ pub async fn physical(home: &Path, only: Option<&str>) -> Vec<Check> {
     checks
 }
 
-/// The expiry of the provisioning profile inside the newest device build of the runner under `home`.
+/// The expiry of the signing profile inside this version's device build of the runner under `home`.
 fn runner_expiry(name: &str, home: &Path) -> Check {
+    use phonedriver_ios::runner::{DEVICE_PROFILE, build_hash, expired, profile_expiry};
     let label = format!("{name} runner");
-    let root = home.join("runner");
-    let profile = std::fs::read_dir(&root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| {
-            e.path()
-                .join("dd/Build/Products/Debug-iphoneos/PhonedriverRunner-Runner.app/embedded.mobileprovision")
-        })
-        .find(|p| p.is_file());
-    let Some(profile) = profile else {
+    let profile = home
+        .join("runner")
+        .join(format!("{}-device", build_hash()))
+        .join("dd/Build/Products")
+        .join(DEVICE_PROFILE);
+    if !profile.is_file() {
         return Check::bad(
             Status::Warn,
             label,
             "not built for devices yet",
             "Run any phonedriver command on the device; the first one builds and signs the runner. `phonedriver ios setup` checks the signing team, pairing and Developer Mode first.",
         );
-    };
-    let decoded = std::process::Command::new("security")
-        .args(["cms", "-D", "-i"])
-        .arg(&profile)
-        .output();
-    let expiry = decoded.ok().and_then(|o| {
-        let text = String::from_utf8_lossy(&o.stdout).into_owned();
-        let after = text.split("<key>ExpirationDate</key>").nth(1)?;
-        let date = after.split("<date>").nth(1)?.split("</date>").next()?;
-        Some(date.to_string())
-    });
-    match expiry {
+    }
+    match profile_expiry(&profile) {
+        Some(date) if expired(&date, std::time::SystemTime::now()) => Check::bad(
+            Status::Warn,
+            label,
+            format!("the signing profile ran out on {date}"),
+            "Nothing to do: the next phonedriver command on the device signs the runner again and installs it, which takes about a minute. A free Apple ID's profile lasts seven days.",
+        ),
         Some(date) => Check::ok(label, format!("signed, profile expires {date}")),
         None => Check::bad(
             Status::Warn,
             label,
             "the profile's expiry cannot be read",
-            "Run `security cms -D -i <runner>.app/embedded.mobileprovision` and read ExpirationDate.",
+            format!("Read ExpirationDate in {}.", profile.display()),
         ),
     }
 }
@@ -774,6 +766,34 @@ pub fn ios_setup(home: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_runner_whose_profile_has_run_out_says_the_next_command_signs_it_again() {
+        let home = tempfile::tempdir().unwrap();
+        let profile = home
+            .path()
+            .join("runner")
+            .join(format!("{}-device", phonedriver_ios::runner::build_hash()))
+            .join("dd/Build/Products")
+            .join(phonedriver_ios::runner::DEVICE_PROFILE);
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        let write = |date: &str| {
+            let text = format!("<key>ExpirationDate</key><date>{date}</date>");
+            std::fs::write(&profile, text).unwrap();
+        };
+        write("2026-11-09T10:00:00Z");
+        let check = runner_expiry("iPhone", home.path());
+        assert_eq!(check.status, Status::Warn, "{check:?}");
+        assert_eq!(
+            check.detail,
+            "the signing profile ran out on 2026-11-09T10:00:00Z"
+        );
+        assert!(check.fix.unwrap().contains("signs the runner again"));
+        write("2999-01-01T00:00:00Z");
+        let check = runner_expiry("iPhone", home.path());
+        assert_eq!(check.status, Status::Ok, "{check:?}");
+        assert_eq!(check.detail, "signed, profile expires 2999-01-01T00:00:00Z");
+    }
 
     #[test]
     fn a_fix_never_sends_the_reader_back_to_doctor() {

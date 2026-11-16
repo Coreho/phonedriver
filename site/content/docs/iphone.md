@@ -6,7 +6,7 @@ updated: 2026-11-14
 seo: How to let an AI agent control a real iPhone or iPad over MCP
 ---
 
-To let an AI agent control a real iPhone or iPad, plug it into a Mac with Xcode and run `phonedriver ios setup`. The agent then reads the screen as text and taps, types and swipes through phonedriver's own XCTest runner. The runner is signed with your Apple developer team. A free Apple ID works, and the signing expires every 7 days.
+To let an AI agent control a real iPhone or iPad, plug it into a Mac with Xcode and run `phonedriver ios setup`. The agent then reads the screen as text and taps, types and swipes through phonedriver's own XCTest runner. The runner is signed with your Apple developer team. A free Apple ID works. Its signature lasts 7 days, and the next command after that signs the runner again by itself.
 
 I tested an iPhone 14 Plus (iOS 26.1) and an iPad Pro (iOS 27.0) through the CLI and MCP. Screenshots, snapshots and the diff after a tap meet the targets I set. A bare tap does not: it takes 454 to 534 ms at p50 against a target of 80 ms. The 12-scenario suite was not run on devices.
 
@@ -71,7 +71,7 @@ No. It builds its own XCTest runner on your Mac. WebDriverAgent is an XCTest run
 
 ### Do I need a paid Apple developer account?
 
-No. A free Apple ID works, and its signing expires every 7 days.
+No. A free Apple ID works. Its signature lasts 7 days; when it has run out, the next phonedriver command signs the runner again and installs it, with the phone attached and unlocked. A paid account's signature lasts a year.
 
 ### Can I control an iPhone from Windows or Linux?
 

@@ -231,7 +231,7 @@ pub enum Error {
 }
 ```
 
-`UserAction` is closed: `UnlockDevice`, `AcceptUsbDebugging`, `EnableUsbDebugging`, `AllowXiaomiInjection`, `TrustComputer`, `EnableDeveloperMode`, `MountDeveloperImage`, `ResignRunner`, `SetSigningTeam`, `ChooseSigningTeam`, `RegisterDevice`, `ApproveSystemPrompt { text }` (a biometric or OS prompt only a person may answer). Each has one message that tells the user exactly what to do on which device.
+`UserAction` is closed: `UnlockDevice`, `AcceptUsbDebugging`, `EnableUsbDebugging`, `AllowXiaomiInjection`, `TrustComputer`, `EnableDeveloperMode`, `MountDeveloperImage`, `SetSigningTeam`, `ChooseSigningTeam`, `RegisterDevice`, `ApproveSystemPrompt { text }` (a biometric or OS prompt only a person may answer). Each has one message that tells the user exactly what to do on which device.
 
 Every variant serializes as `{ code, message, hint }`. `hint` names the next command to run.
 
@@ -355,7 +355,7 @@ Three tiers, chosen automatically per device and reported in `phonedriver device
 | **Runner** | iOS 17 to 26 physical device | Runner screenshots, DVT screenshot | Runner (`XCSynthesizedEventRecord`) | Runner | app_service or runner | PhonedriverRunner (signed) |
 | **Simulator** | Booted simulator on a Mac | Runner screenshots | Runner | Runner | `simctl` | PhonedriverRunner (unsigned) |
 
-Honest consequence: without the runner, a CoreDevice-tier phone has no accessibility tree, so snapshots are OCR text only, with no roles, no switches' states, and no icon-only buttons. The full product on iOS needs the runner, which needs code signing (a free Apple ID re-signs every 7 days). Spike I5 (Phase 6) tests whether the Accessibility Inspector audit service (go-ios `ios/accessibility/`) can give a signing-free tree fast enough; if it can, it replaces OCR as the CoreDevice tree source.
+Honest consequence: without the runner, a CoreDevice-tier phone has no accessibility tree, so snapshots are OCR text only, with no roles, no switches' states, and no icon-only buttons. The full product on iOS needs the runner, which needs code signing (a free Apple ID's signature lasts 7 days, and phonedriver signs again when it has run out). Spike I5 (Phase 6) tests whether the Accessibility Inspector audit service (go-ios `ios/accessibility/`) can give a signing-free tree fast enough; if it can, it replaces OCR as the CoreDevice tree source.
 
 Not available on iOS in v1: `press recents` (no API; returns `Unsupported`).
 
@@ -397,7 +397,7 @@ Simulator lifecycle (task 5.4, `crates/ios/src/runner.rs`). The runner's sources
 
 Private headers drift between Xcode releases. The runner is built and tested against the Xcode on the build machine (27.0 at planning time); a build failure after an Xcode update is expected maintenance, not a design flaw.
 
-Signing: built with Xcode automatic signing for the user's team. A free Apple ID works and expires every 7 days; `phonedriver devices` shows the expiry. Signing without a Mac is out of scope for v1 (see "Known gaps").
+Signing: built with Xcode automatic signing for the user's team. A free Apple ID works and its signing profile lasts 7 days; a paid team's lasts a year. A device build whose profile has run out is not used again: the next connect builds, signs and installs the runner anew (decision D84), and `doctor` shows the expiry. Signing without a Mac is out of scope for v1 (see "Known gaps").
 
 ### 7.4 iOS states
 
@@ -407,7 +407,7 @@ Signing: built with Xcode automatic signing for the user's team. A free Apple ID
 | Auto-Lock while in use | The poller sends the runner `awake` (Shift down and up) every 10 s for 10 minutes after the host's last request, and never to a locked device (decision D56) |
 | Developer Mode off | `NeedsUser(EnableDeveloperMode)`; idevice `amfi` reveals the toggle in Settings |
 | Not paired | `NeedsUser(TrustComputer)` |
-| Runner expired | `NeedsUser(ResignRunner)` with the exact command |
+| Runner's signing profile run out | The next connect builds and signs the runner again and installs it (decision D84) |
 | Tunnel dropped | Actor reconnects once, then `DeviceGone` |
 
 ## 8. Video (`phonedriver-video`)
