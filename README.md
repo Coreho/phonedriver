@@ -72,6 +72,8 @@ This is my own test set. All three tools ran on the same Android emulator on 10 
 
 ## What the model sees
 
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/reads-dark.webp"><img alt="A phone screen drawn in characters. A line moves down it, and each row it passes becomes a numbered line of text beside the phone." src=".github/assets/reads-light.webp" width="100%"></picture></p>
+
 Each screen arrives as a short numbered list. This is the Settings app on an Android emulator:
 
 ```console
