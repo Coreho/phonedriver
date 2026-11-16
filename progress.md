@@ -2505,3 +2505,9 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - The secrets property test reads a page that prints every earlier secret back (`Step::Page`); the reply leaves through `Daemon::call` and is masked.
 - Mac mini: `cargo fmt --all -- --check` clean, clippy for the workspace clean, `cargo test --locked -p phonedriver -p phonedriver-android -p phonedriver-core --no-fail-fast`: 769 passed, 2 failed, 104 ignored. One is the known `no_device_exits_4_with_the_message_then_the_hint` (three simulators were booted). The other, `doctor_says_which_step_failed_when_the_agent_cannot_start`, ran over 60 s and failed once; alone it passed in 16 s and the whole `--test cli` then gave 19 passed, 1 failed (the known one). I did not find why it was slow that once. The whole workspace suite on the same code the hour before: 884 passed, 1 failed, 130 ignored.
 - Not done: iOS; browsers other than Chrome; a job in the agent set that needs the end of a long page, which is what would show a token saving or its absence.
+
+## 2026-11-16: the `verify-secrets` skill follows the code to 7369a14
+
+- The covered files changed twice since the skill's sync commit (`be4cf0b`): `3cdf18b` (F5, the steps file of a recording) and `7369a14` (the `page` call). Followed the skill: read `git diff --stat be4cf0b -- <covered files>`; the new reply door (`page`) leaves through `Daemon::call`, and the generator now sends it against a page that prints every earlier secret back; the new write (`Taping::step`) has its step and break B11.
+- Mac mini: `cargo test --locked -p phonedriver --test secret_property`: `3 passed; 0 failed; 1 ignored`. `python3 .claude/skills/verify-secrets/breaks.py B1-replies-are-not-masked`: `FAILED. 1 passed; 2 failed`, first line `step 0 (type): the reply holds the secret Ty0mW4zR8nB3c`; the file written back, the check passes again. B11 failed the check before `3cdf18b` was committed.
+- The sync commit in the skill is `7369a14`.
