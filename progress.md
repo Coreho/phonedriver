@@ -2547,3 +2547,9 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Tests (`control::tests`, the crate's first with paused time, so `tokio`'s `test-util` is a dev-dependency there): a request never answered ends as a gone device after exactly its own 60 s plus 30; a reply with the request's id is the answer. I wrote them with the change; to see the first one fail I set the margin to 31 s on the mini only: `left: 91s right: 90s`.
 - Mac mini: `phonedriver-android --lib` 64 passed; `--test daemon` 175 passed; `--test lanes` 7 passed; clippy clean.
 - Not done: iOS has its own request path and was not looked at; no live run cut a link on purpose.
+
+## 2026-11-16: doctor no longer answers a failed simulator probe with "run doctor"
+
+- `doctor_says_which_step_failed_when_the_agent_cannot_start` failed twice today in the whole suite on the mini and passed alone. The line that failed is `assert!(!out.contains("fix: Run \`phonedriver doctor\`"))`. The mini has three real simulators attached, the test's doctor probes them too, and under load a probe timed out; the iOS branch printed the transport error's hint as the fix, which is to run doctor. The Android branch already filtered that hint.
+- Both branches now go through `fix_for` (`crates/cli/src/doctor.rs`). Test: `a_fix_never_sends_the_reader_back_to_doctor`. Mac mini: `cargo test --locked -p phonedriver --lib doctor`: `6 passed`; clippy clean.
+- My reading of the cause is from the assertion's line and the code, not from a captured failing output; the whole suite has not been rerun under load since.

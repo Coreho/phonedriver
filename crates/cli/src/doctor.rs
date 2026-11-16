@@ -411,13 +411,20 @@ async fn agent_checks(id: &str) -> Vec<Check> {
             Status::Fail,
             format!("agent {id}"),
             e.message(),
-            e.hint()
-                .filter(|h| !h.contains("phonedriver doctor"))
-                .unwrap_or_else(|| {
-                    "The daemon log is `daemon.log` in the phonedriver home.".into()
-                }),
+            fix_for(
+                &e,
+                "The daemon log is `daemon.log` in the phonedriver home.",
+            ),
         )],
     }
+}
+
+/// What to do about a failed probe: the error's own hint, unless that hint is to run `doctor`. Seen on a loaded
+/// Mac: a simulator's probe timed out and doctor printed ``fix: Run `phonedriver doctor` to check the connection``.
+fn fix_for(e: &Failure, otherwise: &str) -> String {
+    e.hint()
+        .filter(|h| !h.contains("phonedriver doctor"))
+        .unwrap_or_else(|| otherwise.into())
 }
 
 fn cannot_reach_daemon(name: String, e: &Failure) -> Check {
@@ -502,9 +509,10 @@ async fn runner_answers(id: &str) -> Check {
             Status::Fail,
             name,
             e.message(),
-            e.hint().unwrap_or_else(|| {
-                "The runner log is in the phonedriver home under runner/<udid>.log.".into()
-            }),
+            fix_for(
+                &e,
+                "The runner log is in the phonedriver home under runner/<udid>.log.",
+            ),
         ),
     }
 }
@@ -766,6 +774,28 @@ pub fn ios_setup(home: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fix_never_sends_the_reader_back_to_doctor() {
+        let failed = |hint: &str| {
+            Failure::Rpc(crate::daemon::rpc::RpcError {
+                code: -32000,
+                message: "connection error".into(),
+                data: json!({"hint": hint}),
+            })
+        };
+        assert_eq!(
+            fix_for(
+                &failed("Run `phonedriver doctor` to check the connection."),
+                "The runner log is there."
+            ),
+            "The runner log is there."
+        );
+        assert_eq!(
+            fix_for(&failed("Unlock the phone."), "The runner log is there."),
+            "Unlock the phone."
+        );
+    }
 
     #[test]
     fn each_check_is_one_aligned_line_and_a_fix_follows_a_problem() {
