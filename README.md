@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://phonedriver.dev">phonedriver.dev</a> · <a href="docs/reference.md">Reference</a> · <a href="docs/bench/jobs.md">Benchmarks</a> · <a href="https://github.com/hridaya423/phonedriver/releases">Releases</a>
+  <a href="https://phonedriver.dev">phonedriver.dev</a> · <a href="https://phonedriver.dev/docs/">Docs</a> · <a href="https://phonedriver.dev/compare/">Compare</a> · <a href="docs/reference.md">Reference</a> · <a href="docs/bench/jobs.md">Benchmarks</a> · <a href="https://github.com/hridaya423/phonedriver/releases">Releases</a>
 </p>
 
 <p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a></p>
@@ -60,7 +60,7 @@ Start an Android emulator, plug in an Android phone with USB debugging on, or bo
 
 The first one is the demo above. phonedriver stops at Buy with GPay and asks you.
 
-The first run downloads one binary for your machine (macOS, Linux or Windows) and caches it. `phonedriver doctor` checks adb, Xcode and each device and tells you what to fix. The shell and PowerShell installers and real iPhones: [docs/reference.md](docs/reference.md#install).
+The first run downloads one binary for your machine (macOS, Linux or Windows) and caches it. `phonedriver doctor` checks adb, Xcode and each device and tells you what to fix. The shell and PowerShell installers and real iPhones are in the [install guide](https://phonedriver.dev/docs/install/) and in [docs/reference.md](docs/reference.md#install).
 
 ## Fewer tokens
 
@@ -68,7 +68,7 @@ Tokens are what an agent's usage limit is spent on. I ran nine jobs that only a 
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/jobs-dark.svg"><img alt="On nine real phone jobs on one Android emulator, 10 November 2026, with Claude Sonnet 5.5: phonedriver passed 27 of 27 runs with 658 thousand tokens in 5.1 minutes; mobile-mcp passed 17 of 18 with 4.6 million tokens in 8.7 minutes; phone-harness passed 14 of 18 with 1.1 million tokens in 22.7 minutes." src=".github/assets/jobs-light.svg" width="100%"></picture></p>
 
-This is my own test set. All three tools ran on the same Android emulator on 10 November 2026. Every run, the versions, the checks and what was thrown away are published in [docs/bench/jobs.md](docs/bench/jobs.md). If you maintain one of these tools and think I set it up wrong, open an issue and I will rerun it.
+This is my own test set. All three tools ran on the same Android emulator on 10 November 2026. Every run, the versions, the checks and what was thrown away are published in [docs/bench/jobs.md](docs/bench/jobs.md). If you maintain one of these tools and think I set it up wrong, open an issue and I will rerun it. Side by side: [phonedriver vs mobile-mcp](https://phonedriver.dev/compare/mobile-mcp/) and [phonedriver vs phone-harness](https://phonedriver.dev/compare/phone-harness/).
 
 ## What the model sees
 
@@ -103,7 +103,7 @@ ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms
   <picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/hero-dark.svg"><img alt="phonedriver against adb on an Android emulator, median of 50 runs. Reading the screen: 13 ms against 2,164 ms, 170 times faster. Screenshot: 9 ms against 291 ms, 32 times faster. Typing 100 characters: 158 ms against 3,638 ms, 23 times faster. Tapping and seeing what changed: 514 ms against 2,477 ms, 4.8 times faster." src=".github/assets/hero-light.svg" width="100%"></picture>
 </p>
 
-Measured on 11 November 2026 with phonedriver 0.1.1 on an Android 17 emulator, median of 50 runs, against `adb shell uiautomator dump`, `screencap` and `input`. The difference comes from a small helper process that phonedriver starts on the phone. It keeps the accessibility connection open, where adb starts a new process and writes XML each time. On a HONOR X8 phone (Android 13), reading the screen took 78.5 ms against 2,507 ms, and a screenshot took 16 ms against 1,006 ms. [Method and raw data.](docs/bench/speed.md)
+Measured on 11 November 2026 with phonedriver 0.1.1 on an Android 17 emulator, median of 50 runs, against `adb shell uiautomator dump`, `screencap` and `input`. The difference comes from a small helper process that phonedriver starts on the phone. It keeps the accessibility connection open, where adb starts a new process and writes XML each time. On a HONOR X8 phone (Android 13), reading the screen took 78.5 ms against 2,507 ms, and a screenshot took 16 ms against 1,006 ms. [Method and raw data.](docs/bench/speed.md) [phonedriver vs adb.](https://phonedriver.dev/compare/adb/)
 
 ## Asking before it pays
 
@@ -115,7 +115,7 @@ You choose Allow, Allow for this session, or Decline. If you want an agent to ru
 
 The check reads button labels in English, Spanish, Portuguese, French, German, Italian, Dutch, Japanese, Chinese (Simplified), Korean and Hindi. It does not catch a payment button that is only an icon, or one labeled in another language. By default it asks about payments and deleting an account. To be asked about more, set `PHONEDRIVER_ASK` to any of `send` (Send, Reply, Post, Share), `delete` (Delete, Remove, Clear all) and `install` (Install, Uninstall), for example `PHONEDRIVER_ASK=send,delete`. The prompt says which kind of tap it is.
 
-The model can't type plain text into a password field or a one-time code field. It gets an error that tells it to use `secret`, which keeps the text out of logs and traces.
+The model can't type plain text into a password field or a one-time code field. It gets an error that tells it to use `secret`, which keeps the text out of logs and traces. [How the guard decides.](https://phonedriver.dev/docs/approval-guard/)
 
 ## Works with
 
@@ -163,6 +163,8 @@ Every other client takes the same entry in its MCP config file:
 
 With more than one device connected, add `"env": { "PHONEDRIVER_DEVICE": "android:emulator-5554" }`. `phonedriver devices` lists the ids.
 
+A guide for each client: [Claude Code](https://phonedriver.dev/docs/claude-code/), [Codex](https://phonedriver.dev/docs/codex/), [VS Code](https://phonedriver.dev/docs/vs-code/), [Cursor, Gemini CLI, Zed and Cline](https://phonedriver.dev/docs/cursor-and-mcp-clients/).
+
 ## How it works
 
 On Android, phonedriver starts a small Java helper on the phone over adb. The helper reads the accessibility tree through UiAutomation and streams the screen as H.264 video, which is how phonedriver knows when the screen has stopped changing. On iOS, an XCTest runner does the same job. A daemon on your computer keeps the connection open and remembers which `@e` number is which element, so a tap still lands after a list has moved. The MCP server and the CLI are thin clients of that daemon.
@@ -178,6 +180,8 @@ phonedriver sends no telemetry. After the first download from GitHub, it connect
 **Can my agent buy things with it?** Not without your answer, unless you have told it to run autonomously. See [Asking before it pays](#asking-before-it-pays).
 
 **Can I use it at work?** Yes. It is AGPL-3.0: you can use it freely. If you change it and offer it to others as a network service, you must publish your changes.
+
+More answers are in [the FAQ](https://phonedriver.dev/faq/).
 
 ## License
 
