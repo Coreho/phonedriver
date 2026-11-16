@@ -18,11 +18,8 @@ public final class Main {
 
     static String version;
     private static byte[] token;
-    private static boolean controlTaken;
-    private static boolean videoTaken;
     private static boolean everConnected;
-
-    static volatile Control control;
+    private static int streams;
 
     public static void main(String[] args) {
         try {
@@ -52,9 +49,6 @@ public final class Main {
             System.exit(2);
         }
         Workarounds.apply();
-        if (args.length > 2 && "hidden".equals(args[2])) {
-            Hidden.open();
-        }
         try {
             Accessibility.connect();
         } catch (IllegalStateException e) {
@@ -78,6 +72,7 @@ public final class Main {
         watchdog.start();
         while (true) {
             LocalSocket socket = server.accept();
+            opened();
             new Thread(() -> serve(socket)).start();
         }
     }
@@ -96,33 +91,33 @@ public final class Main {
         return MessageDigest.isEqual(token, o.optString("token").getBytes());
     }
 
-    private static synchronized boolean claim(int kind) {
-        if (kind == 'C' && !controlTaken) {
-            controlTaken = true;
-        } else if (kind == 'V' && !videoTaken) {
-            videoTaken = true;
-        } else {
-            return false;
-        }
+    private static synchronized void connected() {
         everConnected = true;
-        return true;
     }
 
-    private static synchronized void release(int kind) {
-        if (kind == 'C') {
-            controlTaken = false;
-        } else {
-            videoTaken = false;
-        }
-        if (!controlTaken && !videoTaken) {
-            System.err.println("both streams closed, exiting");
-            System.exit(0);
-        }
+    private static synchronized void opened() {
+        streams++;
+    }
+
+    /** True when the stream that just closed was the last one of a host that had connected. */
+    private static synchronized boolean closedTheLast() {
+        streams--;
+        return streams == 0 && everConnected;
+    }
+
+    private static void refuse(DataOutputStream out, JSONObject hello, String error) throws IOException {
+        JSONObject reply = Json.put(new JSONObject(), "id", hello.optInt("id"));
+        Json.put(reply, "ok", false);
+        Json.put(reply, "error", error);
+        byte[] frame = Json.bytes(reply);
+        out.writeInt(frame.length);
+        out.write(frame);
+        out.flush();
     }
 
     private static void serve(LocalSocket socket) {
         int kind = 0;
-        boolean claimed = false;
+        Lane lane = null;
         try {
             Looper.prepare();
             DataInputStream in = new DataInputStream(socket.getInputStream());
@@ -138,11 +133,25 @@ public final class Main {
                 System.err.println("bad token, dropping");
                 return;
             }
-            if (!claim(kind)) {
-                System.err.println("stream kind " + (char) kind + " already open, dropping");
-                return;
+            connected();
+            boolean hidden = "hidden".equals(first.optString("display"));
+            String name = first.optString("lane");
+            if (kind == 'C') {
+                try {
+                    lane = Lane.claimControl(hidden, name);
+                } catch (IllegalStateException e) {
+                    System.err.println("control stream refused: " + e.getMessage());
+                    refuse(out, first, e.getMessage());
+                    return;
+                }
+            } else {
+                lane = Lane.claimVideo(hidden, name);
+                if (lane == null) {
+                    System.err.println("video stream for a lane that is not open or has one, dropping");
+                    return;
+                }
             }
-            claimed = true;
+            lane.enter();
             if (kind == 'C') {
                 new Control(in, out).run(first);
             } else {
@@ -155,8 +164,12 @@ public final class Main {
                 socket.close();
             } catch (IOException ignored) {
             }
-            if (claimed) {
-                release(kind);
+            if (lane != null) {
+                Lane.release(lane, kind);
+            }
+            if (closedTheLast()) {
+                System.err.println("every stream closed, exiting");
+                System.exit(0);
             }
         }
     }

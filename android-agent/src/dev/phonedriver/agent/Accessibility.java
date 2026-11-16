@@ -7,6 +7,7 @@ import android.os.Build;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
@@ -33,8 +34,7 @@ final class Accessibility {
     private static boolean afterWake;
     private static final java.util.Set<String> waitedWebViews = new java.util.HashSet<>();
     private static final int WEBVIEW_WAIT_MS = 2500;
-    private static int screenW;
-    private static int screenH;
+
 
     static void connect() throws Exception {
         HandlerThread thread = new HandlerThread("uiautomation");
@@ -69,18 +69,30 @@ final class Accessibility {
         }
     }
 
+    // AccessibilityEvent.getDisplayId() is API 34. Before it an event cannot be told from another lane's, so every
+    // lane hears it, which only lengthens a settle.
+    private static int displayOf(AccessibilityEvent event) {
+        return Build.VERSION.SDK_INT >= 34 ? event.getDisplayId() : Display.INVALID_DISPLAY;
+    }
+
     private static void onEvent(AccessibilityEvent event) {
-        Control c = Main.control;
-        if (c == null) {
-            return;
+        int display = displayOf(event);
+        JSONObject e = null;
+        for (Lane lane : Lane.all()) {
+            Control c = lane.control;
+            if (c == null || (display != Display.INVALID_DISPLAY && display != lane.displayId())) {
+                continue;
+            }
+            if (e == null) {
+                e = Json.put(new JSONObject(), "ev", "window_changed");
+                Json.put(e, "w", event.getWindowId());
+                if (event.getPackageName() != null) {
+                    Json.put(e, "pkg", event.getPackageName().toString());
+                }
+                Json.put(e, "t", event.getEventTime());
+            }
+            c.event(e);
         }
-        JSONObject e = Json.put(new JSONObject(), "ev", "window_changed");
-        Json.put(e, "w", event.getWindowId());
-        if (event.getPackageName() != null) {
-            Json.put(e, "pkg", event.getPackageName().toString());
-        }
-        Json.put(e, "t", event.getEventTime());
-        c.event(e);
     }
 
     private static void clearCache() throws Exception {
@@ -153,8 +165,9 @@ final class Accessibility {
     static JSONObject tree() throws Exception {
         clearCache();
         DisplayInfo di = ServiceManager.getDisplayManager().getDisplayInfo(Hidden.displayId());
-        screenW = di.getSize().getWidth();
-        screenH = di.getSize().getHeight();
+        Lane lane = Lane.here();
+        lane.screenW = di.getSize().getWidth();
+        lane.screenH = di.getSize().getHeight();
         JSONObject tree = read();
         for (int i = 0; hollow(tree, afterWake) && i < EMPTY_TREE_RETRIES; i++) {
             SystemClock.sleep(20);
@@ -296,9 +309,9 @@ final class Accessibility {
     // top or bottom edge. Walking them cost about 37 of 192 nodes on Settings (spike A1) and agents never act on them.
     private static boolean isEdgeBar(AccessibilityWindowInfo w, Rect b) {
         return w.getType() == AccessibilityWindowInfo.TYPE_SYSTEM
-                && b.width() == screenW
-                && b.height() * 10 <= screenH
-                && (b.top == 0 || b.bottom == screenH);
+                && b.width() == Lane.here().screenW
+                && b.height() * 10 <= Lane.here().screenH
+                && (b.top == 0 || b.bottom == Lane.here().screenH);
     }
 
     private static JSONArray rect(Rect b) {
@@ -359,7 +372,7 @@ final class Accessibility {
         n.getBoundsInScreen(b);
         Json.put(o, "b", rect(b));
         StringBuilder f = new StringBuilder();
-        if (b.right > 0 && b.bottom > 0 && b.left < screenW && b.top < screenH && b.width() > 0 && b.height() > 0) {
+        if (b.right > 0 && b.bottom > 0 && b.left < Lane.here().screenW && b.top < Lane.here().screenH && b.width() > 0 && b.height() > 0) {
             f.append('v');
         }
         if (n.isVisibleToUser()) f.append('V');

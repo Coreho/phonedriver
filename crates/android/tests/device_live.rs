@@ -8,6 +8,7 @@ use phonedriver_core::device::{
     TimedPoint, Url,
 };
 use phonedriver_core::element::Role;
+use phonedriver_core::error::Error;
 use phonedriver_core::geometry::Point;
 use phonedriver_core::prune::{Node, prune};
 use support::agent as raw;
@@ -19,9 +20,14 @@ async fn connect() -> (AndroidDevice, String, tokio::sync::MutexGuard<'static, (
     let guard = raw::exclusive().await;
     let (adb, serial) = (support::adb(), support::serial());
     testbed::ensure_installed(&adb, &serial).await;
-    let device = AndroidDevice::connect(&adb, &serial, phonedriver_core::device::DisplayMode::Main)
-        .await
-        .unwrap();
+    let device = AndroidDevice::connect(
+        &adb,
+        &serial,
+        phonedriver_core::device::DisplayMode::Main,
+        None,
+    )
+    .await
+    .unwrap();
     (device, serial, guard)
 }
 
@@ -300,10 +306,14 @@ async fn the_testbed_on_the_hidden_display_gets_the_taps_and_is_a_task_of_that_d
     let _g = raw::exclusive().await;
     let (adb, serial) = (support::adb(), support::serial());
     testbed::ensure_installed(&adb, &serial).await;
-    let device =
-        AndroidDevice::connect(&adb, &serial, phonedriver_core::device::DisplayMode::Hidden)
-            .await
-            .unwrap();
+    let device = AndroidDevice::connect(
+        &adb,
+        &serial,
+        phonedriver_core::device::DisplayMode::Hidden,
+        None,
+    )
+    .await
+    .unwrap();
     let id = device.hidden_display().expect("a hidden display id");
     assert!(id > 0);
     testbed::clear_log(&adb, &serial).await;
@@ -341,4 +351,77 @@ async fn the_testbed_on_the_hidden_display_gets_the_taps_and_is_a_task_of_that_d
     let foreground = device.foreground().await.unwrap();
     assert_eq!(foreground, Some(AppId(testbed::PACKAGE.into())));
     drop(device);
+}
+
+#[tokio::test]
+#[ignore = "needs PHONEDRIVER_TEST_DEVICE on Android 13 or later"]
+async fn two_lanes_of_one_phone_take_their_own_taps_at_the_same_time() {
+    let _g = raw::exclusive().await;
+    let (adb, serial) = (support::adb(), support::serial());
+    testbed::ensure_installed(&adb, &serial).await;
+    let hidden = phonedriver_core::device::DisplayMode::Hidden;
+    let a = AndroidDevice::connect(&adb, &serial, hidden, Some("a"))
+        .await
+        .unwrap();
+    let b = AndroidDevice::connect(&adb, &serial, hidden, Some("b"))
+        .await
+        .unwrap();
+    assert_eq!(a.info().id, format!("android:{serial}+a"));
+    assert_ne!(a.hidden_display(), b.hidden_display());
+
+    let taken = AndroidDevice::connect(&adb, &serial, hidden, Some("a")).await;
+    assert!(
+        matches!(taken, Err(Error::Refused { .. })),
+        "a lane that is open is refused to a second connection"
+    );
+
+    testbed::clear_log(&adb, &serial).await;
+    let settings = AppId("com.android.settings".into());
+    let app = AppId(testbed::PACKAGE.into());
+    let (on_a, on_b) = tokio::join!(a.launch(&app), b.launch(&settings));
+    on_a.unwrap();
+    on_b.unwrap();
+    let button = wait_for_node(&a, Duration::from_secs(20), |n| {
+        n.label.as_deref() == Some("b1")
+    })
+    .await
+    .expect("button b1 on lane a");
+    let row = wait_for_node(&b, Duration::from_secs(20), |n| {
+        n.label.as_deref() == Some("Network & internet")
+    })
+    .await
+    .expect("Settings on lane b");
+
+    let (tap_a, tap_b) = tokio::join!(
+        a.gesture(tap_at(button.bounds.center())),
+        b.gesture(tap_at(row.bounds.center()))
+    );
+    tap_a.unwrap();
+    tap_b.unwrap();
+    let log = testbed::wait_for_log(&adb, &serial, 3000, |l| {
+        l.iter().any(|e| e["ev"] == "tap" && e["id"] == "b1")
+    })
+    .await;
+    assert!(
+        log.iter().any(|e| e["ev"] == "tap" && e["id"] == "b1"),
+        "lane a's tap did not reach the testbed: {log:?}"
+    );
+    wait_for_node(&b, Duration::from_secs(10), |n| {
+        n.label.as_deref() == Some("Internet")
+    })
+    .await
+    .expect("lane b's tap opened Network & internet");
+    assert_eq!(a.foreground().await.unwrap(), Some(app));
+    assert_eq!(b.foreground().await.unwrap(), Some(settings));
+
+    drop(a);
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert!(
+        wait_for_node(&b, Duration::from_secs(5), |n| {
+            n.label.as_deref() == Some("Internet")
+        })
+        .await
+        .is_some(),
+        "lane b stopped working when lane a closed"
+    );
 }

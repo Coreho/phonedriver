@@ -107,8 +107,8 @@ Tested on an iPhone 13 Pro Max (iOS 27.0.1) on one network. An iPhone 14 Plus (i
 |---|---|---|
 | `PHONEDRIVER_HOME` | `~/.phonedriver` | Where the daemon keeps its socket (`run/`), `daemon.log`, `traces/`, `tmp/` and the iOS `runner/` builds. Set it to run a separate daemon. On macOS the socket path must stay under about 100 bytes. |
 | `PHONEDRIVER_SOCKET` | under `PHONEDRIVER_HOME` (else `$XDG_RUNTIME_DIR/phonedriver`) | The daemon's socket or named pipe. Point it at an `ssh -L` forward to use a remote machine's devices. |
-| `PHONEDRIVER_DEVICE` | none | The device to use when `--device` is not given. Also read by `phonedriver mcp`. |
-| `PHONEDRIVER_DISPLAY` | `main` | `hidden` makes the Android agent work on a second screen the person holding the phone cannot see (Android 13 and later; `--display hidden` does the same). Read by the CLI, `phonedriver mcp` and `doctor`. A call in the other mode restarts the agent, which takes a few seconds. Not tried on a physical phone yet, and some makers' builds may refuse it. |
+| `PHONEDRIVER_DEVICE` | none | The device to use when `--device` is not given. Also read by `phonedriver mcp`. `<id>+<name>` is a lane of an Android device ([several agents on one phone](#several-agents-on-one-android-phone)). |
+| `PHONEDRIVER_DISPLAY` | `main` | `hidden` makes the Android agent work on a second screen the person holding the phone cannot see (Android 13 and later; `--display hidden` does the same). Read by the CLI, `phonedriver mcp` and `doctor`. A call in the other mode reconnects, which takes a few seconds. Tested on an emulator and a HONOR X8 (Android 13); some makers' builds may refuse it. |
 | `PHONEDRIVER_SESSION` | `default` | The session name, as `--session`. |
 | `PHONEDRIVER_TEAM` | the team of this Mac's Apple Development certificate | Apple developer team ID that signs the iOS runner on a physical device. Needed only with certificates for several teams. |
 | `PHONEDRIVER_IOS_TIER` | `runner` | `coredevice` selects the CoreDevice tier on iOS 27 devices. Experimental. |
@@ -150,6 +150,27 @@ phonedriver snapshot
 On the other machine, run any `phonedriver` command once, or `phonedriver daemon`, so that the socket exists. Both machines need the same `phonedriver` version. If the forward is down, the error names `PHONEDRIVER_SOCKET`.
 
 Two things differ from a local run. `phonedriver screenshot` prints a path on the machine that has the device; `phonedriver screenshot -o shot.png` writes the file on your machine instead. The MCP `screenshot` tool returns the image itself, so it works unchanged.
+
+### Several agents on one Android phone
+
+Add `+` and a short name to a device id and the session works on a lane: a hidden screen of its own on that phone (Android 13 and later). Each lane has its own lease, so several agents use one phone or emulator at the same time, and the phone's own screen stays free:
+
+```sh
+PHONEDRIVER_SESSION=one phonedriver --device emulator-5554+a launch settings
+PHONEDRIVER_SESSION=two phonedriver --device emulator-5554+b launch clock
+phonedriver devices
+```
+
+```console
+ID                       MODEL                OS                   TIER   LEASE          DISPLAY
+android:emulator-5554    sdk_gphone64_x86_64  Android 17 (API 37)  agent  -              main
+android:emulator-5554+a  sdk_gphone64_x86_64  Android 17 (API 37)  agent  one (idle 3s)  hidden (display 13)
+android:emulator-5554+b  sdk_gphone64_x86_64  Android 17 (API 37)  agent  two (idle 3s)  hidden (display 12)
+```
+
+For MCP, give each agent its own lane in its config: `"env": { "PHONEDRIVER_DEVICE": "emulator-5554+a" }`. With one device connected, `+a` is enough. The name is 1 to 8 lowercase letters or digits. A lane closes, and the apps on it with it, when its session releases it (`phonedriver release`) or has made no call for ten minutes.
+
+An app runs in one place at a time. If two lanes launch the same app, it moves to the second one and the first is left on its home screen, so give each lane a different app. The clipboard is one for the phone, so lanes take turns to paste. Tried on one emulator (API 37) with two lanes beside the main screen; not on a physical phone.
 
 ### Android over Wi-Fi
 

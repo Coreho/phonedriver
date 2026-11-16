@@ -9,8 +9,8 @@ import com.genymobile.scrcpy.display.DisplayInfo;
 import com.genymobile.scrcpy.wrappers.ServiceManager;
 import com.genymobile.scrcpy.wrappers.WindowManager;
 
+/** A virtual display with its encoder. The static methods answer for the lane of the calling thread. */
 final class Hidden {
-    static final int EXIT_UNAVAILABLE = 5;
     private static final int MIN_API = 33;
     private static final int PUBLIC = 1;
     private static final int PRESENTATION = 1 << 1;
@@ -27,35 +27,43 @@ final class Hidden {
     private static final int DEVICE_DISPLAY_GROUP = 1 << 15;
     private static final int[] SIZE_FALLBACK = {0, 2560, 1920, 1600, 1280, 1024, 800};
 
-    private static VirtualDisplay display;
-    private static MediaCodec codec;
-    private static int id;
-    private static int width;
-    private static int height;
+    final int id;
+    private final VirtualDisplay display;
+    private final MediaCodec codec;
+    private final int width;
+    private final int height;
+
+    private Hidden(VirtualDisplay display, MediaCodec codec, int width, int height) {
+        this.display = display;
+        this.id = display.getDisplay().getDisplayId();
+        this.codec = codec;
+        this.width = width;
+        this.height = height;
+    }
 
     static boolean active() {
-        return display != null;
+        return Lane.here().hidden != null;
     }
 
     static int displayId() {
-        return display == null ? 0 : id;
+        return Lane.here().displayId();
     }
 
     static MediaCodec codec() {
-        return codec;
+        return Lane.here().hidden.codec;
     }
 
     static int width() {
-        return width;
+        return Lane.here().hidden.width;
     }
 
     static int height() {
-        return height;
+        return Lane.here().hidden.height;
     }
 
-    private static void unavailable(String why) {
+    private static IllegalStateException unavailable(String why) {
         System.err.println("hidden display: " + why);
-        System.exit(EXIT_UNAVAILABLE);
+        return new IllegalStateException("hidden display: " + why);
     }
 
     private static int flags() {
@@ -69,9 +77,9 @@ final class Hidden {
         return flags;
     }
 
-    static void open() throws Exception {
+    static Hidden open(String lane) throws Exception {
         if (Build.VERSION.SDK_INT < MIN_API) {
-            unavailable("needs Android 13 (API 33) or newer, this is API " + Build.VERSION.SDK_INT);
+            throw unavailable("needs Android 13 (API 33) or newer, this is API " + Build.VERSION.SDK_INT);
         }
         DisplayInfo main = ServiceManager.getDisplayManager().getDisplayInfo(0);
         int mainW = main.getSize().getWidth();
@@ -96,25 +104,34 @@ final class Hidden {
             }
         }
         if (surface == null) {
-            unavailable("no encoder size works: " + last);
+            encoder.release();
+            throw unavailable("no encoder size works: " + last);
         }
         int dpi = Math.round(main.getDpi() * (float) size[0] / mainW);
+        VirtualDisplay display;
         try {
-            display = ServiceManager.getDisplayManager()
-                    .createNewVirtualDisplay("phonedriver", size[0], size[1], dpi, surface, flags());
+            display = ServiceManager.getDisplayManager().createNewVirtualDisplay(
+                    lane.isEmpty() ? "phonedriver" : "phonedriver-" + lane, size[0], size[1], dpi, surface, flags());
         } catch (Exception e) {
             Throwable cause = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
-            unavailable("the system refused a virtual display: " + cause);
+            encoder.release();
+            throw unavailable("the system refused a virtual display: " + cause);
         }
-        id = display.getDisplay().getDisplayId();
+        Hidden hidden = new Hidden(display, encoder, size[0], size[1]);
         // A display that shows system decorations keeps its own keyboard; otherwise the keyboard opens on the phone's screen.
-        ServiceManager.getWindowManager().setDisplayImePolicy(id, WindowManager.DISPLAY_IME_POLICY_LOCAL);
+        ServiceManager.getWindowManager().setDisplayImePolicy(hidden.id, WindowManager.DISPLAY_IME_POLICY_LOCAL);
         encoder.start();
-        codec = encoder;
-        width = size[0];
-        height = size[1];
-        System.err.println("hidden display " + id + ": " + width + "x" + height + " at " + dpi + " dpi");
+        System.err.println("hidden display " + hidden.id + ": " + hidden.width + "x" + hidden.height + " at " + dpi + " dpi");
+        return hidden;
     }
 
-    private Hidden() {}
+    void close() {
+        try {
+            display.release();
+            codec.stop();
+            codec.release();
+        } catch (Exception e) {
+            System.err.println("hidden display " + id + " did not close cleanly: " + e);
+        }
+    }
 }

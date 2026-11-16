@@ -2354,23 +2354,28 @@ impl Actor {
                 };
                 // Observed on the iOS 26.5 Simulator: Photos crashed at every launch, the home screen stayed, and the
                 // agent read "launched Photos" as a launch that worked and tapped the icon again and again.
+                // Observed on the API 37 emulator with two lanes opened at once: a hidden display has no application
+                // window for seconds after it is created, and a launch there read an empty screen and said `launched`.
+                let empty_counts = device.hidden_display().is_some();
+                let elsewhere = |front: &Option<AppId>| match front {
+                    Some(f) => *f != found.id,
+                    None => empty_counts,
+                };
                 let mut front = device.foreground().await?;
                 let late = Instant::now();
-                while front.as_ref().is_some_and(|f| *f != found.id)
-                    && late.elapsed() < LATE_START_WAIT
-                {
+                while elsewhere(&front) && late.elapsed() < LATE_START_WAIT {
                     tokio::time::sleep(LATE_START_STEP).await;
                     front = device.foreground().await?;
                     if front.as_ref() == Some(&found.id) {
                         self.until_app_content(leaving.as_ref()).await?;
                     }
                 }
-                if let Some(front) = front.filter(|f| *f != found.id) {
+                if elsewhere(&front) {
                     summary = format!(
                         "{summary}, but {} is not in front after {} s ({} is): it is still starting, or it quit at start; `snapshot` shows which",
                         found.name,
                         started_launch.elapsed().as_secs(),
-                        front.0
+                        front.map_or("nothing".to_string(), |f| f.0)
                     );
                 }
                 self.finish(s, p.settle, cfg, started, summary, None, None)

@@ -44,7 +44,7 @@ pub struct AndroidDevice {
     video: VideoStream,
     events: broadcast::Sender<DeviceEvent>,
     log: AgentLog,
-    _launched: Launched,
+    _launched: std::sync::Arc<Launched>,
     settings: tokio::sync::OnceCell<std::sync::Arc<SettingsIndex>>,
 }
 
@@ -53,16 +53,26 @@ impl AndroidDevice {
     /// once the first frame has been decoded (or after 2 s), so settle and screenshots have a picture from the start.
     /// `info().screen` is the size at connect time; a later rotation arrives as `DeviceEvent::DisplayChanged`.
     /// Dropping the device closes the agent's shell stream, which ends the agent within about a second.
-    pub async fn connect(adb: &Adb, serial: &str, display: DisplayMode) -> Result<AndroidDevice> {
+    /// With a `lane`, the device works on a hidden display of its own beside the device's other lanes, and its id is
+    /// `android:<serial>+<lane>` (decision D73).
+    pub async fn connect(
+        adb: &Adb,
+        serial: &str,
+        display: DisplayMode,
+        lane: Option<&str>,
+    ) -> Result<AndroidDevice> {
         let Agent {
             control,
             video,
             hello,
             log,
             launched,
-        } = Agent::start(adb, serial, display).await?;
+        } = Agent::start(adb, serial, display, lane).await?;
         let density = hello.density;
-        let id = format!("android:{serial}");
+        let id = match lane {
+            Some(lane) => format!("android:{serial}+{lane}"),
+            None => format!("android:{serial}"),
+        };
         let (events, _) = broadcast::channel(EVENT_BACKLOG);
         let screen_long_pt = hello.display.w.max(hello.display.h) as f32 / density;
         let video = VideoStream::spawn(video, FrameStore::fitted(screen_long_pt));

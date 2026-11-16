@@ -121,7 +121,13 @@ final class TextInput {
         AccessibilityNodeInfo focus = awaitFocusedInput();
         AccessibilityNodeInfo field = focus == null ? null : focusedEditableIn(focus);
         String before = textOf(field != null ? field : focus);
-        ClipboardManager cm = clipboard();
+        pasteThrough(clipboard(), text, sensitive, field, before);
+    }
+
+    // The clipboard is one for the whole phone, so one paste at a time: two lanes pasting at once would paste each
+    // other's text.
+    private static synchronized void pasteThrough(ClipboardManager cm, String text, boolean sensitive,
+            AccessibilityNodeInfo field, String before) throws Exception {
         ClipData saved = cm.getClip();
         cm.setClip(clip(text, sensitive));
         try {

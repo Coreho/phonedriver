@@ -1,7 +1,7 @@
 //! Deploys, launches and connects to the on-device agent (architecture 6.2).
 
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use phonedriver_core::device::DisplayMode;
@@ -19,7 +19,6 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const JAR: &[u8] = include_bytes!(env!("PHONEDRIVER_AGENT_JAR"));
 const JAR_MISSING: i32 = 99;
-const NO_HIDDEN_DISPLAY: i32 = 5;
 const SIGTERM: i32 = 143;
 const OWNED: i32 = 98;
 const OWNER_FILE: &str = "/data/local/tmp/phonedriver-owner";
@@ -28,8 +27,10 @@ const OWNER_GRACE_STEP: Duration = Duration::from_millis(500);
 /// Observed on two API 37 emulators under load (2026-11-10): the first call of a session failed five times with "did not
 /// print `ready` within 3 s", and the next call found the agent up. An agent that starts in time is not delayed by this.
 const READY_TIMEOUT: Duration = Duration::from_secs(10);
-/// Creating the encoder and the virtual display at 2560x1600 took 5 to 8 s to `ready` on the API 37 tablet emulator.
-const HIDDEN_READY_TIMEOUT: Duration = Duration::from_secs(20);
+/// Creating the encoder and the virtual display at 2560x1600 took 5 to 8 s on the API 37 tablet emulator.
+const HIDDEN_HELLO_TIMEOUT: Duration = Duration::from_secs(20);
+const NO_HIDDEN_DISPLAY: &str =
+    "a hidden display needs Android 13 (API 33) or newer, and the phone must allow it";
 const LOG_LINES: usize = 200;
 const MAX_FRAME: usize = 64 << 20;
 const CONFLICT_HOLDER: &str = "another UiAutomation client, such as `uiautomator`, an Appium server or an instrumentation test";
@@ -82,36 +83,16 @@ fn owner() -> String {
 /// One adb shell does the existence check of the jar, the owner check, the kill and the start. The owner file is read
 /// only while an agent is running: an agent that adbd has already ended leaves a stale file, and an agent with no file
 /// is from a phonedriver that did not write one.
-fn start_command(
-    jar: &str,
-    owner_file: &str,
-    name: &str,
-    display: DisplayMode,
-    me: &str,
-) -> String {
-    let hidden = match display {
-        DisplayMode::Main => "",
-        DisplayMode::Hidden => " hidden",
-    };
+fn start_command(jar: &str, owner_file: &str, name: &str, me: &str) -> String {
     // `$M` keeps the class name out of this shell's own command line, which `pkill -f` would otherwise match.
     format!(
-        "[ -f {jar} ] || exit {JAR_MISSING}; o=$(cat {owner_file} 2>/dev/null); if [ -n \"$o\" ] && [ \"$o\" != '{me}' ] && pgrep -f 'dev.phonedriver.agent.[M]ain' >/dev/null; then echo \"owned $o\"; exit {OWNED}; fi; pkill -f 'dev.phonedriver.agent.[M]ain'; echo '{me}' > {owner_file}; M=Main; CLASSPATH={jar} exec app_process / dev.phonedriver.agent.$M {VERSION} {name}{hidden}"
+        "[ -f {jar} ] || exit {JAR_MISSING}; o=$(cat {owner_file} 2>/dev/null); if [ -n \"$o\" ] && [ \"$o\" != '{me}' ] && pgrep -f 'dev.phonedriver.agent.[M]ain' >/dev/null; then echo \"owned $o\"; exit {OWNED}; fi; pkill -f 'dev.phonedriver.agent.[M]ain'; echo '{me}' > {owner_file}; M=Main; CLASSPATH={jar} exec app_process / dev.phonedriver.agent.$M {VERSION} {name}"
     )
 }
 
-async fn start(
-    adb: &Adb,
-    serial: &str,
-    jar: &str,
-    name: &str,
-    token: &str,
-    display: DisplayMode,
-) -> Result<ShellStream> {
+async fn start(adb: &Adb, serial: &str, jar: &str, name: &str, token: &str) -> Result<ShellStream> {
     let mut shell = adb
-        .shell_stream(
-            serial,
-            &start_command(jar, OWNER_FILE, name, display, &owner()),
-        )
+        .shell_stream(serial, &start_command(jar, OWNER_FILE, name, &owner()))
         .await?;
     shell.write_stdin(format!("{token}\n").as_bytes()).await?;
     Ok(shell)
@@ -166,7 +147,8 @@ impl AgentLog {
     }
 }
 
-/// A running agent process that nobody has connected to yet. Dropping it closes the shell stream, which makes adbd kill the agent.
+/// A running agent process. Every lane of the device holds it; dropping the last hold closes the shell stream, which
+/// makes adbd kill the agent.
 pub struct Launched {
     pub name: String,
     pub token: String,
@@ -274,12 +256,6 @@ fn not_ready(
             holder: CONFLICT_HOLDER.to_string(),
         };
     }
-    if exit == Some(NO_HIDDEN_DISPLAY) {
-        return Error::Unsupported {
-            op: Op::Display,
-            reason: "a hidden display needs Android 13 (API 33) or newer, and the phone must allow it",
-        };
-    }
     if timed_out {
         return transport(format!(
             "the agent did not print `ready` within {} s: {tail}",
@@ -308,21 +284,18 @@ fn not_ready(
 
 /// adbd ends an agent about a second after its shell stream closes, so an owner that has just exited still shows for
 /// that long: an owned device is asked again a few times before it is reported.
-#[allow(clippy::too_many_arguments)]
 async fn start_ready(
     adb: &Adb,
     serial: &str,
     jar: &str,
     name: &str,
     token: &str,
-    display: DisplayMode,
     log: &AgentLog,
-    limit: Duration,
 ) -> Result<(ShellStream, bool)> {
     let mut tries = 0;
     loop {
-        let mut shell = start(adb, serial, jar, name, token, display).await?;
-        match wait_ready(&mut shell, log, limit, serial).await {
+        let mut shell = start(adb, serial, jar, name, token).await?;
+        match wait_ready(&mut shell, log, READY_TIMEOUT, serial).await {
             Err(Error::DeviceDriven { .. }) if tries < OWNER_GRACE_TRIES => {
                 tries += 1;
                 tokio::time::sleep(OWNER_GRACE_STEP).await;
@@ -332,24 +305,48 @@ async fn start_ready(
     }
 }
 
+type Running = Arc<tokio::sync::Mutex<Weak<Launched>>>;
+
+/// The agent process of each device this daemon drives, by adb server and serial. The system registers one
+/// UiAutomation at a time, so every lane of a device connects to the same process (decision D73).
+fn running(adb: &Adb, serial: &str) -> Running {
+    static RUNNING: std::sync::OnceLock<Mutex<HashMap<(String, String), Running>>> =
+        std::sync::OnceLock::new();
+    RUNNING
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entry((adb.addr().to_string(), serial.to_string()))
+        .or_default()
+        .clone()
+}
+
+/// The device's running agent, or a new one when none of this daemon's is alive.
+pub async fn launch(adb: &Adb, serial: &str) -> Result<Arc<Launched>> {
+    let slot = running(adb, serial);
+    let mut held = slot.lock().await;
+    if let Some(alive) = held.upgrade()
+        && !alive.drain.is_finished()
+    {
+        return Ok(alive);
+    }
+    let launched = Arc::new(launch_new(adb, serial).await?);
+    *held = Arc::downgrade(&launched);
+    Ok(launched)
+}
+
 /// Kills this daemon's own running agent, starts a new one and waits for it to listen. One adb shell does the existence check of the
 /// jar, the kill and the start, so a warm start costs one round trip to the device before the agent boots; the jar is
 /// pushed only when the shell reports it missing.
-pub async fn launch(adb: &Adb, serial: &str, display: DisplayMode) -> Result<Launched> {
+async fn launch_new(adb: &Adb, serial: &str) -> Result<Launched> {
     let jar = jar_path();
     let name = format!("phonedriver-{VERSION}-{}", random_hex(4)?);
     let token = random_hex(32)?;
     let log = AgentLog::default();
-    let ready_limit = match display {
-        DisplayMode::Main => READY_TIMEOUT,
-        DisplayMode::Hidden => HIDDEN_READY_TIMEOUT,
-    };
-    let (mut shell, found) =
-        start_ready(adb, serial, &jar, &name, &token, display, &log, ready_limit).await?;
+    let (mut shell, found) = start_ready(adb, serial, &jar, &name, &token, &log).await?;
     if !found {
         deploy(adb, serial).await?;
-        let (again, found) =
-            start_ready(adb, serial, &jar, &name, &token, display, &log, ready_limit).await?;
+        let (again, found) = start_ready(adb, serial, &jar, &name, &token, &log).await?;
         shell = again;
         if !found {
             return Err(transport(format!(
@@ -453,13 +450,14 @@ pub struct Hello {
     pub hidden_display: Option<u32>,
 }
 
-/// A connected agent. Dropping it closes the shell stream, which ends the agent on the device within about a second.
+/// One lane's connection to the agent. Dropping the last one of a device closes the shell stream, which ends the agent
+/// on the device within about a second.
 pub struct Agent {
     pub control: TcpStream,
     pub video: TcpStream,
     pub hello: Hello,
     pub log: AgentLog,
-    pub(crate) launched: Launched,
+    pub(crate) launched: Arc<Launched>,
 }
 
 async fn open_stream(
@@ -478,37 +476,91 @@ async fn open_stream(
     Ok(stream)
 }
 
+/// Why the agent answered hello with a refusal: a phone that cannot give a hidden display, a lane another
+/// connection holds, or a version that is not ours.
+fn refused_hello(reply: &Value) -> Error {
+    let error = reply["error"].as_str().unwrap_or_default();
+    if error.contains("hidden display:") {
+        return Error::Unsupported {
+            op: Op::Display,
+            reason: NO_HIDDEN_DISPLAY,
+        };
+    }
+    if let Some(lane) = error.strip_prefix("lane in use: ") {
+        return Error::Refused {
+            detail: format!("lane {lane} of this device is already open from this daemon"),
+        };
+    }
+    transport(format!("the agent refused hello: {reply}"))
+}
+
 const SLOW_LINK: Duration = Duration::from_millis(120);
 
 /// The bit rate and frame rate to ask for on a slow link, told by how long the agent's hello took (two round
 /// trips: 9 to 14 ms over USB, 31 to 34 ms through an ssh tunnel, 433 to 481 ms on a link shaped to 3G, 780 kbit/s
 /// down and 100 ms each way). The agent's own 8 Mbit/s is ten times what that link carries, and the frames that
 /// tell a tap has settled queue behind the stream (2026-11-12).
-fn video_for(hello: Duration) -> Option<(u32, u32, u32)> {
-    (hello >= SLOW_LINK).then_some((400_000, 10, 1280))
+///
+/// Not for a hidden display: it is opened inside hello, so that hello's time says nothing about the link, and its
+/// encoder already runs at the agent's own rate. Observed with two lanes: the second lane's stream was configured
+/// with the first one's slow-link numbers, and a screenshot after a tap showed the screen from before it.
+fn video_for(display: DisplayMode, hello: Duration) -> Option<(u32, u32, u32)> {
+    (display == DisplayMode::Main && hello >= SLOW_LINK).then_some((400_000, 10, 1280))
 }
 
 impl Agent {
-    pub async fn start(adb: &Adb, serial: &str, display: DisplayMode) -> Result<Agent> {
-        let launched = launch(adb, serial, display).await?;
+    /// Connects to the device's agent, starting it when it is not running. With `DisplayMode::Hidden` the agent
+    /// opens a virtual display for this connection: the one named `lane`, or the unnamed one of D32.
+    pub async fn start(
+        adb: &Adb,
+        serial: &str,
+        display: DisplayMode,
+        lane: Option<&str>,
+    ) -> Result<Agent> {
+        let launched = launch(adb, serial).await?;
+        let on = match display {
+            DisplayMode::Main => json!({}),
+            DisplayMode::Hidden => json!({"display": "hidden", "lane": lane.unwrap_or_default()}),
+        };
+        let with = |mut first: Value| {
+            for (k, v) in on.as_object().into_iter().flatten() {
+                first[k] = v.clone();
+            }
+            first
+        };
         let asked = std::time::Instant::now();
         let mut control = open_stream(
             adb,
             serial,
             &launched,
             b'C',
-            json!({"id": 0, "op": "hello", "version": VERSION, "token": launched.token}),
+            with(json!({"id": 0, "op": "hello", "version": VERSION, "token": launched.token})),
         )
         .await?;
-        let reply = read_reply(&mut control, 0).await.map_err(|e| {
+        let no_hello = |e: Error| {
             let lines = launched.log.recent().join("\n");
             transport(format!("no hello from the agent ({e}); agent log: {lines}"))
-        })?;
+        };
+        let reply = match display {
+            DisplayMode::Main => read_reply(&mut control, 0).await.map_err(no_hello)?,
+            DisplayMode::Hidden => {
+                tokio::time::timeout(HIDDEN_HELLO_TIMEOUT, read_reply(&mut control, 0))
+                    .await
+                    .map_err(|_| {
+                        transport(format!(
+                            "the agent did not open a hidden display within {} s",
+                            HIDDEN_HELLO_TIMEOUT.as_secs()
+                        ))
+                    })?
+                    .map_err(no_hello)?
+            }
+        };
         if reply["ok"] != true {
-            return Err(transport(format!("the agent refused hello: {reply}")));
+            return Err(refused_hello(&reply));
         }
-        let mut first = json!({"token": launched.token});
-        if let Some((bit_rate, fps, max_size)) = video_for(asked.elapsed()) {
+        let asked = asked.elapsed();
+        let mut first = with(json!({"token": launched.token}));
+        if let Some((bit_rate, fps, max_size)) = video_for(display, asked) {
             first["bit_rate"] = json!(bit_rate);
             first["fps"] = json!(fps);
             first["max_size"] = json!(max_size);
@@ -544,11 +596,19 @@ mod tests {
 
     #[test]
     fn only_a_slow_link_gets_the_small_stream() {
-        assert_eq!(video_for(Duration::from_millis(34)), None);
         assert_eq!(
-            video_for(Duration::from_millis(433)),
+            video_for(DisplayMode::Main, Duration::from_millis(34)),
+            None
+        );
+        assert_eq!(
+            video_for(DisplayMode::Main, Duration::from_millis(433)),
             Some((400_000, 10, 1280))
         );
+    }
+
+    #[test]
+    fn a_hidden_display_keeps_the_full_stream_however_long_its_hello_took() {
+        assert_eq!(video_for(DisplayMode::Hidden, Duration::from_secs(3)), None);
     }
 
     #[test]
@@ -603,7 +663,6 @@ mod tests {
             jar.to_str().unwrap(),
             owner_file.to_str().unwrap(),
             "phonedriver-0.1.0-ab",
-            DisplayMode::Main,
             me,
         );
         let out = std::process::Command::new("sh")
@@ -735,24 +794,22 @@ Caused by: java.lang.NullPointerException: Attempt to invoke interface method 'v
     }
 
     #[test]
-    fn an_agent_that_refuses_a_hidden_display_is_unsupported_not_a_transport_failure() {
-        let lines = vec!["hidden display: needs Android 13 (API 33), this is API 26".to_string()];
+    fn a_hello_refused_for_the_hidden_display_is_unsupported_and_a_lane_in_use_is_refused() {
+        let no_display = json!({"id": 0, "ok": false,
+            "error": "java.lang.IllegalStateException: hidden display: needs Android 13 (API 33) or newer, this is API 26"});
         assert!(matches!(
-            not_ready(
-                Some(NO_HIDDEN_DISPLAY),
-                false,
-                READY_TIMEOUT,
-                &lines,
-                "emulator-5556"
-            ),
+            refused_hello(&no_display),
             Error::Unsupported {
                 op: Op::Display,
                 ..
             }
         ));
-        assert!(matches!(
-            not_ready(Some(1), false, READY_TIMEOUT, &lines, "emulator-5556"),
-            Error::Transport { .. }
-        ));
+        let taken = json!({"id": 0, "ok": false, "error": "lane in use: a"});
+        let Error::Refused { detail } = refused_hello(&taken) else {
+            panic!("a lane in use is a refusal");
+        };
+        assert!(detail.contains("lane a"), "{detail}");
+        let other = json!({"id": 0, "ok": false, "error": "agent is version 0.1.3, host is 0.1.4"});
+        assert!(matches!(refused_hello(&other), Error::Transport { .. }));
     }
 }

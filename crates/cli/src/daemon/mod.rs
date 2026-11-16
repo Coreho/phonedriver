@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use phonedriver_core::device::{Capabilities, Device, DisplayMode};
+use phonedriver_core::device::{Capabilities, Device, DisplayMode, lane_of};
 use phonedriver_core::error::{DeviceSummary, Error, Op};
 use serde_json::{Value, json};
 use tokio::io::split;
@@ -310,7 +310,18 @@ impl Daemon {
         }
     }
 
+    /// A request for a lane (`emulator-5554+a`, or `+a` for the only device) resolves its device and keeps the lane.
     async fn resolve(&self, requested: Option<&str>) -> Result<String, Error> {
+        let Some((device, Some(lane))) = requested.map(lane_of) else {
+            return self.resolve_device(requested).await;
+        };
+        let device = self
+            .resolve_device((!device.is_empty()).then_some(device))
+            .await?;
+        Ok(format!("{device}+{lane}"))
+    }
+
+    async fn resolve_device(&self, requested: Option<&str>) -> Result<String, Error> {
         let list = self.source.list_for(requested).await?;
         let summaries = || {
             list.iter()
@@ -387,6 +398,10 @@ impl Daemon {
     ) -> Result<Value, Error> {
         let (reply, rx) = oneshot::channel();
         let gone = || Error::DeviceGone { id: id.to_string() };
+        let display = match lane_of(id) {
+            (_, Some(_)) => DisplayMode::Hidden,
+            _ => display,
+        };
         let terminal = !self
             .agents
             .lock()
@@ -411,30 +426,45 @@ impl Daemon {
     async fn devices(&self) -> Result<Value, Error> {
         let mut out = Vec::new();
         for l in self.source.list().await? {
-            let existing = self
+            let mut ids: Vec<String> = self
                 .actors
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .contains_key(&l.id);
-            let lease = if existing {
-                self.send(&l.id, "", false, DisplayMode::Main, Call::Leased)
-                    .await?
-            } else {
-                Value::Null
-            };
-            let leased_by = lease["session"].as_str().map(str::to_string);
-            let hidden_display = lease["hidden_display"].as_u64().map(|d| d as u32);
-            let lease_idle_s = lease["idle_s"].as_u64();
-            out.push(DeviceEntry {
-                id: l.id,
-                model: l.model,
-                os: l.os.unwrap_or_default(),
-                tier: l.tier,
-                capabilities: l.capabilities,
-                leased_by,
-                lease_idle_s,
-                hidden_display,
-            });
+                .keys()
+                .filter(|id| lane_of(id).0 == l.id)
+                .cloned()
+                .collect();
+            ids.sort();
+            if ids.first() != Some(&l.id) {
+                ids.insert(0, l.id.clone());
+            }
+            for id in ids {
+                let existing = self
+                    .actors
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .contains_key(&id);
+                let lease = if existing {
+                    self.send(&id, "", false, DisplayMode::Main, Call::Leased)
+                        .await?
+                } else {
+                    Value::Null
+                };
+                let hidden_display = lease["hidden_display"].as_u64().map(|d| d as u32);
+                if id != l.id && lease["session"].is_null() && hidden_display.is_none() {
+                    continue;
+                }
+                out.push(DeviceEntry {
+                    id,
+                    model: l.model.clone(),
+                    os: l.os.clone().unwrap_or_default(),
+                    tier: l.tier.clone(),
+                    capabilities: l.capabilities,
+                    leased_by: lease["session"].as_str().map(str::to_string),
+                    lease_idle_s: lease["idle_s"].as_u64(),
+                    hidden_display,
+                });
+            }
         }
         Ok(serde_json::to_value(out).unwrap_or(Value::Null))
     }

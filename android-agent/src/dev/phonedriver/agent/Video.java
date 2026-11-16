@@ -14,7 +14,6 @@ import com.genymobile.scrcpy.wrappers.SurfaceControl;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 final class Video {
     private static final int[] MAX_SIZE_FALLBACK = {2560, 1920, 1600, 1280, 1024, 800};
@@ -22,30 +21,29 @@ final class Video {
     private static final long DISPLAY_POLL_NS = 100_000_000L;
     private static final int FLAG_BARRIER = 4;
     private static final int OUTPUT_WAIT_US = 10_000;
-    private static volatile boolean syncRequested;
-    private static final ConcurrentLinkedQueue<Long> barriers = new ConcurrentLinkedQueue<>();
+
     private static final int BIT_RATE = 8_000_000;
     private static final int FPS = 30;
-    private static volatile int bitRate = BIT_RATE;
-    private static volatile int fps = FPS;
-    private static volatile boolean constantRate;
 
     private final DataOutputStream out;
+    private final Lane lane = Lane.here();
     private int maxSize;
+    private final int bitRate;
+    private final int fps;
 
     Video(DataOutputStream out, int maxSize, int bitRate, int fps) {
         this.out = out;
         this.maxSize = maxSize;
-        Video.bitRate = bitRate > 0 ? bitRate : BIT_RATE;
-        Video.fps = fps > 0 ? fps : FPS;
+        this.bitRate = bitRate > 0 ? bitRate : BIT_RATE;
+        this.fps = fps > 0 ? fps : FPS;
     }
 
     static void requestSyncFrame() {
-        syncRequested = true;
+        Lane.here().syncRequested = true;
     }
 
     static void requestBarrier(long id) {
-        barriers.add(id);
+        Lane.here().barriers.add(id);
     }
 
     static int[] fit(int w, int h, int maxSize, int align) {
@@ -57,7 +55,12 @@ final class Video {
         return new int[] {w & ~(align - 1), h & ~(align - 1)};
     }
 
+    /** The format of a hidden display's stream: its encoder starts before the video connection that could ask for less. */
     static MediaFormat format(int w, int h) {
+        return format(w, h, BIT_RATE, FPS, false);
+    }
+
+    private static MediaFormat format(int w, int h, int bitRate, int fps, boolean constantRate) {
         MediaFormat f = new MediaFormat();
         f.setString(MediaFormat.KEY_MIME, "video/avc");
         f.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
@@ -95,7 +98,7 @@ final class Video {
                 codec.getCodecInfo().getCapabilitiesForType("video/avc").getVideoCapabilities();
         int align = Math.max(caps.getWidthAlignment(), caps.getHeightAlignment());
         // Asked for 400 kbit/s without a rate mode, the HONOR X8's encoder sent 853 kbit/s of its lock screen.
-        constantRate = codec.getCodecInfo().getCapabilitiesForType("video/avc").getEncoderCapabilities()
+        boolean constantRate = codec.getCodecInfo().getCapabilitiesForType("video/avc").getEncoderCapabilities()
                 .isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR);
         boolean first = true;
         int fallback = -1;
@@ -110,7 +113,7 @@ final class Video {
             IBinder legacyDisplay = null;
             boolean started = false;
             try {
-                codec.configure(format(size[0], size[1]), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                codec.configure(format(size[0], size[1], bitRate, fps, constantRate), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                 surface = codec.createInputSurface();
                 try {
                     display = ServiceManager.getDisplayManager().createVirtualDisplay("phonedriver", size[0], size[1], 0, surface);
@@ -172,19 +175,19 @@ final class Video {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         long lastCheck = 0;
         while (true) {
-            if (syncRequested) {
-                syncRequested = false;
+            if (lane.syncRequested) {
+                lane.syncRequested = false;
                 Bundle b = new Bundle();
                 b.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0);
                 codec.setParameters(b);
             }
-            if (!barriers.isEmpty()) {
+            if (!lane.barriers.isEmpty()) {
                 int ready;
                 while ((ready = codec.dequeueOutputBuffer(info, 0)) >= 0) {
                     writeOutput(codec, ready, info);
                 }
                 Long barrier;
-                while ((barrier = barriers.poll()) != null) {
+                while ((barrier = lane.barriers.poll()) != null) {
                     out.writeLong(0);
                     out.writeByte(FLAG_BARRIER);
                     out.writeInt(8);

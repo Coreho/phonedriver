@@ -18,13 +18,11 @@ pub struct RawAgent {
     pub serial: String,
     pub name: String,
     pub token: String,
-    pub launched: Launched,
+    pub launched: std::sync::Arc<Launched>,
 }
 
 pub async fn launch(adb: &Adb, serial: &str) -> RawAgent {
-    let launched = agent::launch(adb, serial, phonedriver_core::device::DisplayMode::Main)
-        .await
-        .unwrap();
+    let launched = agent::launch(adb, serial).await.unwrap();
     RawAgent {
         adb: adb.clone(),
         serial: serial.to_string(),

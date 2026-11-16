@@ -16,7 +16,7 @@ final class Monitor {
     }
 
     private static void emit(JSONObject event) {
-        Control c = Main.control;
+        Control c = Lane.here().control;
         if (c != null) {
             c.event(event);
         }
@@ -27,7 +27,7 @@ final class Monitor {
         Boolean locked = null;
         Boolean screenOn = null;
         long keyguardAt = 0;
-        while (true) {
+        while (!Lane.here().closed) {
             try {
                 DisplayInfo now = ServiceManager.getDisplayManager().getDisplayInfo(Hidden.displayId());
                 if (last != null && (!now.getSize().equals(last.getSize()) || now.getRotation() != last.getRotation()

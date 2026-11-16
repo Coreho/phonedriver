@@ -90,7 +90,11 @@ final class Control {
                 event(reply);
                 return;
             }
-            Main.control = this;
+            Lane lane = Lane.here();
+            lane.control = this;
+            if (lane.hidden != null) {
+                Monitor.start();
+            }
             event(helloReply(reply));
             while (true) {
                 int n = in.readInt();
@@ -105,8 +109,9 @@ final class Control {
                 target.execute(() -> event(answer(q)));
             }
         } finally {
-            if (Main.control == this) {
-                Main.control = null;
+            Lane lane = Lane.here();
+            if (lane.control == this) {
+                lane.control = null;
             }
             requests.shutdownNow();
             gestures.shutdownNow();

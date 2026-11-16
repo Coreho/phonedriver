@@ -295,6 +295,23 @@ pub enum DisplayMode {
     Hidden,
 }
 
+/// Splits a device id into the device and its lane. `android:emulator-5554+a` is lane `a` of that phone: a hidden
+/// display of its own, so several sessions can work on one phone at once (decision D73). A lane name is one to eight
+/// lower-case letters and digits; any other suffix is part of the id.
+pub fn lane_of(id: &str) -> (&str, Option<&str>) {
+    match id.rsplit_once('+') {
+        Some((device, lane))
+            if (1..=8).contains(&lane.len())
+                && lane
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) =>
+        {
+            (device, Some(lane))
+        }
+        _ => (id, None),
+    }
+}
+
 /// The seam between the domain and each platform (architecture 4.8).
 #[async_trait]
 pub trait Device: Send + Sync {
