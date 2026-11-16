@@ -1797,7 +1797,9 @@ impl Actor {
             {
                 return Ok((woke, false));
             }
-            if state.secure {
+            // Seen on a HONOR X8 (Android 13, PIN), 2026-11-16: while the phone is locked a hidden display shows
+            // the keyguard's clock and starts no app, and a swipe on it unlocks nothing.
+            if state.secure || device.hidden_display().is_some() {
                 return Err(Error::NeedsUser {
                     action: UserAction::UnlockDevice,
                 });

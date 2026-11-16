@@ -140,7 +140,7 @@ ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms
 
 设置完成后可以拔掉数据线。对 iPhone，运行 `phonedriver ios wifi on` 然后拔线；只要它和 Mac 在同一个 Wi-Fi 网络中，就会一直出现在 `phonedriver devices` 里。对 Android 手机，用 `phonedriver pair` 或 `phonedriver untether` 也能做到（[Android over Wi-Fi](docs/reference.md#android-over-wi-fi)）。当手机离得很远，比如走隧道或移动网络时，phonedriver 会发送更小的屏幕流和压缩过的屏幕树。在限速到 3G 的链路上，模拟器上的点击中位耗时是 1.4 s，原先是 2.8 s。
 
-在 Android 13 及更高版本上，智能体可以在一个隐藏的第二屏幕上工作，所以你自己的屏幕仍归你使用。在 MCP 配置中设置 `PHONEDRIVER_DISPLAY=hidden`，或者给 CLI 传 `--display hidden`。已在模拟器和一部 HONOR X8（Android 13）上测试过。向应用自己的输入框输入文字，不会在你的屏幕上留下痕迹。向网页输入文字时，系统会显示剪贴板提示，之后你的剪贴板会被还原。
+在 Android 13 及更高版本上，智能体可以在一个隐藏的第二屏幕上工作，所以你自己的屏幕仍归你使用。在 MCP 配置中设置 `PHONEDRIVER_DISPLAY=hidden`，或者给 CLI 传 `--display hidden`。已在模拟器和一部 HONOR X8（Android 13）上测试过。手机需要处于解锁状态：锁定时隐藏屏幕上显示的也是锁屏，phonedriver 会说明手机已锁定，并且不会唤醒手机。向应用自己的输入框输入文字，不会在你的屏幕上留下痕迹。向网页输入文字时，系统会显示剪贴板提示，之后你的剪贴板会被还原。
 
 MCP 服务器有 14 个工具：`devices`、`apps`、`snapshot`、`screenshot`、`tap`、`type`、`swipe`、`scroll`、`press`、`launch`、`wait`、`batch`、`clipboard` 和 `shell`。`snapshot`、`screenshot` 和 `wait` 被标记为只读，所以客户端可以不经权限提示就运行它们。`phonedriver` CLI 有同样的命令，供脚本和更喜欢用 shell 的智能体使用。你在终端里用过的设备，空闲 30 秒后会交给你的智能体。
 

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use phonedriver_core::device::DisplayMode;
-use phonedriver_core::error::{Error, Op};
+use phonedriver_core::error::{Error, Op, UserAction};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -476,14 +476,19 @@ async fn open_stream(
     Ok(stream)
 }
 
-/// Why the agent answered hello with a refusal: a phone that cannot give a hidden display, a lane another
-/// connection holds, or a version that is not ours.
+/// Why the agent answered hello with a refusal: a phone that cannot give a hidden display, a locked phone asked
+/// for one, a lane another connection holds, or a version that is not ours.
 fn refused_hello(reply: &Value) -> Error {
     let error = reply["error"].as_str().unwrap_or_default();
     if error.contains("hidden display:") {
         return Error::Unsupported {
             op: Op::Display,
             reason: NO_HIDDEN_DISPLAY,
+        };
+    }
+    if error.contains("the phone is locked") {
+        return Error::NeedsUser {
+            action: UserAction::UnlockDevice,
         };
     }
     if let Some(lane) = error.strip_prefix("lane in use: ") {
@@ -809,6 +814,13 @@ Caused by: java.lang.NullPointerException: Attempt to invoke interface method 'v
             panic!("a lane in use is a refusal");
         };
         assert!(detail.contains("lane a"), "{detail}");
+        let locked = json!({"id": 0, "ok": false, "error": "the phone is locked"});
+        assert!(matches!(
+            refused_hello(&locked),
+            Error::NeedsUser {
+                action: UserAction::UnlockDevice
+            }
+        ));
         let other = json!({"id": 0, "ok": false, "error": "agent is version 0.1.3, host is 0.1.4"});
         assert!(matches!(refused_hello(&other), Error::Transport { .. }));
     }

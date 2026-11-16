@@ -140,7 +140,7 @@ Android にはインストールするアプリはありません。phonedriver 
 
 セットアップ後は、ケーブルを外せます。iPhone では、`phonedriver ios wifi on` を実行してからケーブルを抜きます。Mac と同じ Wi-Fi ネットワークにある間は、`phonedriver devices` に表示され続けます。Android スマートフォンでは、`phonedriver pair` または `phonedriver untether` で同じことができます（[Android over Wi-Fi](docs/reference.md#android-over-wi-fi)）。スマートフォンが遠くにある場合、たとえばトンネルやモバイルネットワーク経由のときは、phonedriver は小さめの画面ストリームと圧縮した画面ツリーを送ります。3G に制限した回線では、エミュレーターでのタップの中央値は 1.4 s で、以前は 2.8 s でした。
 
-Android 13 以降では、エージェントは非表示の 2 つ目の画面で作業できます。そのため、あなた自身の画面はそのまま使えます。MCP 設定で `PHONEDRIVER_DISPLAY=hidden` を設定するか、CLI に `--display hidden` を渡します。エミュレーターと HONOR X8（Android 13）でテストしています。アプリ自身の入力欄への入力は、あなたの画面に何も残しません。Web ページへの入力では、システムのクリップボードの通知が表示され、その後クリップボードは元に戻されます。
+Android 13 以降では、エージェントは非表示の 2 つ目の画面で作業できます。そのため、あなた自身の画面はそのまま使えます。MCP 設定で `PHONEDRIVER_DISPLAY=hidden` を設定するか、CLI に `--display hidden` を渡します。エミュレーターと HONOR X8（Android 13）でテストしています。スマートフォンのロックは解除しておく必要があります。ロック中は非表示の画面にもロック画面が表示されるため、phonedriver はロックされていると伝え、スマートフォンをスリープのままにします。アプリ自身の入力欄への入力は、あなたの画面に何も残しません。Web ページへの入力では、システムのクリップボードの通知が表示され、その後クリップボードは元に戻されます。
 
 MCP サーバーには 14 個のツールがあります: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`。`snapshot`、`screenshot`、`wait` は読み取り専用としてマークされているため、クライアントは権限プロンプトなしで実行できます。`phonedriver` CLI にも同じコマンドがあり、スクリプトや、シェルを好むエージェントで使えます。ターミナルで使ったデバイスは、30 秒間アイドルになるとエージェントに引き渡されます。
 

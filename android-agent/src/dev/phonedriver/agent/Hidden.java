@@ -87,6 +87,11 @@ final class Hidden {
         if (Build.VERSION.SDK_INT < MIN_API) {
             throw unavailable("needs Android 13 (API 33) or newer, this is API " + Build.VERSION.SDK_INT);
         }
+        // Seen on a HONOR X8 (Android 13, PIN), 2026-11-16: creating a virtual display turns the screen of a locked,
+        // sleeping phone on for ten seconds, and the display then shows the keyguard's clock and starts no app.
+        if (Keyguard.locked()) {
+            throw new IllegalStateException("the phone is locked");
+        }
         DisplayInfo main = ServiceManager.getDisplayManager().getDisplayInfo(0);
         int mainW = main.getSize().getWidth();
         int mainH = main.getSize().getHeight();
