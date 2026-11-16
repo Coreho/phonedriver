@@ -76,6 +76,7 @@ impl Control {
         let gone = || Error::DeviceGone {
             id: self.device.clone(),
         };
+        debug_assert!(req.get("id").is_none(), "`id` is the channel's: {req}");
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         req["id"] = id.into();
         let (tx, rx) = oneshot::channel();
@@ -151,6 +152,28 @@ mod tests {
             }
         );
         assert_eq!(started.elapsed(), Duration::from_secs(90));
+    }
+
+    #[tokio::test]
+    async fn a_barrier_request_carries_its_number_apart_from_the_requests_own_id() {
+        let (control, mut agent) = connected().await;
+        let answer = tokio::spawn(async move {
+            let asked = read_frame(&mut agent).await.unwrap();
+            write_frame(&mut agent, &json!({"id": asked["id"], "ok": true}))
+                .await
+                .unwrap();
+            (asked, agent)
+        });
+        control
+            .request(
+                Op::Screenshot,
+                crate::device::barrier_request(700),
+                Duration::ZERO,
+            )
+            .await
+            .unwrap();
+        let (asked, _agent) = answer.await.unwrap();
+        assert_eq!(asked["barrier"], 700);
     }
 
     #[tokio::test]

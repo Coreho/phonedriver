@@ -170,6 +170,8 @@ android:emulator-5554+b  sdk_gphone64_x86_64  Android 17 (API 37)  agent  two (i
 
 For MCP, give each agent its own lane in its config: `"env": { "PHONEDRIVER_DEVICE": "emulator-5554+a" }`. With one device connected, `+a` is enough. The name is 1 to 8 lowercase letters or digits. A lane closes, and the apps on it with it, when its session releases it (`phonedriver release`) or has made no call for ten minutes.
 
+On an emulator a lane's video is two pixels a point at 15 frames a second, because an emulator's encoder is software and falls behind at full size; screenshots and text read from pixels are the same as on the main screen, and a recording of a lane is that size.
+
 An app runs in one place at a time. If two lanes launch the same app, it moves to the second one and the first is left on its home screen, so give each lane a different app. The clipboard is one for the phone, so lanes take turns to paste. Tried on one emulator (API 37) with two lanes beside the main screen; not on a physical phone.
 
 ### Android over Wi-Fi

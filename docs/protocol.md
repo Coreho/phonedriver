@@ -178,7 +178,7 @@ Frames: `u32 big-endian length` + UTF-8 JSON. Requests carry `id`; replies echo 
 | `state` | none | `{screen_on, locked, secure_keyguard, ime_visible, foreground}` |
 | `power` | none | `{screen_on, locked, secure_keyguard, focused}` (`focused`: an accessibility window has input focus); cheap, read before every action |
 | `sync_frame` | none | `{}`; next video frame is a keyframe |
-| `video_barrier` | `id` (u64) | `{}`; the agent takes every frame already encoded, then writes a barrier packet with `id` into the video stream (below) |
+| `video_barrier` | `barrier` (u64) | `wait_ms`; the agent writes a barrier packet with that number into the video stream (below) once its encoder has given out what the screen showed when the request came. `wait_ms` is how much longer than usual that may take: 0 while the encoder keeps up. The number is not sent as `id`, which is the request's own (decision D74) |
 | `wake` | none | `{}` |
 
 `RawNode` (flat; tree order is preorder). Empty and false fields are omitted to keep the payload small.
@@ -228,7 +228,7 @@ Then frames:
 
 On display change the agent sends a new codec header preceded by a frame with `pts_us = u64::MAX` and length 0.
 
-A barrier packet answers `video_barrier`: `pts_us = 0`, `flags` bit2 set, length 8, and the request's `id` as a big-endian `u64`. The host reads packets in order, so when it has decoded the barrier every frame the agent wrote before it has been shown.
+A barrier packet answers `video_barrier`: `pts_us = 0`, `flags` bit2 set, length 8, and the request's `barrier` number as a big-endian `u64`. The host reads packets in order, so when it has decoded the barrier every frame the agent wrote before it has been shown. The agent writes it after the encoder output on hand when its last frame came out within 100 ms of its presentation time. When that frame was later than that, the encoder is behind, and the barrier is held until a frame presented after the request has been written, or until the encoder has given nothing for 100 ms plus twice that lateness.
 
 ## 3. Daemon ↔ PhonedriverRunner
 

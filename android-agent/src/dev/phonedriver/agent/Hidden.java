@@ -26,6 +26,12 @@ final class Hidden {
     private static final int OWN_FOCUS = 1 << 14;
     private static final int DEVICE_DISPLAY_GROUP = 1 << 15;
     private static final int[] SIZE_FALLBACK = {0, 2560, 1920, 1600, 1280, 1024, 800};
+    // A software encoder, which is what every emulator has, does not keep up with a phone panel at 30 frames a
+    // second: on the API 37 emulator a lane's frames left the encoder a median 598 ms after the screen showed them
+    // (p90 899 ms), and 43 ms (p90 118 ms) at two pixels a point and 15 frames a second. A screenshot is one pixel a
+    // point and text is read from pixels at two, so nothing the host uses is lost.
+    private static final int SOFTWARE_PIXELS_PER_POINT = 2;
+    private static final int SOFTWARE_FPS = 15;
 
     final int id;
     private final VirtualDisplay display;
@@ -88,13 +94,16 @@ final class Hidden {
         MediaCodecInfo.VideoCapabilities caps =
                 encoder.getCodecInfo().getCapabilitiesForType("video/avc").getVideoCapabilities();
         int align = Math.max(caps.getWidthAlignment(), caps.getHeightAlignment());
+        boolean software = encoder.getCodecInfo().isSoftwareOnly();
+        int cap = software ? SOFTWARE_PIXELS_PER_POINT * Math.max(mainW, mainH) * 160 / main.getDpi() : 0;
+        int fps = software ? SOFTWARE_FPS : Video.FPS;
         Surface surface = null;
         int[] size = null;
         Exception last = null;
         for (int maxSize : SIZE_FALLBACK) {
-            size = Video.fit(mainW, mainH, maxSize, align);
+            size = Video.fit(mainW, mainH, cap > 0 && (maxSize == 0 || maxSize > cap) ? cap : maxSize, align);
             try {
-                encoder.configure(Video.format(size[0], size[1]), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                encoder.configure(Video.format(size[0], size[1], fps), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                 surface = encoder.createInputSurface();
                 break;
             } catch (Exception e) {

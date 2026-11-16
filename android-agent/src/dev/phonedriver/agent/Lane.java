@@ -29,7 +29,8 @@ final class Lane {
     final Hidden hidden;
     volatile Control control;
     volatile boolean syncRequested;
-    final ConcurrentLinkedQueue<Long> barriers = new ConcurrentLinkedQueue<>();
+    final ConcurrentLinkedQueue<long[]> barriers = new ConcurrentLinkedQueue<>();
+    volatile long videoLagUs;
     volatile boolean closed;
     int screenW;
     int screenH;

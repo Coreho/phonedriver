@@ -169,8 +169,8 @@ impl AndroidDevice {
     }
 
     async fn video_caught_up(&self, op: Op) -> Result<()> {
-        caught_up(&self.video, &self.info.id, BARRIER_WAIT, |id| {
-            self.simple(op, json!({"op": "video_barrier", "id": id}))
+        caught_up(&self.video, &self.info.id, BARRIER_WAIT, |number| {
+            self.simple(op, barrier_request(number))
         })
         .await
     }
@@ -679,6 +679,12 @@ fn permission_name(name: &str) -> Result<String> {
     }
 }
 
+/// The number goes under its own name: `Control::request` stamps every request with an `id`, which once overwrote
+/// it (decision D74).
+pub(crate) fn barrier_request(number: u64) -> Value {
+    json!({"op": "video_barrier", "barrier": number})
+}
+
 /// The newest frame as PNG once `barrier` has passed. The frame on hand is encoded while the barrier travels, and
 /// encoded again only when a newer one arrived meanwhile, so a screenshot costs the slower of the two, not both.
 async fn newest_png(
@@ -721,7 +727,9 @@ async fn newest_png(
 /// serves is the newest the agent has produced. Observed on API 26 through an adb tunnel: after the agent was
 /// killed (which is what a second daemon does), neither socket reported it for 5 to 21 s, the stream looked open,
 /// a screenshot answered with the last frame and tree reads hung. A barrier that does not come back means the
-/// device is gone as far as this connection is concerned, so the caller reconnects.
+/// device is gone as far as this connection is concerned, so the caller reconnects. The agent holds the barrier
+/// until its encoder has given out what the screen showed when it was asked, and says in `wait_ms` how far behind
+/// the encoder is, which is added to `limit`.
 async fn caught_up<F>(
     video: &VideoStream,
     device: &str,
@@ -731,16 +739,18 @@ async fn caught_up<F>(
 where
     F: std::future::Future<Output = Result<Value>>,
 {
+    let gone = || Error::DeviceGone { id: device.into() };
     let id = video.next_barrier();
-    let reached = tokio::time::timeout(limit, async {
-        ask(id).await?;
-        Ok::<bool, Error>(video.wait_barrier(id, limit).await)
-    })
-    .await;
-    match reached {
-        Ok(Ok(true)) => Ok(()),
-        Ok(Err(e)) => Err(e),
-        Ok(Ok(false)) | Err(_) => Err(Error::DeviceGone { id: device.into() }),
+    let asked = std::time::Instant::now();
+    let reply = tokio::time::timeout(limit, ask(id))
+        .await
+        .map_err(|_| gone())??;
+    let behind = std::time::Duration::from_millis(reply["wait_ms"].as_u64().unwrap_or(0));
+    let left = limit.saturating_sub(asked.elapsed()) + behind;
+    if video.wait_barrier(id, left).await {
+        Ok(())
+    } else {
+        Err(gone())
     }
 }
 
@@ -804,6 +814,23 @@ mod barrier_tests {
                 id: "android:x".into()
             }
         );
+    }
+
+    #[tokio::test]
+    async fn a_barrier_the_agent_says_is_behind_is_waited_for_that_much_longer() {
+        let (mut agent, video) = open_stream();
+        agent.write_all(&header()).await.unwrap();
+        let late = tokio::spawn(async move {
+            tokio::time::sleep(LIMIT + Duration::from_millis(200)).await;
+            agent.write_all(&barrier_packet(1)).await.unwrap();
+            agent
+        });
+        caught_up(&video, "android:x", LIMIT, |_| async {
+            Ok(json!({"wait_ms": 400}))
+        })
+        .await
+        .unwrap();
+        late.await.unwrap();
     }
 
     #[tokio::test]
