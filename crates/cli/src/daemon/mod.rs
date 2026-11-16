@@ -212,7 +212,7 @@ impl Daemon {
                 Ok(json!({"same": last.as_deref() == Some(line.as_str())}))
             }
             "release" | "snapshot" | "screenshot" | "act" | "wait" | "batch" | "find" | "apps"
-            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "record"
+            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "page" | "record"
             | "journal" => {
                 let common: Common = rpc::params(params)?;
                 if method == "release" && common.device.is_none() {
@@ -231,6 +231,7 @@ impl Daemon {
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
                     "shell" => Call::Shell(rpc::params(params)?),
                     "logs" => Call::Logs(rpc::params(params)?),
+                    "page" => Call::Page(rpc::params(params)?),
                     "record" => {
                         let p: RecordParams = rpc::params(params)?;
                         if p.path.as_ref().is_some_and(|path| !path.is_absolute()) {

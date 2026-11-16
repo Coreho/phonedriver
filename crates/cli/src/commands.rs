@@ -440,6 +440,15 @@ pub(crate) enum Verb {
         #[arg(long)]
         since: Option<u64>,
     },
+    /// Print the web page in front as text, whole, without scrolling (Android: Chrome, and the web views of debug builds).
+    Page {
+        /// Keep only lines containing one of these words, separated by `|`, ignoring case.
+        #[arg(long)]
+        grep: Option<String>,
+        /// Print the whole page, however long.
+        #[arg(long)]
+        all: bool,
+    },
     /// A system setting without its screen (Android 17): `setting find dark` lists keys and what each accepts
     /// (`find "dark theme|media volume"` runs several searches), `setting get <key>` reads one,
     /// `setting set <key> <value> [<key> <value>...]` writes and prints the values afterwards, and
@@ -1088,6 +1097,15 @@ pub(crate) async fn execute_with(
                 return Ok(r.to_string());
             }
             Ok(show_logs(&r, since.unwrap_or(60)))
+        }
+        Verb::Page { grep, all } => {
+            let r = client
+                .call("page", with(json!({"grep": grep, "all": all})))
+                .await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_page(&r, grep.as_deref()))
         }
         Verb::Setting {
             action,
@@ -1878,6 +1896,37 @@ pub(crate) fn show_logs(result: &Value, seconds: u64) -> String {
         return format!("no log lines from {app} in the last {seconds} s");
     }
     out.join("\n")
+}
+
+/// `page`: the title and address, then the page's lines, then what was left out and how to get it.
+pub(crate) fn show_page(result: &Value, grep: Option<&str>) -> String {
+    let text = result["text"].as_str().unwrap_or_default();
+    let mut out = format!(
+        "page \"{}\" {}",
+        result["title"].as_str().unwrap_or_default(),
+        result["url"].as_str().unwrap_or_default()
+    );
+    match (text.is_empty(), grep) {
+        (true, Some(words)) => out.push_str(&format!("\nno line of the page has \"{words}\"")),
+        (true, None) => out.push_str("\nthe page has no text"),
+        (false, _) => {
+            out.push('\n');
+            out.push_str(text);
+        }
+    }
+    let left = result["omitted_lines"].as_u64().unwrap_or(0);
+    let chars = result["omitted_chars"].as_u64().unwrap_or(0);
+    if chars > 0 {
+        let what = match left {
+            0 => format!("{chars} more characters of this line"),
+            1 => format!("1 more line ({chars} characters)"),
+            n => format!("{n} more lines ({chars} characters)"),
+        };
+        out.push_str(&format!(
+            "\n… {what}\nhint: `--grep words` keeps only the lines with them, `--all` prints everything"
+        ));
+    }
+    out
 }
 
 /// `setting`: the matching lines of a search, `key = value` for a read, `ok key = value` and the screen change for

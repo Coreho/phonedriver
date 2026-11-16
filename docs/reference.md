@@ -216,6 +216,25 @@ iOS devices and the Simulator answer that logs cannot be read. Decision D58.
 
 A web view with accessibility off, a Flutter screen or a game gives no list of elements. phonedriver then reads the screenshot's text on the machine the daemon runs on and adds the lines it finds, marked `(ocr)`; `tap "Send"` taps one. `snapshot --pixels` asks for this on any screen. macOS and Windows use the text recognition the system ships. Linux uses Tesseract when the `tesseract` program is on the `PATH` (`apt install tesseract-ocr`); without it, `--pixels` answers that pixels cannot be read and names the package. Decisions D61, D64 and D65.
 
+### Reading a web page
+
+On Android, `phonedriver page` prints the text of the web page in front, whole, without scrolling:
+
+```
+$ phonedriver page --grep "born|died"
+page "Ada Lovelace - Wikipedia" https://en.wikipedia.org/wiki/Ada_Lovelace
+Born
+Augusta Ada Byron
+10 December 1815
+Died
+27 November 1852 (aged 36)
+...
+```
+
+It is the text a person can read on the page, in reading order, with blank lines dropped. A long page is cut at a line end before 8,000 characters and the reply says how much is left; `--all` prints everything. `--grep "a|b"` keeps the lines with one of the words and the two lines after each, because a page often puts a label and its value on separate lines. In MCP it is `snapshot` with `page: true`, with `find` for the words; MCP has no `all`, so a long page is narrowed with `find`.
+
+It works for Chrome and for a web view inside an app that is a debug build (or that turned web debugging on), because it reads through the debugging socket those open. Any other app answers that it has no page that can be read. It only reads: taps and typing still go through the screen, so the approval guard sees them. iOS has no equivalent yet. Decision D71.
+
 ### Saving and replaying a run
 
 `phonedriver save run.steps` writes what the session has done so far to a file, and `phonedriver replay run.steps` does it again with no model:

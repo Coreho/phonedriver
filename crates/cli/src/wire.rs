@@ -350,6 +350,15 @@ pub struct LogsParams {
     pub since_s: Option<u64>,
 }
 
+/// The web page in front, whole (`docs/protocol.md`, `page`).
+#[derive(Debug, Deserialize)]
+pub struct PageParams {
+    pub grep: Option<String>,
+    /// Print everything, however long.
+    #[serde(default)]
+    pub all: bool,
+}
+
 /// A system setting by key (`docs/protocol.md`, `setting`): `find` searches (`a|b` for several searches), `key`
 /// reads, `key` with `value` writes, `values` writes several, `open` shows the settings screen with that key.
 #[derive(Debug, Deserialize)]

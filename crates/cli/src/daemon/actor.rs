@@ -40,10 +40,10 @@ use super::verify::{Expect, Verdict, Verify};
 use super::{guard, secret_field};
 use crate::wire::{
     ActParams, Action, ActionResult, AppParams, Approval, BatchParams, BatchResult,
-    ClipboardParams, Crashed, FindParams, Kind, LogsParams, Observation, PinchDirection,
-    RecordAction, RecordParams, ScreenshotParams, ScreenshotResult, SettingParams, ShellParams,
-    ShellResult, SnapshotParams, Step, StepFailure, StepResult, Target, TypeMode, WaitCondition,
-    WaitParams,
+    ClipboardParams, Crashed, FindParams, Kind, LogsParams, Observation, PageParams,
+    PinchDirection, RecordAction, RecordParams, ScreenshotParams, ScreenshotResult, SettingParams,
+    ShellParams, ShellResult, SnapshotParams, Step, StepFailure, StepResult, Target, TypeMode,
+    WaitCondition, WaitParams,
 };
 
 pub const LEASE_TTL: Duration = Duration::from_secs(600);
@@ -59,6 +59,10 @@ const LOGS_SINCE_S: u64 = 60;
 const CRASH_MARGIN: Duration = Duration::from_secs(2);
 const SETTING_LINES_OF_MANY: usize = 4;
 const SCREEN_WAIT: Duration = Duration::from_secs(3);
+/// About 2,000 tokens: a mobile Wikipedia article with its sections closed is 6,086 characters.
+const PAGE_CHARS: usize = 8000;
+/// A page puts a label and its value on separate lines: Wikipedia's "Born" is followed by the birth name, then the date.
+const GREP_LINES_AFTER: usize = 2;
 const KEYGUARD_WAIT: Duration = Duration::from_millis(1000);
 const WAIT_DEBOUNCE: Duration = Duration::from_millis(100);
 /// Typed text is already in the field when the call returns (the paste waits for it), so unlike after a tap there is
@@ -139,6 +143,7 @@ pub enum Call {
     Shell(ShellParams),
     Setting(SettingParams),
     Logs(LogsParams),
+    Page(PageParams),
     Record(RecordParams),
     /// The session's steps so far, taken out of it.
     Journal,
@@ -704,6 +709,7 @@ impl Actor {
             }
             Call::Journal => s.journal.take(),
             Call::Logs(p) => self.logs(s, p).await?,
+            Call::Page(p) => self.page(p).await?,
             Call::Record(p) => self.record(p).await?,
             Call::Health => self.health().await?,
             Call::Release | Call::Leased => json!({}),
@@ -995,6 +1001,61 @@ impl Actor {
             "output": lines[omitted..].join("\n"),
             "omitted": omitted,
             "crash": reply.crash,
+        }))
+    }
+
+    /// The web page in front as text, whole (decision D71): no blank lines, and cut at a line end near `PAGE_CHARS`
+    /// unless `all`. With `grep`, only the lines with one of its words, each with the `GREP_LINES_AFTER` lines after it.
+    async fn page(&mut self, p: PageParams) -> Result<Value, Error> {
+        let page = self.device()?.page().await?;
+        let keep = p
+            .grep
+            .as_deref()
+            .filter(|g| !g.is_empty())
+            .map(shell::matcher);
+        let all: Vec<&str> = page
+            .text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        let lines: Vec<&str> = match &keep {
+            None => all,
+            Some(keep) => (0..all.len())
+                .filter(|&i| (i.saturating_sub(GREP_LINES_AFTER)..=i).any(|j| keep(all[j])))
+                .map(|i| all[i])
+                .collect(),
+        };
+        let mut text = String::new();
+        let mut shown = 0;
+        let mut used = 0;
+        let mut cut = 0;
+        for line in &lines {
+            let length = line.chars().count();
+            if !p.all && used + length > PAGE_CHARS {
+                if shown == 0 {
+                    text.extend(line.chars().take(PAGE_CHARS));
+                    text.push('…');
+                    cut = length - PAGE_CHARS;
+                    shown = 1;
+                }
+                break;
+            }
+            if shown > 0 {
+                text.push('\n');
+            }
+            text.push_str(line);
+            used += length;
+            shown += 1;
+        }
+        let left: usize = cut
+            + lines[shown..]
+                .iter()
+                .map(|l| l.chars().count())
+                .sum::<usize>();
+        Ok(json!({
+            "title": page.title, "url": page.url, "text": text,
+            "lines": lines.len(), "omitted_lines": lines.len() - shown, "omitted_chars": left,
         }))
     }
 

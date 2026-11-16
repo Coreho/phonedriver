@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
     DisplayMode, FrameRef, Gesture, Image, ImageFormat, Key, LogReply, LogRequest, Quality,
-    Recorded, Result, ScreenState, ShellReply, ShellRequest, TextInput, Url,
+    Recorded, Result, ScreenState, ShellReply, ShellRequest, TextInput, Url, WebPage,
 };
 use phonedriver_core::error::{Error, Op};
 use phonedriver_core::geometry::{Rect, Size};
@@ -20,6 +20,7 @@ use crate::adb::Adb;
 use crate::agent::{Agent, AgentLog, Launched};
 use crate::console;
 use crate::control::Control;
+use crate::devtools;
 use crate::logs;
 use crate::map;
 use crate::settings;
@@ -407,6 +408,13 @@ impl Device for AndroidDevice {
         }))
     }
 
+    async fn page(&self) -> Result<WebPage> {
+        let front = self.foreground().await?.ok_or(Error::Refused {
+            detail: "no app is in front".into(),
+        })?;
+        devtools::page(&self.adb, &self.serial, &front).await
+    }
+
     async fn logs(&self, req: &LogRequest) -> Result<LogReply> {
         package_name(&req.app)?;
         let seconds = req.since.as_secs() + 1;
@@ -609,7 +617,7 @@ fn unapplied(dump: &str, verb: &str, permission: &str) -> Option<&'static str> {
 const LOGS_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// An app id goes into shell commands, so it must look like a package name.
-fn package_name(app: &AppId) -> Result<()> {
+pub(crate) fn package_name(app: &AppId) -> Result<()> {
     let ok = !app.0.is_empty()
         && app
             .0

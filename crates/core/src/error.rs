@@ -190,6 +190,7 @@ pub enum Op {
     Setting,
     Logs,
     Record,
+    Page,
 }
 
 impl Op {
@@ -213,6 +214,7 @@ impl Op {
             Op::Setting => "setting",
             Op::Logs => "logs",
             Op::Record => "record",
+            Op::Page => "page",
         }
     }
 }

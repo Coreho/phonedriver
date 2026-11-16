@@ -164,6 +164,8 @@ struct SnapshotArgs {
     /// Read the pixels with OCR and add text the tree lacks (automatic when the tree is empty).
     pixels: Option<bool>,
     find: Option<String>,
+    /// The web page in front as text, whole, no scrolling (Chrome; web views of debug builds). `find` keeps matching lines.
+    page: Option<bool>,
 }
 
 /// `autonomous` is not in the lean tool schema, so a model that reads the refusal text guesses its type: one sent
@@ -1065,6 +1067,10 @@ fn for_mcp(hint: &str) -> String {
             "`--secret` (the text on stdin or in PHONEDRIVER_SECRET)",
             "`secret: true`",
         ),
+        (
+            "`--grep words` keeps only the lines with them, `--all` prints everything",
+            "`find` keeps only the lines with those words",
+        ),
         ("`--device <id>`", "`device`"),
         ("`--timeout`", "`timeout_ms`"),
         ("`--into`", "`into`"),
@@ -1290,6 +1296,13 @@ impl Mcp {
         )
     )]
     async fn snapshot(&self, Parameters(a): Parameters<SnapshotArgs>) -> CallToolResult {
+        if a.page == Some(true) {
+            let verb = Verb::Page {
+                grep: a.find,
+                all: false,
+            };
+            return self.run(a.device, verb, None).await;
+        }
         if let Some(text) = a.find {
             return self
                 .run(a.device, Verb::Find { text, role: None }, None)

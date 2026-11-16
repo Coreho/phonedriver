@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use phonedriver::daemon::rpc::RpcError;
 use phonedriver::daemon::{Config, Daemon, DeviceSource, Listed};
 use phonedriver_core::device::{
-    AppId, Capabilities, Device, DeviceEvent, FrameRef, Key, TextInput, Url,
+    AppId, Capabilities, Device, DeviceEvent, FrameRef, Key, TextInput, Url, WebPage,
 };
 use phonedriver_core::error::Error;
 use phonedriver_core::geometry::{Point, Rect, Scale};
@@ -1205,6 +1205,79 @@ async fn a_secret_typed_into_a_plain_field_is_masked_in_a_batch_and_in_every_lat
     );
     let trace = trace_text(home.path());
     assert!(!trace.contains("hunter2"), "{trace}");
+}
+
+fn article() -> WebPage {
+    let body: String = (1..=200)
+        .map(|n| format!("Paragraph {n} of the article, which is one line of text.\n\n"))
+        .collect();
+    WebPage {
+        title: "Grace Hopper - Wikipedia".into(),
+        url: "https://en.wikipedia.org/wiki/Grace_Hopper".into(),
+        text: format!(
+            "Grace Hopper\n\n  Born  \nGrace Brewster Murray\nDecember 9, 1906\nNew York City\n\n{body}"
+        ),
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_web_page_is_read_whole_without_blank_lines_and_cut_at_a_line_end() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    let e = err(&d, "default", "page", json!({})).await;
+    assert_eq!(e.code, -32025, "{e:?}");
+    fake.show_page(article());
+    let r = ok(&d, "default", "page", json!({})).await;
+    assert_eq!(r["title"], "Grace Hopper - Wikipedia");
+    assert_eq!(r["lines"], 205);
+    let text = r["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("Grace Hopper\nBorn\nGrace Brewster Murray\n"),
+        "{text}"
+    );
+    let chars = text.lines().map(|l| l.chars().count()).sum::<usize>();
+    assert!(chars <= 8000 && chars > 7900, "{chars}");
+    assert!(text.ends_with("one line of text."), "{text}");
+    let shown = text.lines().count() as u64;
+    assert_eq!(r["omitted_lines"], 205 - shown);
+    let all = ok(&d, "default", "page", json!({"all": true})).await;
+    assert_eq!(all["text"].as_str().unwrap().lines().count(), 205);
+    assert_eq!(all["omitted_lines"], 0);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_page_that_is_one_long_line_is_cut_by_characters_not_bytes() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    fake.show_page(WebPage {
+        title: "長い".into(),
+        url: "https://example.com/".into(),
+        text: "é".repeat(9000),
+    });
+    let (d, _home) = daemon(source);
+    let r = ok(&d, "default", "page", json!({})).await;
+    assert_eq!(r["text"].as_str().unwrap().chars().count(), 8001);
+    assert_eq!(r["omitted_lines"], 0);
+    assert_eq!(r["omitted_chars"], 1000);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_word_keeps_the_lines_of_a_page_that_have_it_and_the_two_after_each() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    fake.show_page(article());
+    let (d, _home) = daemon(source);
+    let r = ok(
+        &d,
+        "default",
+        "page",
+        json!({"grep": "BORN|paragraph 200 "}),
+    )
+    .await;
+    assert_eq!(
+        r["text"],
+        "Born\nGrace Brewster Murray\nDecember 9, 1906\nParagraph 200 of the article, which is one line of text."
+    );
+    let none = ok(&d, "default", "page", json!({"grep": "zebra"})).await;
+    assert_eq!(none["text"], "");
 }
 
 fn two_fields(password_focused: bool) -> RawTree {

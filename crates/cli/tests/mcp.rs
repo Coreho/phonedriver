@@ -931,6 +931,45 @@ async fn a_screen_with_elements_comes_without_a_picture() {
 }
 
 #[tokio::test]
+async fn snapshot_with_page_reads_the_web_page_whole_and_find_keeps_its_matching_lines() {
+    use phonedriver_core::device::WebPage;
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    let body: String = (1..=300)
+        .map(|n| format!("Line {n} of a long page, forty characters wide.\n"))
+        .collect();
+    fake.show_page(WebPage {
+        title: "Example Domain".into(),
+        url: "https://example.com/".into(),
+        text: format!("Example Domain\n\nBorn\nDecember 9, 1906\n{body}"),
+    });
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("snapshot", json!({"page": true})).await;
+    let text = &texts(&r)[0];
+    assert!(
+        text.starts_with("page \"Example Domain\" https://example.com/\nExample Domain\nBorn\n"),
+        "{text}"
+    );
+    let end: Vec<&str> = text.lines().rev().take(2).collect();
+    assert!(
+        end[1].starts_with("… ") && end[1].contains(" more lines ("),
+        "{}",
+        end[1]
+    );
+    assert_eq!(end[0], "hint: `find` keeps only the lines with those words");
+    let r = rig
+        .call("snapshot", json!({"page": true, "find": "born"}))
+        .await;
+    assert_eq!(
+        texts(&r),
+        [
+            "page \"Example Domain\" https://example.com/\nBorn\nDecember 9, 1906\nLine 1 of a long page, forty characters wide."
+        ]
+    );
+}
+
+#[tokio::test]
 async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
     use phonedriver_core::testing::Call;
     let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[

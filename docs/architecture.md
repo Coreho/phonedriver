@@ -456,6 +456,7 @@ phonedriver clipboard [get|set <text>]
 phonedriver shell <command> [--grep words] [--head n] [--force] [--time-limit s] [--secret]
 phonedriver setting find <words> | get <key> | set <key> <value> [--force] | open <screen key>
 phonedriver logs [app] [--grep words] [--head n] [--since s]     an app's last log lines and its last crash
+phonedriver page [--grep words] [--all]      the web page in front as text, whole (Android: Chrome, debug-build web views)
 phonedriver record start [-o file.mp4] | stop                    a video of the screen and the actions done during it
 phonedriver save <file>                      what this session has done, as a steps file
 phonedriver replay <file> [--from N]         run a steps file again with no model; stops at the first step that misses

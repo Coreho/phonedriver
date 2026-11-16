@@ -8,7 +8,7 @@ use tokio::sync::{broadcast, watch};
 use crate::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
     FrameRef, Gesture, Image, Key, LogReply, LogRequest, Quality, Recorded, Result, ScreenState,
-    ShellReply, ShellRequest, TextInput, Url,
+    ShellReply, ShellRequest, TextInput, Url, WebPage,
 };
 use crate::error::{Error, Op};
 use crate::geometry::Size;
@@ -54,6 +54,7 @@ pub struct FakeDevice {
     events: broadcast::Sender<DeviceEvent>,
     frames: watch::Sender<FrameRef>,
     shell: Mutex<ShellReply>,
+    page: Mutex<Option<WebPage>>,
     on_text: Mutex<Option<TextHook>>,
     text_failures: Mutex<Vec<Error>>,
     on_gesture: Mutex<Option<GestureHook>>,
@@ -103,6 +104,7 @@ impl FakeDevice {
             events: broadcast::channel(64).0,
             frames: watch::channel(FrameRef::default()).0,
             shell: Mutex::new(ShellReply::default()),
+            page: Mutex::new(None),
             on_text: Mutex::new(None),
             text_failures: Mutex::new(Vec::new()),
             on_gesture: Mutex::new(None),
@@ -236,6 +238,11 @@ impl FakeDevice {
     /// What `shell()` answers from now on.
     pub fn answer_shell(&self, reply: ShellReply) {
         *lock(&self.shell) = reply;
+    }
+
+    /// The web page `page()` reads from now on; without one it refuses, as an app with no web page does.
+    pub fn show_page(&self, page: WebPage) {
+        *lock(&self.page) = Some(page);
     }
 
     pub fn set_screen(&self, state: ScreenState) {
@@ -496,6 +503,12 @@ impl Device for FakeDevice {
 
     async fn app_op(&self, op: AppOp, app: &AppId) -> Result<()> {
         self.record(Call::AppOp(op, app.clone()))
+    }
+
+    async fn page(&self) -> Result<WebPage> {
+        lock(&self.page).clone().ok_or(Error::Refused {
+            detail: "com.example has no web page that can be read".into(),
+        })
     }
 
     async fn shell(&self, req: &ShellRequest) -> Result<ShellReply> {

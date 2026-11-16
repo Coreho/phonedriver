@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use phonedriver::daemon::trace::TraceOptions;
 use phonedriver::daemon::{Config, Daemon, DeviceSource, Listed};
-use phonedriver_core::device::{Capabilities, Device, ShellReply, TextInput};
+use phonedriver_core::device::{Capabilities, Device, ShellReply, TextInput, WebPage};
 use phonedriver_core::error::Error;
 use phonedriver_core::geometry::Scale;
 use phonedriver_core::raw::RawTree;
@@ -117,6 +117,7 @@ enum Step {
     Tap(Field),
     TapNothing,
     TapWhatTheNoteSays,
+    Page,
     Find,
     Journal,
     RecordStart,
@@ -157,6 +158,7 @@ fn steps() -> impl Strategy<Value = Vec<Step>> {
         1 => Just(Step::Journal),
         1 => Just(Step::RecordStart),
         1 => Just(Step::RecordStop),
+        1 => Just(Step::Page),
     ];
     prop::collection::vec(step, 1..7)
 }
@@ -288,6 +290,14 @@ async fn session(steps: &[Step], full: bool, deaf: bool, fails: bool, home: &Pat
                 "record stop",
                 call("record", json!({"action": "stop"})).await,
             ),
+            Step::Page => {
+                fake.show_page(WebPage {
+                    title: "What you entered".into(),
+                    url: "https://form.example/done".into(),
+                    text: secrets.join("\n"),
+                });
+                ("page", call("page", json!({})).await)
+            }
             Step::Shell { flagged, echoes } => {
                 let command = format!("login --token Sh{i}xK9pQ2vL7");
                 let earlier = if *echoes {
@@ -526,6 +536,7 @@ fn every_kind_of_step_works_on_the_fake_phone() {
         Step::Snapshot,
         Step::Find,
         Step::RecordStop,
+        Step::Page,
         Step::Journal,
     ];
     let seen = run(session(&steps, true, false, false, home.path()));

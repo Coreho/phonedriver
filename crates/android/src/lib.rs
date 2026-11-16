@@ -5,6 +5,7 @@ pub mod agent;
 pub mod console;
 pub mod control;
 pub mod device;
+mod devtools;
 mod logs;
 pub mod map;
 mod settings;

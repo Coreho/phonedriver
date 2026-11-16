@@ -220,6 +220,14 @@ pub struct LogReply {
     pub crash: Option<String>,
 }
 
+/// The web page in front as its browser has it: the text a person can read on it, whole, in reading order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WebPage {
+    pub title: String,
+    pub url: String,
+    pub text: String,
+}
+
 /// A finished screen recording: an MP4 file of `frames` pictures over `ms`. `early` says why it ended before it was
 /// stopped.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -342,6 +350,13 @@ pub trait Device: Send + Sync {
         Err(Error::Unsupported {
             op: Op::Logs,
             reason: "this device's app logs cannot be read; Android devices have them",
+        })
+    }
+    /// The web page the app in front shows, read from the browser and not from the screen.
+    async fn page(&self) -> Result<WebPage> {
+        Err(Error::Unsupported {
+            op: Op::Page,
+            reason: "this device's web pages cannot be read whole; on Android, Chrome's and a debug build's can",
         })
     }
     /// System settings as typed reads and writes: the index of what there is, one value, or a write (which answers
