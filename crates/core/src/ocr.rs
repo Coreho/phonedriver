@@ -6,8 +6,8 @@ use crate::element::{Actions, Element, ElementState, Ref, Role, Source};
 use crate::geometry::Rect;
 use crate::render::Rendered;
 
-/// Overlap above which an OCR box and a tree element with the same text are one thing.
-const SAME_IOU: f32 = 0.5;
+/// Share of an OCR box that must lie inside a tree element with the same text for the two to be one thing.
+const SAME_INSIDE: f32 = 0.5;
 
 /// A line of text recognized in a screenshot, in logical points of the current orientation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -17,21 +17,21 @@ pub struct TextBox {
     pub confidence: f32,
 }
 
-fn iou(a: Rect, b: Rect) -> f32 {
-    let Some(i) = a.clip(b) else { return 0.0 };
-    let inter = i.area();
-    inter / (a.area() + b.area() - inter)
+fn inside(b: Rect, element: Rect) -> f32 {
+    b.clip(element).map_or(0.0, |i| i.area() / b.area())
 }
 
 fn same_text(a: &str, b: &str) -> bool {
     a.trim().to_lowercase() == b.trim().to_lowercase()
 }
 
-/// A tree element says what the box says when its label or value is the box's text.
+/// A tree element says what the box says when its label, value or hint is the box's text and the box lies in it.
+/// Observed on Settings (API 37): a row is several times the size of its title, so a rule that asked the two boxes
+/// to overlap as equals listed every title twice, and a tap by that text was refused as ambiguous.
 fn already_in_tree(tree: &[Element], b: &TextBox) -> bool {
     tree.iter().any(|e| {
-        iou(e.bounds, b.bounds) > SAME_IOU
-            && [e.label.as_deref(), e.value.as_deref()]
+        inside(b.bounds, e.bounds) > SAME_INSIDE
+            && [e.label.as_deref(), e.value.as_deref(), e.hint.as_deref()]
                 .into_iter()
                 .flatten()
                 .any(|t| same_text(t, &b.text))
@@ -237,6 +237,22 @@ mod tests {
             vec![text_box("WI-FI", rect(12.0, 14.0, 90.0, 30.0))],
         );
         assert_eq!(r.elements.len(), 1);
+    }
+
+    #[test]
+    fn a_line_of_text_inside_a_row_that_says_it_is_dropped() {
+        let mut row = tree_with("Network & internet", rect(16.0, 235.0, 380.0, 75.0));
+        row.elements[0].hint = Some("Mobile, Wi-Fi, hotspot".into());
+        let r = merged(
+            row,
+            vec![
+                text_box("Network & internet", rect(84.0, 254.0, 130.0, 20.0)),
+                text_box("Mobile, Wi-Fi, hotspot", rect(84.0, 276.0, 140.0, 16.0)),
+                text_box("Sign in", rect(84.0, 290.0, 60.0, 16.0)),
+            ],
+        );
+        let labels: Vec<_> = r.elements.iter().map(|e| e.label.as_deref()).collect();
+        assert_eq!(labels, [Some("Network & internet"), Some("Sign in")]);
     }
 
     #[test]
