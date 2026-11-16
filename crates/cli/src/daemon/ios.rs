@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use phonedriver_core::device::Device;
-use phonedriver_core::error::Error;
+use phonedriver_core::error::{DeviceSummary, Error};
 use phonedriver_ios::coredevice::CoreDevice;
 use phonedriver_ios::device::IosDevice;
 use phonedriver_ios::lan::Lan;
@@ -76,6 +76,25 @@ impl DeviceSource for SimSource {
                 capabilities: IosDevice::CAPABILITIES,
             })
             .collect())
+    }
+
+    async fn off(&self) -> Vec<DeviceSummary> {
+        Simulator::off()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| DeviceSummary {
+                id: format!("sim:{}", s.udid),
+                model: s.name,
+                os: s.os,
+            })
+            .collect()
+    }
+
+    async fn boot(&self, id: &str) -> Result<(), Error> {
+        Simulator::boot(id.strip_prefix("sim:").unwrap_or(id)).await?;
+        *self.listed.lock().await = None;
+        Ok(())
     }
 
     async fn connect(&self, id: &str) -> Result<Arc<dyn Device>, Error> {

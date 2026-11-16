@@ -58,7 +58,7 @@ codex plugin marketplace add hridaya423/phonedriver && codex plugin add phonedri
 
 phonedriver is a standard MCP server over stdio, so any MCP client can run it. I test it with Claude Code. Setup for the others: [Other clients](#other-clients).
 
-Start an Android emulator, plug in an Android phone with USB debugging on, or boot the iOS Simulator. Then give Claude a job that only a phone can do:
+Start an Android emulator, plug in an Android phone with USB debugging on, or boot the iOS Simulator (`phonedriver boot "iPhone 17"`, or let Claude do it: with nothing connected, the error names what it can start). Then give Claude a job that only a phone can do:
 
 > Order me a large pepperoni pizza from the Domino's nearest Leicester Square, for collection.
 

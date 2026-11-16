@@ -148,7 +148,7 @@ pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
                 Status::Warn,
                 "simulators",
                 "none booted",
-                "Boot one in Simulator.app or with `xcrun simctl boot <udid>`; `xcrun simctl list devices available` lists them.",
+                "`phonedriver boot` lists the ones that can be started; `phonedriver boot <name>` starts one.",
             ));
             Vec::new()
         }

@@ -29,7 +29,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use phonedriver_core::device::{Capabilities, Device, DisplayMode, lane_of};
-use phonedriver_core::error::{DeviceSummary, Error, Op};
+use phonedriver_core::error::{DeviceSummary, Error, Op, can_be_started};
 use serde_json::{Value, json};
 use tokio::io::split;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -88,6 +88,17 @@ pub trait DeviceSource: Send + Sync {
     async fn list_for(&self, requested: Option<&str>) -> Result<Vec<Listed>, Error> {
         let _ = requested;
         self.list().await
+    }
+
+    /// The devices that are off and that this source can start (simulators that are shut down), the ones to
+    /// prefer first. A source that cannot say has none.
+    async fn off(&self) -> Vec<DeviceSummary> {
+        Vec::new()
+    }
+
+    /// Starts the off device `id` and returns once it is listed.
+    async fn boot(&self, id: &str) -> Result<(), Error> {
+        Err(Error::DeviceGone { id: id.to_string() })
     }
 
     /// Why this device cannot be driven yet, when that is known without connecting (an iPhone with no signing
@@ -202,6 +213,7 @@ impl Daemon {
                 Ok(json!({"pid": std::process::id()}))
             }
             "devices" => Ok(self.devices().await?),
+            "boot" => Ok(self.boot(params["name"].as_str()).await?),
             "told" => {
                 let line = params["line"].as_str().unwrap_or_default().to_string();
                 let last = self
@@ -348,6 +360,7 @@ impl Daemon {
                             })
                             .collect(),
                         unasked: vec![],
+                        off: vec![],
                     })
                 }
             },
@@ -356,6 +369,7 @@ impl Daemon {
                     requested: None,
                     connected: vec![],
                     unasked: vec![],
+                    off: self.source.off().await,
                 }),
                 [one] => Ok(one.id.clone()),
                 _ => {
@@ -423,6 +437,31 @@ impl Daemon {
         let (result, phases) = rx.await.map_err(|_| gone())?;
         let _ = PHASES.try_with(|p| p.borrow_mut().extend(phases));
         result
+    }
+
+    /// Without a name, the devices that are off. With one (a model, any case, or an id), that device started,
+    /// or `already` when a connected device has the name.
+    async fn boot(&self, name: Option<&str>) -> Result<Value, Error> {
+        let off = self.source.off().await;
+        let Some(name) = name else {
+            return Ok(json!({"off": off}));
+        };
+        let named = |id: &str, model: &str| names(id, name) || model.eq_ignore_ascii_case(name);
+        let connected = self.source.list().await?;
+        if let Some(on) = connected.iter().find(|l| named(&l.id, &l.model)) {
+            return Ok(json!({"id": on.id, "model": on.model, "os": on.os, "already": true}));
+        }
+        let Some(device) = off.iter().find(|d| named(&d.id, &d.model)) else {
+            let startable = match off.as_slice() {
+                [] => "nothing can be started".into(),
+                off => format!("can be started: {}", can_be_started(off)),
+            };
+            return Err(Error::Refused {
+                detail: format!("no device named \"{name}\" is off; {startable}"),
+            });
+        };
+        self.source.boot(&device.id).await?;
+        Ok(json!(device))
     }
 
     async fn devices(&self) -> Result<Value, Error> {

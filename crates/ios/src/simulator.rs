@@ -23,8 +23,38 @@ impl Simulator {
     }
 }
 
+impl Simulator {
+    /// The iOS simulators that are shut down and can boot, newest system first.
+    pub async fn off() -> Result<Vec<Simulator>> {
+        parse_off(&simctl(&["list", "devices", "available", "-j"]).await?)
+    }
+
+    /// Boots the simulator and returns when it has finished booting.
+    pub async fn boot(udid: &str) -> Result<()> {
+        simctl(&["bootstatus", udid, "-b"]).await.map(|_| ())
+    }
+}
+
 /// Parses `xcrun simctl list devices -j` and keeps the booted devices.
 pub fn parse_list(json: &str) -> Result<Vec<Simulator>> {
+    parse(json, "Booted")
+}
+
+/// Parses `xcrun simctl list devices -j` and keeps the iOS devices that are shut down and available, newest
+/// system first. Other systems (tvOS, watchOS, visionOS) are left out: the runner is built for iOS.
+pub fn parse_off(json: &str) -> Result<Vec<Simulator>> {
+    let version = |s: &Simulator| -> Vec<u32> {
+        s.os.split(|c: char| !c.is_ascii_digit())
+            .filter_map(|n| n.parse().ok())
+            .collect()
+    };
+    let mut off = parse(json, "Shutdown")?;
+    off.retain(|s| s.os.starts_with("iOS "));
+    off.sort_by_key(|s| std::cmp::Reverse(version(s)));
+    Ok(off)
+}
+
+fn parse(json: &str, state: &str) -> Result<Vec<Simulator>> {
     let v: Value = serde_json::from_str(json).map_err(|e| Error::Transport {
         detail: format!("simctl printed a device list that does not parse: {e}"),
     })?;
@@ -35,7 +65,7 @@ pub fn parse_list(json: &str) -> Result<Vec<Simulator>> {
     for (runtime, devices) in runtimes {
         let os = runtime_name(runtime);
         for d in devices.as_array().into_iter().flatten() {
-            if d["state"] != "Booted" {
+            if d["state"] != state || d["isAvailable"] == false {
                 continue;
             }
             let (Some(udid), Some(name)) = (d["udid"].as_str(), d["name"].as_str()) else {
@@ -329,6 +359,31 @@ mod tests {
                 name: "iPhone 17".into(),
                 os: "iOS 26.5".into(),
             }]
+        );
+    }
+
+    #[test]
+    fn the_simulators_that_are_off_are_the_ios_ones_that_can_boot_newest_system_first() {
+        let list = r#"{"devices":{
+          "com.apple.CoreSimulator.SimRuntime.iOS-18-6":[
+            {"udid":"A","name":"iPhone 16","state":"Shutdown","isAvailable":true}],
+          "com.apple.CoreSimulator.SimRuntime.iOS-26-5":[
+            {"udid":"B","name":"iPhone 17","state":"Booted","isAvailable":true},
+            {"udid":"C","name":"iPhone 16","state":"Shutdown","isAvailable":true},
+            {"udid":"D","name":"iPad Air","state":"Shutdown","isAvailable":false}],
+          "com.apple.CoreSimulator.SimRuntime.tvOS-26-0":[
+            {"udid":"E","name":"Apple TV","state":"Shutdown","isAvailable":true}]}}"#;
+        let off: Vec<(String, String)> = parse_off(list)
+            .unwrap()
+            .into_iter()
+            .map(|s| (s.udid, s.os))
+            .collect();
+        assert_eq!(
+            off,
+            [
+                ("C".into(), "iOS 26.5".into()),
+                ("A".into(), "iOS 18.6".into())
+            ]
         );
     }
 

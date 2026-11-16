@@ -113,6 +113,8 @@ struct SettingArgs {
 struct DevicesArgs {
     device: Option<String>,
     release: Option<bool>,
+    /// Start a simulator that is off, by name.
+    boot: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -1082,6 +1084,7 @@ fn for_mcp(hint: &str) -> String {
             "`find` keeps only the lines with those words",
         ),
         ("`--device <id>`", "`device`"),
+        ("`phonedriver boot <name>`", "`devices` with `boot: <name>`"),
         ("`--timeout`", "`timeout_ms`"),
         ("`--into`", "`into`"),
         ("`--max`", "`max`"),
@@ -1138,7 +1141,7 @@ fn bad(message: &str) -> CallToolResult {
 #[tool_router]
 impl Mcp {
     #[tool(
-        description = "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold.",
+        description = "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold. `boot` starts a simulator that is off.",
         annotations(
             title = "List devices",
             read_only_hint = false,
@@ -1150,6 +1153,9 @@ impl Mcp {
     async fn devices(&self, Parameters(a): Parameters<DevicesArgs>) -> CallToolResult {
         if a.release.unwrap_or(false) {
             return self.run(a.device, Verb::Release, None).await;
+        }
+        if let Some(name) = a.boot {
+            return self.run(None, Verb::Boot { name: Some(name) }, None).await;
         }
         self.run(None, Verb::Devices, None).await
     }

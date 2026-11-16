@@ -8,7 +8,7 @@ use phonedriver::daemon::{Config, Daemon, DeviceSource, Listed};
 use phonedriver_core::device::{
     AppId, Capabilities, Device, DeviceEvent, FrameRef, Key, TextInput, Url, WebPage,
 };
-use phonedriver_core::error::Error;
+use phonedriver_core::error::{DeviceSummary, Error};
 use phonedriver_core::geometry::{Point, Rect, Scale};
 use phonedriver_core::raw::RawTree;
 use phonedriver_core::testing::{Call, FakeDevice};
@@ -46,6 +46,7 @@ fn field_tree(value: &str, password: bool) -> RawTree {
 
 struct FakeSource {
     devices: Mutex<Vec<(Listed, Arc<FakeDevice>)>>,
+    off: Mutex<Vec<DeviceSummary>>,
 }
 
 impl FakeSource {
@@ -70,6 +71,7 @@ impl FakeSource {
                 },
                 fake.clone(),
             )]),
+            off: Mutex::new(vec![]),
         });
         (source, fake)
     }
@@ -98,8 +100,100 @@ impl DeviceSource for FakeSource {
                 requested: None,
                 connected: vec![],
                 unasked: vec![],
+                off: vec![],
             })
     }
+
+    async fn off(&self) -> Vec<DeviceSummary> {
+        self.off.lock().unwrap().clone()
+    }
+
+    async fn boot(&self, id: &str) -> Result<(), Error> {
+        let mut off = self.off.lock().unwrap();
+        let at = off.iter().position(|d| d.id == id).expect("an off device");
+        let d = off.remove(at);
+        let fake = Arc::new(FakeDevice::new(vec![]));
+        self.devices.lock().unwrap().push((
+            Listed {
+                id: d.id,
+                model: d.model,
+                os: Some(d.os),
+                tier: "fake".into(),
+                capabilities: fake.info().capabilities,
+            },
+            fake,
+        ));
+        Ok(())
+    }
+}
+
+fn off_phone(id: &str, model: &str, os: &str) -> DeviceSummary {
+    DeviceSummary {
+        id: id.into(),
+        model: model.into(),
+        os: os.into(),
+    }
+}
+
+#[tokio::test]
+async fn boot_lists_what_is_off_and_starts_one_by_name_or_id() {
+    let (source, _fake) = FakeSource::with(vec![]);
+    *source.off.lock().unwrap() = vec![
+        off_phone("fake:new", "Phone", "FakeOS 2"),
+        off_phone("fake:old", "Phone", "FakeOS 1"),
+        off_phone("fake:pad", "Pad", "FakeOS 2"),
+    ];
+    let (d, _home) = daemon(source);
+    let listed = ok(&d, "s", "boot", json!({})).await;
+    assert_eq!(
+        listed["off"][0],
+        json!({"id": "fake:new", "model": "Phone", "os": "FakeOS 2"})
+    );
+    assert_eq!(listed["off"].as_array().unwrap().len(), 3);
+    let booted = ok(&d, "s", "boot", json!({"name": "phone"})).await;
+    assert_eq!(
+        booted,
+        json!({"id": "fake:new", "model": "Phone", "os": "FakeOS 2"})
+    );
+    let by_id = ok(&d, "s", "boot", json!({"name": "fake:old"})).await;
+    assert_eq!(by_id["id"], "fake:old");
+    let ids: Vec<String> = ok(&d, "s", "devices", json!({}))
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(ids, ["fake:1", "fake:new", "fake:old"]);
+    let again = ok(&d, "s", "boot", json!({"name": "Phone"})).await;
+    assert_eq!(
+        again,
+        json!({"id": "fake:new", "model": "Phone", "os": "FakeOS 2", "already": true})
+    );
+    let e = err(&d, "s", "boot", json!({"name": "Watch"})).await;
+    assert_eq!(
+        e.message,
+        "no device named \"Watch\" is off; can be started: Pad (FakeOS 2)"
+    );
+    ok(&d, "s", "boot", json!({"name": "pad"})).await;
+    let e = err(&d, "s", "boot", json!({"name": "Watch"})).await;
+    assert_eq!(
+        e.message,
+        "no device named \"Watch\" is off; nothing can be started"
+    );
+}
+
+#[tokio::test]
+async fn with_nothing_connected_a_request_is_answered_with_what_can_be_started() {
+    let (source, _fake) = FakeSource::with(vec![]);
+    source.devices.lock().unwrap().clear();
+    *source.off.lock().unwrap() = vec![off_phone("fake:new", "Phone", "FakeOS 2")];
+    let (d, _home) = daemon(source);
+    let e = err(&d, "s", "snapshot", json!({})).await;
+    assert_eq!(
+        e.message,
+        "no device is connected; can be started: Phone (FakeOS 2)"
+    );
 }
 
 fn daemon(source: Arc<FakeSource>) -> (Arc<Daemon>, tempfile::TempDir) {
@@ -4665,6 +4759,7 @@ fn physical() -> (Arc<FakeSource>, Arc<FakeDevice>) {
             },
             fake.clone(),
         )]),
+        off: Mutex::new(vec![]),
     });
     (source, fake)
 }

@@ -86,6 +86,7 @@ impl DeviceSource for Sources {
                 })
                 .collect(),
             unasked: errors.iter().map(Error::to_string).collect(),
+            off: vec![],
         })
     }
 
@@ -107,6 +108,24 @@ impl DeviceSource for Sources {
             .map(|(_, s)| s)
             .ok_or_else(|| Error::DeviceGone { id: id.to_string() })?;
         source.connect_on(id, display).await
+    }
+
+    async fn off(&self) -> Vec<DeviceSummary> {
+        let mut out = Vec::new();
+        for (_, source) in &self.0 {
+            out.extend(source.off().await);
+        }
+        out
+    }
+
+    async fn boot(&self, id: &str) -> Result<(), Error> {
+        let source = self
+            .0
+            .iter()
+            .find(|(prefix, _)| id.starts_with(prefix))
+            .map(|(_, s)| s)
+            .ok_or_else(|| Error::DeviceGone { id: id.to_string() })?;
+        source.boot(id).await
     }
 
     fn blocker(&self, id: &str) -> Option<&'static str> {

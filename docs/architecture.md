@@ -211,7 +211,7 @@ One enum, every variant written for an agent to act on:
 
 ```rust
 pub enum Error {
-    NoDevice { requested: Option<String>, connected: Vec<DeviceSummary>, unasked: Vec<String> }, // `requested` is a --device id that matches nothing; `unasked` says why a source (adb, the simulators) gave no list, so the device may be there
+    NoDevice { requested: Option<String>, connected: Vec<DeviceSummary>, unasked: Vec<String>, off: Vec<DeviceSummary> }, // `requested` is a --device id that matches nothing; `unasked` says why a source (adb, the simulators) gave no list, so the device may be there; `off`, with nothing connected, is what `boot` can start
     AmbiguousDevice { connected: Vec<DeviceSummary> },
     DeviceGone { id: DeviceId },
     DeviceBusy { id: DeviceId, held_by: SessionName },
@@ -434,6 +434,7 @@ For canvases, games, WebViews without accessibility, and CoreDevice devices with
 
 ```
 phonedriver devices                          list devices, tier, capabilities, leases
+phonedriver boot [name]                      start a simulator that is shut down; without a name, list them (decision D77)
 phonedriver snapshot [--diff] [--interactive] [--within @eN] [--pixels] [--max-lines N]
 phonedriver screenshot [-o file] [--marks]
 phonedriver find <text> [--role R]           refs matching text

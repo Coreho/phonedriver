@@ -318,7 +318,7 @@ impl UserAction {
 #[derive(Debug, Clone, PartialEq, thiserror::Error, Serialize)]
 #[serde(tag = "code_name", rename_all = "snake_case")]
 pub enum Error {
-    #[error("{}", no_device(requested.as_deref(), connected, unasked))]
+    #[error("{}", no_device(requested.as_deref(), connected, unasked, off))]
     NoDevice {
         /// The id passed with `--device` or `PHONEDRIVER_DEVICE` that matches no connected device.
         requested: Option<String>,
@@ -326,6 +326,9 @@ pub enum Error {
         /// Why a place the device could be (adb, the simulators) gave no list, so the device may be there.
         #[serde(skip_serializing_if = "Vec::is_empty")]
         unasked: Vec<String>,
+        /// With nothing connected, the devices that are off and that `boot` can start.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        off: Vec<DeviceSummary>,
     },
     #[error("{} devices are connected; pick one", connected.len())]
     AmbiguousDevice { connected: Vec<DeviceSummary> },
@@ -446,9 +449,20 @@ pub enum Error {
     Refused { detail: String },
 }
 
-fn no_device(requested: Option<&str>, connected: &[DeviceSummary], unasked: &[String]) -> String {
+fn no_device(
+    requested: Option<&str>,
+    connected: &[DeviceSummary],
+    unasked: &[String],
+    off: &[DeviceSummary],
+) -> String {
     let Some(requested) = requested else {
-        return "no device is connected".into();
+        return match off {
+            [] => "no device is connected".into(),
+            off => format!(
+                "no device is connected; can be started: {}",
+                can_be_started(off)
+            ),
+        };
     };
     let unasked: String = unasked
         .iter()
@@ -463,6 +477,20 @@ fn no_device(requested: Option<&str>, connected: &[DeviceSummary], unasked: &[St
         .collect::<Vec<_>>()
         .join(", ");
     format!("no device \"{requested}\"; connected: {list}{unasked}")
+}
+
+/// The first six devices that are off, as `iPhone 17 (iOS 26.5)`, and how many more there are.
+pub fn can_be_started(off: &[DeviceSummary]) -> String {
+    let shown = off
+        .iter()
+        .take(6)
+        .map(|d| format!("{} ({})", d.model, d.os))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match off.len().saturating_sub(6) {
+        0 => shown,
+        more => format!("{shown} and {more} more"),
+    }
 }
 
 /// The refusal's message: what the tap is, and the screen text that says what it commits.
@@ -529,6 +557,9 @@ impl Error {
     /// The next thing to do, starting with a verb.
     pub fn hint(&self) -> String {
         match self {
+            Error::NoDevice { off, .. } if !off.is_empty() => {
+                "Start one with `phonedriver boot <name>`.".into()
+            }
             Error::NoDevice { unasked, .. } if !unasked.is_empty() => {
                 "Run `phonedriver doctor`: the device may be where the list could not be read (adb not running, a dropped tunnel).".into()
             }
@@ -779,11 +810,13 @@ mod tests {
                 requested: None,
                 connected: vec![],
                 unasked: vec![],
+                off: vec![],
             },
             Error::NoDevice {
                 requested: Some("sim:BAD".into()),
                 connected: vec![summary()],
                 unasked: vec![],
+                off: vec![],
             },
             Error::AmbiguousDevice {
                 connected: vec![
@@ -1124,6 +1157,7 @@ mod tests {
             requested: Some("sim:BAD".into()),
             connected: vec![summary()],
             unasked: vec![],
+            off: vec![],
         };
         assert_eq!(
             e.to_string(),
@@ -1137,6 +1171,7 @@ mod tests {
             requested: Some("sim:BAD".into()),
             connected: vec![],
             unasked: vec![],
+            off: vec![],
         };
         assert_eq!(none.to_string(), "no device \"sim:BAD\"; none is connected");
         assert!(none.hint().starts_with("Connect a device"));
@@ -1150,6 +1185,7 @@ mod tests {
                 requested: None,
                 connected: vec![],
                 unasked: vec![],
+                off: vec![],
             }
             .to_string(),
             "no device is connected"
@@ -1158,12 +1194,41 @@ mod tests {
             requested: Some("emulator-5554".into()),
             connected: vec![],
             unasked: vec!["connection error: cannot reach the adb server".into()],
+            off: vec![],
         };
         assert_eq!(
             adb_down.to_string(),
             "no device \"emulator-5554\"; none is connected; could not ask: connection error: cannot reach the adb server"
         );
         assert!(adb_down.hint().starts_with("Run `phonedriver doctor`"));
+    }
+
+    #[test]
+    fn with_nothing_connected_the_devices_that_are_off_are_named_with_how_to_start_one() {
+        let off = |n: usize| -> Vec<DeviceSummary> {
+            (1..=n)
+                .map(|i| DeviceSummary {
+                    id: format!("sim:{i}"),
+                    model: format!("iPhone {i}"),
+                    os: "iOS 26.5".into(),
+                })
+                .collect()
+        };
+        let e = Error::NoDevice {
+            requested: None,
+            connected: vec![],
+            unasked: vec![],
+            off: off(2),
+        };
+        assert_eq!(
+            e.to_string(),
+            "no device is connected; can be started: iPhone 1 (iOS 26.5), iPhone 2 (iOS 26.5)"
+        );
+        assert_eq!(e.hint(), "Start one with `phonedriver boot <name>`.");
+        assert_eq!(
+            can_be_started(&off(8)),
+            "iPhone 1 (iOS 26.5), iPhone 2 (iOS 26.5), iPhone 3 (iOS 26.5), iPhone 4 (iOS 26.5), iPhone 5 (iOS 26.5), iPhone 6 (iOS 26.5) and 2 more"
+        );
     }
 
     #[test]

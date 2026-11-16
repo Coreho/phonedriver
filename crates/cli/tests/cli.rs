@@ -242,13 +242,12 @@ async fn no_device_exits_4_with_the_message_then_the_hint() {
     let out = env.cmd().arg("snapshot").assert().code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let mut lines = stderr.lines();
-    assert_eq!(
-        lines.next(),
-        Some("error: no device is connected"),
-        "{stderr}"
-    );
+    let message = lines.next().unwrap();
+    let hint = lines.next().unwrap();
     assert!(
-        lines.next().unwrap().contains("phonedriver doctor"),
+        (message == "error: no device is connected" && hint.contains("phonedriver doctor"))
+            || (message.starts_with("error: no device is connected; can be started: ")
+                && hint.contains("phonedriver boot")),
         "{stderr}"
     );
     assert!(out.get_output().stdout.is_empty());

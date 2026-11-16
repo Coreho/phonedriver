@@ -204,6 +204,11 @@ const DIRECTIONS: [&str; 4] = ["up", "down", "left", "right"];
 pub(crate) enum Verb {
     /// List devices, tier, capabilities and leases.
     Devices,
+    /// Start a simulator that is shut down, by name or id. Without a name, list the ones that can be started.
+    Boot {
+        /// The model (`"iPhone 17"`, any case; the newest system when several have the name) or the id.
+        name: Option<String>,
+    },
     /// Print what is on screen, or what changed since the last observation.
     Snapshot {
         /// Print only what changed since the last observation.
@@ -927,10 +932,21 @@ pub(crate) async fn execute_with(
             if g.json {
                 return Ok(result.to_string());
             }
+            if result.as_array().is_some_and(Vec::is_empty) {
+                return Ok(no_devices(&client.call("boot", json!({})).await?));
+            }
             Ok(with_default_device(
                 device_table(&result),
                 g.device.as_deref(),
             ))
+        }
+        Verb::Boot { name } => {
+            let result = client.call("boot", json!({"name": name})).await?;
+            Ok(if g.json {
+                result.to_string()
+            } else {
+                show_boot(&result)
+            })
         }
         Verb::Snapshot {
             diff,
@@ -1637,13 +1653,50 @@ fn with_default_device(table: String, default: Option<&str>) -> String {
     }
 }
 
+const NO_DEVICES: &str = "no devices\nhint: Connect a device or start an emulator; `phonedriver doctor` says what is missing.";
+
+fn off_devices(boot: &Value) -> Vec<phonedriver_core::error::DeviceSummary> {
+    serde_json::from_value(boot["off"].clone()).unwrap_or_default()
+}
+
+/// What `devices` prints with nothing connected, given the `boot` reply that lists what is off.
+fn no_devices(boot: &Value) -> String {
+    match off_devices(boot).as_slice() {
+        [] => NO_DEVICES.into(),
+        off => format!(
+            "no devices\ncan be started: {}\nhint: Start one with `phonedriver boot <name>`.",
+            phonedriver_core::error::can_be_started(off)
+        ),
+    }
+}
+
+fn show_boot(result: &Value) -> String {
+    if let Some(id) = result["id"].as_str() {
+        let word = match result["already"].as_bool() {
+            Some(true) => "already on:",
+            _ => "booted",
+        };
+        return format!(
+            "{word} {id} · {} · {}",
+            result["model"].as_str().unwrap_or_default(),
+            result["os"].as_str().unwrap_or_default()
+        );
+    }
+    let off = off_devices(result);
+    if off.is_empty() {
+        return "nothing to start\nhint: `boot` starts iOS simulators that are shut down. Start an Android emulator with `emulator @<avd>`.".into();
+    }
+    let mut rows = vec![vec!["ID".to_string(), "MODEL".into(), "OS".into()]];
+    rows.extend(off.into_iter().map(|d| vec![d.id, d.model, d.os]));
+    table(&rows)
+}
+
 fn device_table(result: &Value) -> String {
     let Ok(devices) = serde_json::from_value::<Vec<DeviceEntry>>(result.clone()) else {
         return result.to_string();
     };
     if devices.is_empty() {
-        return "no devices\nhint: Connect a device or start an emulator; `phonedriver doctor` says what is missing."
-            .into();
+        return NO_DEVICES.into();
     }
     let any_hidden = devices.iter().any(|d| d.hidden_display.is_some());
     let mut head = vec!["ID", "MODEL", "OS", "TIER", "LEASE"];
@@ -1671,6 +1724,10 @@ fn device_table(result: &Value) -> String {
         }
         rows.push(row);
     }
+    table(&rows)
+}
+
+fn table(rows: &[Vec<String>]) -> String {
     let columns = rows[0].len();
     let widths: Vec<usize> = (0..columns)
         .map(|c| rows.iter().map(|r| r[c].chars().count()).max().unwrap_or(0))
@@ -2523,6 +2580,32 @@ mod tests {
     fn devices_with_nothing_connected_says_so_and_what_to_do() {
         let shown = device_table(&json!([]));
         assert!(shown.starts_with("no devices"), "{shown}");
+        let off = json!({"off": [
+            {"id": "sim:C", "model": "iPhone 16", "os": "iOS 26.5"},
+            {"id": "sim:A", "model": "iPad", "os": "iOS 18.6"}]});
+        assert_eq!(
+            no_devices(&off),
+            "no devices\ncan be started: iPhone 16 (iOS 26.5), iPad (iOS 18.6)\nhint: Start one with `phonedriver boot <name>`."
+        );
+        assert_eq!(no_devices(&json!({"off": []})), shown);
+        assert_eq!(
+            show_boot(&off),
+            "ID     MODEL      OS\nsim:C  iPhone 16  iOS 26.5\nsim:A  iPad       iOS 18.6"
+        );
+        assert_eq!(
+            show_boot(&json!({"off": []})),
+            "nothing to start\nhint: `boot` starts iOS simulators that are shut down. Start an Android emulator with `emulator @<avd>`."
+        );
+        assert_eq!(
+            show_boot(&json!({"id": "sim:C", "model": "iPhone 16", "os": "iOS 26.5"})),
+            "booted sim:C · iPhone 16 · iOS 26.5"
+        );
+        assert_eq!(
+            show_boot(
+                &json!({"id": "sim:C", "model": "iPhone 16", "os": "iOS 26.5", "already": true})
+            ),
+            "already on: sim:C · iPhone 16 · iOS 26.5"
+        );
         assert!(shown.contains("hint: Connect a device"), "{shown}");
         assert!(shown.contains("phonedriver doctor"), "{shown}");
     }

@@ -24,6 +24,7 @@ Progress: a client that sends `"progress": true` in `hello` may receive notifica
 | `hello` | `version, client, progress?` | `version, pid` |
 | `shutdown` | none | `{pid}` (the daemon exits, ending the iOS runners it started) |
 | `devices` | none | `[DeviceSummary]` |
+| `boot` | `name?` | without `name`: `{off: [DeviceSummary]}`, the devices that are off and can be started, the ones to prefer first. With `name` (a model, any case, or an id): `{id, model, os}` once it is listed, with `already: true` when a connected device has the name; `Refused` when nothing off has it (decision D77) |
 | `release` | `device?` | `{}` |
 | `told` | `line` | `{same}` (records `line` as the device line the session was last shown; `same` is true when it already was. The CLI drops a repeated line from its text output, never from `--json`; no device, no lease) |
 | `snapshot` | `device?, diff?, interactive?, within?, pixels?, max_lines?, no_settle?, elements?, capture?, timeout_ms?` | `Observation` |

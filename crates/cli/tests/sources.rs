@@ -36,6 +36,7 @@ impl DeviceSource for Fixed {
                 requested: None,
                 connected: vec![],
                 unasked: vec![],
+                off: vec![],
             }),
         }
     }

@@ -624,6 +624,22 @@ async fn failures_and_hints_over_mcp_name_tools_and_arguments_not_cli_commands()
 }
 
 #[tokio::test]
+async fn devices_with_boot_starts_a_device_or_says_it_is_on_and_a_wrong_name_names_the_tool() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("devices", json!({"boot": "fake"})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    assert_eq!(texts(&r), vec!["already on: fake:1 · Fake · FakeOS 1"]);
+    let r = rig.call("devices", json!({"boot": "Watch"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    let text = texts(&r).join("\n");
+    assert!(
+        text.starts_with("no device named \"Watch\" is off; nothing can be started\nhint: "),
+        "{text}"
+    );
+    assert!(!text.contains("phonedriver"), "{text}");
+}
+
+#[tokio::test]
 async fn a_batch_over_mcp_runs_the_steps_and_returns_one_numbered_reply() {
     let rig = rig(vec![field_tree("", false), field_tree("hi", false)]).await;
     rig.call("snapshot", json!({})).await;

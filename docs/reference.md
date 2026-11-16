@@ -79,7 +79,7 @@ warn  android devices  none connected
 ok    xcode            Xcode 27.0, Build version 27A266a
 ok    xcodegen         /opt/homebrew/bin/xcodegen
 warn  simulators       none booted
-      fix: Boot one in Simulator.app or with `xcrun simctl boot <udid>`; `xcrun simctl list devices available` lists them.
+      fix: `phonedriver boot` lists the ones that can be started; `phonedriver boot <name>` starts one.
 ok    daemon socket    /Users/you/.phonedriver/run/daemon.sock mode 600 in a directory of mode 700
 ```
 
@@ -91,6 +91,20 @@ phonedriver snapshot
 phonedriver tap "Dark theme"
 phonedriver wait settled
 ```
+
+### Start a simulator
+
+With Xcode installed and no simulator running, phonedriver starts one:
+
+```console
+$ phonedriver boot
+ID                                        MODEL      OS
+sim:E02FE8A6-5F1E-405E-A263-2E828218BE5F  iPhone 17  iOS 26.5
+$ phonedriver boot "iphone 17"
+booted sim:E02FE8A6-5F1E-405E-A263-2E828218BE5F · iPhone 17 · iOS 26.5
+```
+
+The name is the model in any case, or the id; when several simulators have the name, the one with the newest system starts. It boots without a window (`open -a Simulator` shows it). Over MCP it is `devices` with `boot: "iPhone 17"`. When nothing is connected, every command's error names what can be started (`no device is connected; can be started: iPhone 17 (iOS 26.5)`), so an agent can start one and go on. Android emulators are not started this way yet: `emulator @<avd>`. Decision D77.
 
 ### iPhone or iPad
 
