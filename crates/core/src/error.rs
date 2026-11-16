@@ -318,11 +318,14 @@ impl UserAction {
 #[derive(Debug, Clone, PartialEq, thiserror::Error, Serialize)]
 #[serde(tag = "code_name", rename_all = "snake_case")]
 pub enum Error {
-    #[error("{}", no_device(requested.as_deref(), connected))]
+    #[error("{}", no_device(requested.as_deref(), connected, unasked))]
     NoDevice {
         /// The id passed with `--device` or `PHONEDRIVER_DEVICE` that matches no connected device.
         requested: Option<String>,
         connected: Vec<DeviceSummary>,
+        /// Why a place the device could be (adb, the simulators) gave no list, so the device may be there.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        unasked: Vec<String>,
     },
     #[error("{} devices are connected; pick one", connected.len())]
     AmbiguousDevice { connected: Vec<DeviceSummary> },
@@ -443,19 +446,23 @@ pub enum Error {
     Refused { detail: String },
 }
 
-fn no_device(requested: Option<&str>, connected: &[DeviceSummary]) -> String {
+fn no_device(requested: Option<&str>, connected: &[DeviceSummary], unasked: &[String]) -> String {
     let Some(requested) = requested else {
         return "no device is connected".into();
     };
+    let unasked: String = unasked
+        .iter()
+        .map(|why| format!("; could not ask: {why}"))
+        .collect();
     if connected.is_empty() {
-        return format!("no device \"{requested}\"; none is connected");
+        return format!("no device \"{requested}\"; none is connected{unasked}");
     }
     let list = connected
         .iter()
         .map(|d| format!("{} ({})", d.id, d.model))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("no device \"{requested}\"; connected: {list}")
+    format!("no device \"{requested}\"; connected: {list}{unasked}")
 }
 
 /// The refusal's message: what the tap is, and the screen text that says what it commits.
@@ -522,9 +529,13 @@ impl Error {
     /// The next thing to do, starting with a verb.
     pub fn hint(&self) -> String {
         match self {
+            Error::NoDevice { unasked, .. } if !unasked.is_empty() => {
+                "Run `phonedriver doctor`: the device may be where the list could not be read (adb not running, a dropped tunnel).".into()
+            }
             Error::NoDevice {
                 requested: Some(_),
                 connected,
+                ..
             } if !connected.is_empty() => format!(
                 "Pass `--device <id>` (or set PHONEDRIVER_DEVICE) to one of: {}.",
                 ids(connected)
@@ -767,10 +778,12 @@ mod tests {
             Error::NoDevice {
                 requested: None,
                 connected: vec![],
+                unasked: vec![],
             },
             Error::NoDevice {
                 requested: Some("sim:BAD".into()),
                 connected: vec![summary()],
+                unasked: vec![],
             },
             Error::AmbiguousDevice {
                 connected: vec![
@@ -1110,6 +1123,7 @@ mod tests {
         let e = Error::NoDevice {
             requested: Some("sim:BAD".into()),
             connected: vec![summary()],
+            unasked: vec![],
         };
         assert_eq!(
             e.to_string(),
@@ -1122,6 +1136,7 @@ mod tests {
         let none = Error::NoDevice {
             requested: Some("sim:BAD".into()),
             connected: vec![],
+            unasked: vec![],
         };
         assert_eq!(none.to_string(), "no device \"sim:BAD\"; none is connected");
         assert!(none.hint().starts_with("Connect a device"));
@@ -1133,11 +1148,22 @@ mod tests {
         assert_eq!(
             Error::NoDevice {
                 requested: None,
-                connected: vec![]
+                connected: vec![],
+                unasked: vec![],
             }
             .to_string(),
             "no device is connected"
         );
+        let adb_down = Error::NoDevice {
+            requested: Some("emulator-5554".into()),
+            connected: vec![],
+            unasked: vec!["connection error: cannot reach the adb server".into()],
+        };
+        assert_eq!(
+            adb_down.to_string(),
+            "no device \"emulator-5554\"; none is connected; could not ask: connection error: cannot reach the adb server"
+        );
+        assert!(adb_down.hint().starts_with("Run `phonedriver doctor`"));
     }
 
     #[test]

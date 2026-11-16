@@ -97,6 +97,7 @@ impl DeviceSource for FakeSource {
             .ok_or(Error::NoDevice {
                 requested: None,
                 connected: vec![],
+                unasked: vec![],
             })
     }
 }

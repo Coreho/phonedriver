@@ -347,6 +347,7 @@ impl Daemon {
                                 os: l.os.clone().unwrap_or_default(),
                             })
                             .collect(),
+                        unasked: vec![],
                     })
                 }
             },
@@ -354,6 +355,7 @@ impl Daemon {
                 [] => Err(Error::NoDevice {
                     requested: None,
                     connected: vec![],
+                    unasked: vec![],
                 }),
                 [one] => Ok(one.id.clone()),
                 _ => {

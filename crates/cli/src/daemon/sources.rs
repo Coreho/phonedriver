@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use phonedriver_core::device::{Device, DisplayMode};
-use phonedriver_core::error::Error;
+use phonedriver_core::error::{DeviceSummary, Error};
 
 use super::{DeviceSource, Listed};
 
@@ -39,7 +39,9 @@ impl DeviceSource for Sources {
     /// A prefixed id (`android:emulator-5554`, `sim:<udid>`, `ios:<udid>`) asks the one source that owns it. A bare
     /// id (`emulator-5554`) asks the sources in order and stops at the first that has it, so the Android serial a
     /// caller usually means never waits on the iOS sources. The audit measured 2.05 s per call on Windows from
-    /// listing physical iOS devices for an Android request.
+    /// listing physical iOS devices for an Android request. When no source that answered has it and one could not
+    /// be asked, the answer says so: with the adb server unreachable and simulators present, a bare
+    /// `emulator-5554` was answered with `no device "emulator-5554"; connected: sim:...` and no word about adb.
     async fn list_for(&self, requested: Option<&str>) -> Result<Vec<Listed>, Error> {
         let Some(requested) = requested else {
             return self.list().await;
@@ -52,7 +54,7 @@ impl DeviceSource for Sources {
             return owner.list_for(Some(requested)).await;
         }
         let mut out = Vec::new();
-        let mut first_error = None;
+        let mut errors = Vec::new();
         let mut answered = false;
         for (_, source) in &self.0 {
             match source.list_for(Some(requested)).await {
@@ -61,18 +63,30 @@ impl DeviceSource for Sources {
                     let found = list.iter().any(|l| super::names(&l.id, requested));
                     out.extend(list);
                     if found {
-                        break;
+                        return Ok(out);
                     }
                 }
-                Err(e) => {
-                    first_error.get_or_insert(e);
-                }
+                Err(e) => errors.push(e),
             }
         }
-        match (answered, first_error) {
-            (false, Some(e)) => Err(e),
-            _ => Ok(out),
+        if !answered && let Some(e) = errors.first() {
+            return Err(e.clone());
         }
+        if errors.is_empty() {
+            return Ok(out);
+        }
+        Err(Error::NoDevice {
+            requested: Some(requested.to_string()),
+            connected: out
+                .into_iter()
+                .map(|l| DeviceSummary {
+                    id: l.id,
+                    model: l.model,
+                    os: l.os.unwrap_or_default(),
+                })
+                .collect(),
+            unasked: errors.iter().map(Error::to_string).collect(),
+        })
     }
 
     async fn connect(&self, id: &str) -> Result<Arc<dyn Device>, Error> {

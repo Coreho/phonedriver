@@ -211,7 +211,7 @@ One enum, every variant written for an agent to act on:
 
 ```rust
 pub enum Error {
-    NoDevice { requested: Option<String>, connected: Vec<DeviceSummary> }, // `requested` is a --device id that matches nothing
+    NoDevice { requested: Option<String>, connected: Vec<DeviceSummary>, unasked: Vec<String> }, // `requested` is a --device id that matches nothing; `unasked` says why a source (adb, the simulators) gave no list, so the device may be there
     AmbiguousDevice { connected: Vec<DeviceSummary> },
     DeviceGone { id: DeviceId },
     DeviceBusy { id: DeviceId, held_by: SessionName },
