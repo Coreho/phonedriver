@@ -96,9 +96,11 @@ pub trait DeviceSource: Send + Sync {
         Vec::new()
     }
 
-    /// Starts the off device `id` and returns once it is listed.
-    async fn boot(&self, id: &str) -> Result<(), Error> {
-        Err(Error::DeviceGone { id: id.to_string() })
+    /// Starts the device called `name` (see [`named`]) and returns it once it is listed, under the id it is listed
+    /// with. `None` when this source has no device by that name that it can start.
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
+        let _ = name;
+        Ok(None)
     }
 
     /// Why this device cannot be driven yet, when that is known without connecting (an iPhone with no signing
@@ -106,6 +108,18 @@ pub trait DeviceSource: Send + Sync {
     fn blocker(&self, _id: &str) -> Option<&'static str> {
         None
     }
+}
+
+/// What `boot` started, or found on.
+pub struct Booted {
+    pub device: DeviceSummary,
+    /// It was on before the call.
+    pub already: bool,
+}
+
+/// Whether `name` is this device's id (with or without its prefix) or its model in any case.
+pub fn named(name: &str, id: &str, model: &str) -> bool {
+    names(id, name) || model.eq_ignore_ascii_case(name)
 }
 
 pub(crate) fn names(id: &str, requested: &str) -> bool {
@@ -446,12 +460,19 @@ impl Daemon {
         let Some(name) = name else {
             return Ok(json!({"off": off}));
         };
-        let named = |id: &str, model: &str| names(id, name) || model.eq_ignore_ascii_case(name);
         let connected = self.source.list().await?;
-        if let Some(on) = connected.iter().find(|l| named(&l.id, &l.model)) {
-            return Ok(json!({"id": on.id, "model": on.model, "os": on.os, "already": true}));
-        }
-        let Some(device) = off.iter().find(|d| named(&d.id, &d.model)) else {
+        let booted = match connected.iter().find(|l| named(name, &l.id, &l.model)) {
+            Some(on) => Some(Booted {
+                device: DeviceSummary {
+                    id: on.id.clone(),
+                    model: on.model.clone(),
+                    os: on.os.clone().unwrap_or_default(),
+                },
+                already: true,
+            }),
+            None => self.source.boot(name).await?,
+        };
+        let Some(Booted { device, already }) = booted else {
             let startable = match off.as_slice() {
                 [] => "nothing can be started".into(),
                 off => format!("can be started: {}", can_be_started(off)),
@@ -460,8 +481,11 @@ impl Daemon {
                 detail: format!("no device named \"{name}\" is off; {startable}"),
             });
         };
-        self.source.boot(&device.id).await?;
-        Ok(json!(device))
+        let mut reply = json!(device);
+        if already {
+            reply["already"] = json!(true);
+        }
+        Ok(reply)
     }
 
     async fn devices(&self) -> Result<Value, Error> {

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use phonedriver::daemon::rpc::RpcError;
-use phonedriver::daemon::{Config, Daemon, DeviceSource, Listed};
+use phonedriver::daemon::{Booted, Config, Daemon, DeviceSource, Listed, named};
 use phonedriver_core::device::{
     AppId, Capabilities, Device, DeviceEvent, FrameRef, Key, TextInput, Url, WebPage,
 };
@@ -108,22 +108,27 @@ impl DeviceSource for FakeSource {
         self.off.lock().unwrap().clone()
     }
 
-    async fn boot(&self, id: &str) -> Result<(), Error> {
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
         let mut off = self.off.lock().unwrap();
-        let at = off.iter().position(|d| d.id == id).expect("an off device");
-        let d = off.remove(at);
+        let Some(at) = off.iter().position(|d| named(name, &d.id, &d.model)) else {
+            return Ok(None);
+        };
+        let device = off.remove(at);
         let fake = Arc::new(FakeDevice::new(vec![]));
         self.devices.lock().unwrap().push((
             Listed {
-                id: d.id,
-                model: d.model,
-                os: Some(d.os),
+                id: device.id.clone(),
+                model: device.model.clone(),
+                os: Some(device.os.clone()),
                 tier: "fake".into(),
                 capabilities: fake.info().capabilities,
             },
             fake,
         ));
-        Ok(())
+        Ok(Some(Booted {
+            device,
+            already: false,
+        }))
     }
 }
 

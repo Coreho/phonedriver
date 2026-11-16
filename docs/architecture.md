@@ -434,7 +434,7 @@ For canvases, games, WebViews without accessibility, and CoreDevice devices with
 
 ```
 phonedriver devices                          list devices, tier, capabilities, leases
-phonedriver boot [name]                      start a simulator that is shut down; without a name, list them (decision D77)
+phonedriver boot [name]                      start an iOS simulator or an Android virtual device that is off; without a name, list them (decisions D77, D79)
 phonedriver snapshot [--diff] [--interactive] [--within @eN] [--pixels] [--max-lines N]
 phonedriver screenshot [-o file] [--marks]
 phonedriver find <text> [--role R]           refs matching text

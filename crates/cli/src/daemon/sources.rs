@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use phonedriver_core::device::{Device, DisplayMode};
 use phonedriver_core::error::{DeviceSummary, Error};
 
-use super::{DeviceSource, Listed};
+use super::{Booted, DeviceSource, Listed};
 
 /// Each source owns the ids that start with its prefix (`android:`, `sim:`).
 pub struct Sources(pub Vec<(&'static str, Arc<dyn DeviceSource>)>);
@@ -118,14 +118,13 @@ impl DeviceSource for Sources {
         out
     }
 
-    async fn boot(&self, id: &str) -> Result<(), Error> {
-        let source = self
-            .0
-            .iter()
-            .find(|(prefix, _)| id.starts_with(prefix))
-            .map(|(_, s)| s)
-            .ok_or_else(|| Error::DeviceGone { id: id.to_string() })?;
-        source.boot(id).await
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
+        for (_, source) in &self.0 {
+            if let Some(booted) = source.boot(name).await? {
+                return Ok(Some(booted));
+            }
+        }
+        Ok(None)
     }
 
     fn blocker(&self, id: &str) -> Option<&'static str> {

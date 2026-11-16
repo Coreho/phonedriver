@@ -5,15 +5,23 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use phonedriver_android::adb::{Adb, AdbDevice, DeviceState};
+use phonedriver_android::avd::{self, Avd};
 use phonedriver_android::device::AndroidDevice;
 use phonedriver_android::wireless::{one_per_phone, serial_in_name};
 use phonedriver_core::device::{Capabilities, Device, DisplayMode, lane_of};
-use phonedriver_core::error::Error;
+use phonedriver_core::error::{DeviceSummary, Error};
 
 use super::progress::after_a_second;
-use super::{DeviceSource, Listed};
+use super::{Booted, DeviceSource, Listed, named};
 
 type OsKey = (String, Option<u32>);
+
+/// The emulator sets this property to the name of the AVD it was started with.
+const AVD_NAME: &str = "getprop ro.boot.qemu.avd_name";
+
+/// `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`: the emulator keeps running when the daemon that started it exits.
+#[cfg(windows)]
+const DETACHED: u32 = 0x0000_0008 | 0x0000_0200;
 
 #[derive(Default)]
 struct Tracked {
@@ -150,10 +158,146 @@ impl AdbSource {
     }
 }
 
+fn env(name: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(name)
+}
+
+fn summary(avd: &Avd, id: String) -> DeviceSummary {
+    DeviceSummary {
+        id,
+        model: avd.name.clone(),
+        os: match &avd.api {
+            Some(api) => format!("Android API {}", api.trim_end_matches(".0")),
+            None => String::new(),
+        },
+    }
+}
+
+/// The first console port from 5554 that no emulator adb knows has and that nothing listens on. An emulator takes
+/// an even port for its console and the next one for adb, and adb names it `emulator-<console port>`.
+fn free_port(devices: &[AdbDevice]) -> Option<u16> {
+    (5554..=5584u16).step_by(2).find(|port| {
+        !devices
+            .iter()
+            .any(|d| d.serial == format!("emulator-{port}"))
+            && [*port, port + 1]
+                .iter()
+                .all(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok())
+    })
+}
+
+impl AdbSource {
+    /// The AVDs on this machine, when this machine is where adb's emulators run.
+    fn avds(&self) -> Vec<Avd> {
+        match avd::home(&env) {
+            Some(home) if self.adb.is_local() => avd::list(&home),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The serial and AVD name of each running emulator.
+    async fn running(&self) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for d in self.devices().await.unwrap_or_default() {
+            if d.state != DeviceState::Device || !d.serial.starts_with("emulator-") {
+                continue;
+            }
+            if let Ok(name) = self.adb.shell(&d.serial, AVD_NAME).await {
+                out.push((d.serial, name.stdout_text().trim().to_string()));
+            }
+        }
+        out
+    }
+
+    /// Starts the AVD on a port of its own, so that its serial is known, and waits until Android has booted.
+    async fn start(&self, avd: &Avd) -> Result<String, Error> {
+        let refused = |detail: String| Error::Refused { detail };
+        let name = &avd.name;
+        let emulator = avd::emulator(&env).ok_or_else(|| {
+            refused(format!(
+                "the `emulator` program that starts {name} was not found; set ANDROID_HOME to the Android SDK"
+            ))
+        })?;
+        let port = free_port(&self.devices().await?)
+            .ok_or_else(|| refused("no emulator port is free (5554 to 5584)".into()))?;
+        let log = std::env::temp_dir().join(format!("phonedriver-emulator-{port}.log"));
+        let out = std::fs::File::create(&log)
+            .map_err(|e| refused(format!("cannot write {}: {e}", log.display())))?;
+        let mut cmd = std::process::Command::new(&emulator);
+        cmd.args(["-avd", name, "-port", &port.to_string()])
+            .stdin(std::process::Stdio::null())
+            .stderr(out.try_clone().map_err(|e| refused(e.to_string()))?)
+            .stdout(out);
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(&mut cmd, DETACHED);
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| refused(format!("cannot run {}: {e}", emulator.display())))?;
+        let serial = format!("emulator-{port}");
+        loop {
+            if let Ok(Some(status)) = child.try_wait() {
+                let said = std::fs::read_to_string(&log).unwrap_or_default();
+                let last = said.lines().rev().find(|l| !l.trim().is_empty());
+                return Err(refused(format!(
+                    "the emulator for {name} stopped ({status}): {}",
+                    last.unwrap_or("it printed nothing")
+                )));
+            }
+            let up = self
+                .devices()
+                .await
+                .unwrap_or_default()
+                .iter()
+                .any(|d| d.serial == serial && d.state == DeviceState::Device);
+            if up
+                && let Ok(done) = self.adb.shell(&serial, "getprop sys.boot_completed").await
+                && done.stdout_text().trim() == "1"
+            {
+                return Ok(serial);
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    }
+}
+
 #[async_trait]
 impl DeviceSource for AdbSource {
     async fn list(&self) -> Result<Vec<Listed>, Error> {
         self.listed(true).await
+    }
+
+    async fn off(&self) -> Vec<DeviceSummary> {
+        let avds = self.avds();
+        if avds.is_empty() {
+            return Vec::new();
+        }
+        let running = self.running().await;
+        avds.iter()
+            .filter(|a| !running.iter().any(|(_, name)| *name == a.name))
+            .map(|a| summary(a, format!("avd:{}", a.name)))
+            .collect()
+    }
+
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
+        let avds = self.avds();
+        let Some(avd) = avds
+            .iter()
+            .find(|a| named(name, &format!("avd:{}", a.name), &a.name))
+        else {
+            return Ok(None);
+        };
+        let running = self.running().await;
+        let on = running.iter().find(|(_, name)| *name == avd.name);
+        let serial = match on {
+            Some((serial, _)) => serial.clone(),
+            None => self.start(avd).await?,
+        };
+        Ok(Some(Booted {
+            device: summary(avd, format!("android:{serial}")),
+            already: on.is_some(),
+        }))
     }
 
     /// A request that names a device sees every connection, so an id that the unnamed listing folded into

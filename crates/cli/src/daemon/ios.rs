@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 
 use super::progress::after_a_second;
-use super::{DeviceSource, Listed};
+use super::{Booted, DeviceSource, Listed, named};
 
 /// `simctl list` takes about 70 ms on the Mac mini and the daemon lists devices on every request, which added that
 /// much to every iOS call; a listing this recent is reused.
@@ -91,10 +91,17 @@ impl DeviceSource for SimSource {
             .collect()
     }
 
-    async fn boot(&self, id: &str) -> Result<(), Error> {
-        Simulator::boot(id.strip_prefix("sim:").unwrap_or(id)).await?;
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
+        let off = self.off().await;
+        let Some(device) = off.into_iter().find(|d| named(name, &d.id, &d.model)) else {
+            return Ok(None);
+        };
+        Simulator::boot(device.id.trim_start_matches("sim:")).await?;
         *self.listed.lock().await = None;
-        Ok(())
+        Ok(Some(Booted {
+            device,
+            already: false,
+        }))
     }
 
     async fn connect(&self, id: &str) -> Result<Arc<dyn Device>, Error> {

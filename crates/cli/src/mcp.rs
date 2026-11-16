@@ -113,7 +113,7 @@ struct SettingArgs {
 struct DevicesArgs {
     device: Option<String>,
     release: Option<bool>,
-    /// Start a simulator that is off, by name.
+    /// Start a simulator or emulator that is off, by name.
     boot: Option<String>,
 }
 
@@ -1141,7 +1141,7 @@ fn bad(message: &str) -> CallToolResult {
 #[tool_router]
 impl Mcp {
     #[tool(
-        description = "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold. `boot` starts a simulator that is off.",
+        description = "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold. `boot` starts a simulator or emulator that is off.",
         annotations(
             title = "List devices",
             read_only_hint = false,

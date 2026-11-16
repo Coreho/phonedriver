@@ -204,9 +204,10 @@ const DIRECTIONS: [&str; 4] = ["up", "down", "left", "right"];
 pub(crate) enum Verb {
     /// List devices, tier, capabilities and leases.
     Devices,
-    /// Start a simulator that is shut down, by name or id. Without a name, list the ones that can be started.
+    /// Start an iOS simulator or an Android virtual device that is off, by name or id. Without a name, list the
+    /// ones that can be started.
     Boot {
-        /// The model (`"iPhone 17"`, any case; the newest system when several have the name) or the id.
+        /// The model (`"iPhone 17"`, `Pixel_9`; any case; the newest system when several have the name) or the id.
         name: Option<String>,
     },
     /// Print what is on screen, or what changed since the last observation.
@@ -1685,7 +1686,7 @@ fn show_boot(result: &Value) -> String {
     }
     let off = off_devices(result);
     if off.is_empty() {
-        return "nothing to start\nhint: `boot` starts iOS simulators that are shut down. Start an Android emulator with `emulator @<avd>`.".into();
+        return "nothing to start\nhint: `boot` starts iOS simulators and Android virtual devices that are off. Create one in Xcode or Android Studio.".into();
     }
     let mut rows = vec![vec!["ID".to_string(), "MODEL".into(), "OS".into()]];
     rows.extend(off.into_iter().map(|d| vec![d.id, d.model, d.os]));
@@ -2595,7 +2596,7 @@ mod tests {
         );
         assert_eq!(
             show_boot(&json!({"off": []})),
-            "nothing to start\nhint: `boot` starts iOS simulators that are shut down. Start an Android emulator with `emulator @<avd>`."
+            "nothing to start\nhint: `boot` starts iOS simulators and Android virtual devices that are off. Create one in Xcode or Android Studio."
         );
         assert_eq!(
             show_boot(&json!({"id": "sim:C", "model": "iPhone 16", "os": "iOS 26.5"})),

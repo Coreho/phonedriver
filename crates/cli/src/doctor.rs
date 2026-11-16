@@ -237,7 +237,7 @@ pub async fn android(adb: &Adb, only: Option<&str>) -> Vec<Check> {
             Status::Warn,
             "android devices",
             "none connected",
-            "Connect a phone with USB debugging on, pair an Android 11+ phone over Wi-Fi with `phonedriver pair`, or start an emulator; `adb devices` lists what adb sees.",
+            "Connect a phone with USB debugging on, pair an Android 11+ phone over Wi-Fi with `phonedriver pair`, or start an emulator (`phonedriver boot` lists the ones on this machine); `adb devices` lists what adb sees.",
         ));
     }
     if let Some(only) = only

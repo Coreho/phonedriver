@@ -92,9 +92,9 @@ phonedriver tap "Dark theme"
 phonedriver wait settled
 ```
 
-### Start a simulator
+### Start a simulator or an emulator
 
-With Xcode installed and no simulator running, phonedriver starts one:
+With nothing running, phonedriver starts an iOS simulator (Xcode installed) or an Android virtual device (one made in Android Studio):
 
 ```console
 $ phonedriver boot
@@ -104,7 +104,22 @@ $ phonedriver boot "iphone 17"
 booted sim:E02FE8A6-5F1E-405E-A263-2E828218BE5F · iPhone 17 · iOS 26.5
 ```
 
-The name is the model in any case, or the id; when several simulators have the name, the one with the newest system starts. It boots without a window (`open -a Simulator` shows it). Over MCP it is `devices` with `boot: "iPhone 17"`. When nothing is connected, every command's error names what can be started (`no device is connected; can be started: iPhone 17 (iOS 26.5)`), so an agent can start one and go on. Android emulators are not started this way yet: `emulator @<avd>`. Decision D77.
+The name is the model in any case, or the id; when several simulators have the name, the one with the newest system starts. It boots without a window (`open -a Simulator` shows it). Over MCP it is `devices` with `boot: "iPhone 17"`. When nothing is connected, every command's error names what can be started (`no device is connected; can be started: iPhone 17 (iOS 26.5)`), so an agent can start one and go on. Decision D77.
+
+Android virtual devices are in the same list, and start the same way:
+
+```console
+$ phonedriver boot
+ID                       MODEL                OS
+avd:Pixel_API_37         Pixel_API_37         Android API 37
+avd:Pixel_Tablet_API_37  Pixel_Tablet_API_37  Android API 37
+avd:Pixel_API_31         Pixel_API_31         Android API 31
+avd:Pixel_API_26         Pixel_API_26         Android API 26
+$ phonedriver boot pixel_api_37
+booted android:emulator-5554 · Pixel_API_37 · Android API 37
+```
+
+phonedriver runs the SDK's `emulator` program (from `ANDROID_HOME`, `ANDROID_SDK_ROOT`, the folder Android Studio installs to, or the `PATH`) and returns when Android says it has booted. The emulator keeps running after phonedriver's daemon stops; `adb -s emulator-5554 emu kill` stops it. A first boot can take minutes, and on a slow or busy machine the first command after it may still fail while Android settles; a later boot resumes from the emulator's saved state in seconds. With `ADB_SERVER_SOCKET` set (adb on another machine), no virtual device is listed. Decision D79.
 
 ### iPhone or iPad
 
