@@ -1002,13 +1002,21 @@ pub(crate) async fn execute_with(
             show_shell(&r, g.json)
         }
         Verb::Save { file } => {
-            let mut out = std::fs::File::create(&file)
-                .map_err(|e| Failure::Local(format!("cannot write {}: {e}", file.display())))?;
+            let cannot =
+                |e: std::io::Error| Failure::Local(format!("cannot write {}: {e}", file.display()));
+            let mut out = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(&file)
+                .map_err(cannot)?;
             let r = client.call("journal", with(json!({}))).await?;
             let steps = r["steps"].as_array().cloned().unwrap_or_default();
-            let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
-            std::io::Write::write_all(&mut out, text.as_bytes())
-                .map_err(|e| Failure::Local(format!("cannot write {}: {e}", file.display())))?;
+            if !steps.is_empty() {
+                let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
+                out.set_len(0).map_err(cannot)?;
+                std::io::Write::write_all(&mut out, text.as_bytes()).map_err(cannot)?;
+            }
             if g.json {
                 return Ok(
                     json!({"path": file, "steps": steps.len(), "over": r["over"]}).to_string(),
@@ -1603,7 +1611,7 @@ const SAVED_STEP_CHARS: usize = 60;
 pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
     if steps.is_empty() {
         return format!(
-            "nothing to save: this session has done no action since its last save ({path} is empty)"
+            "nothing to save: this session has done no action since its last save ({path} is as it was)"
         );
     }
     let count = |field: &str| steps.iter().filter(|s| !s[field].is_null()).count() as u64;
@@ -1915,9 +1923,8 @@ pub(crate) fn show_setting(result: &Value, asked: &str, json: bool) -> Result<St
     let Some(action) = result.get("action") else {
         return Ok(out);
     };
-    let action: ActionResult = decode(action)?;
-    if action.changed {
-        let seen = show_action(&serde_json::to_value(&action).unwrap_or_default(), false)?;
+    if action["changed"] == true {
+        let seen = show_action(action, false)?;
         let seen = seen.strip_prefix("ok set").unwrap_or(&seen);
         out.push_str("\nscreen: ");
         out.push_str(seen.trim_start_matches(" · "));
@@ -1983,9 +1990,15 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
         ));
     }
     if r.observation.empty {
+        if let Some(u) = &r.unverified {
+            out.push_str("\nhint: ");
+            out.push_str(&u.hint);
+        }
         out.push('\n');
         out.push_str(EMPTY_SCREEN);
-    } else if let Some(n) = r.unchanged_repeats {
+        return Ok(out);
+    }
+    if let Some(n) = r.unchanged_repeats {
         out.push_str(&format!("\nhint: this action has changed nothing {n} times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"));
     } else if r.settled && !r.changed {
         out.push_str("\nhint: nothing changed; the tap may have missed, or changed only what the element list does not show (a web checkbox): `phonedriver screenshot` shows the picture");

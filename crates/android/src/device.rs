@@ -26,11 +26,11 @@ use crate::settings;
 
 const FIRST_FRAME_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 /// A screenshot proves the stream is current within this: one control round trip and the barrier's way back.
+const BARRIER_WAIT: std::time::Duration = std::time::Duration::from_millis(1500);
 /// The finger `press fingerprint` touches the sensor with, which is the one to enroll with, and one that is
 /// never enrolled.
 const ENROLLED_FINGER: u32 = 1;
 const OTHER_FINGER: u32 = 2;
-const BARRIER_WAIT: std::time::Duration = std::time::Duration::from_millis(1500);
 const EVENT_BACKLOG: usize = 64;
 
 pub struct AndroidDevice {
@@ -586,8 +586,6 @@ impl Device for AndroidDevice {
     }
 }
 
-/// `notifications`, `camera`, `location`... become `android.permission.POST_NOTIFICATIONS` and so on; a name with a
-/// dot is taken as written.
 /// Why `pm grant` or `pm revoke` did not do what it was asked, read from the `granted=` lines of `dumpsys package`.
 /// On API 37 `pm grant` exits 0 and prints nothing for a permission the app's manifest does not request.
 fn unapplied(dump: &str, verb: &str, permission: &str) -> Option<&'static str> {
@@ -626,6 +624,8 @@ fn package_name(app: &AppId) -> Result<()> {
     }
 }
 
+/// `notifications`, `camera`, `location`... become `android.permission.POST_NOTIFICATIONS` and so on; a name with a
+/// dot is taken as written.
 fn permission_name(name: &str) -> Result<String> {
     let full = match name {
         "notifications" => "android.permission.POST_NOTIFICATIONS".to_string(),

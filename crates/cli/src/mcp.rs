@@ -112,7 +112,7 @@ struct DevicesArgs {
 struct ScreenshotArgs {
     device: Option<String>,
     marks: Option<bool>,
-    /// `start`, later `stop` (Android).
+    /// `start`, later `stop` (Android, iOS Simulator).
     record: Option<String>,
 }
 

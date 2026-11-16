@@ -122,7 +122,7 @@ pub fn probe(path: &Path) -> io::Result<Recorded> {
                 width: width as u32,
                 height: height as u32,
                 frames: be32(child(stbl, b"stsz")?, 8)? as u32,
-                ms: (ticks * 1000).checked_div(timescale)?,
+                ms: ticks.checked_mul(1000)?.checked_div(timescale)?,
             });
         }
     };
@@ -130,7 +130,7 @@ pub fn probe(path: &Path) -> io::Result<Recorded> {
 }
 
 /// The NAL units of an Annex-B buffer, without their start codes.
-pub fn nal_units(annex_b: &[u8]) -> Vec<&[u8]> {
+fn nal_units(annex_b: &[u8]) -> Vec<&[u8]> {
     let mut starts = Vec::new();
     let mut i = 0;
     while i + 3 <= annex_b.len() {

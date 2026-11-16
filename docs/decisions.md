@@ -950,4 +950,6 @@ One mask at the one place every reply leaves through covers a reply shape nobody
 
 **Limits.** A fake phone with two fields; no real device. Pixels: a screenshot, a recording and a `--trace-screens` copy show what the phone shows. A secret under four characters shows on later screens. A device that prints a secret back changed (escaped, split over lines, cut short) is not matched. Text typed without `secret` is not a secret to the daemon, whatever it is. A label that happens to hold a remembered secret's characters is masked too. A daemon that restarts forgets, so a full trace written after a restart can hold a secret still on the screen.
 
+**Added the same day (F5).** A review found one place the daemon writes text to disk itself: the steps file of a recording (`Taping::step`) holds each action's summary, and a tap on a label that shows a remembered secret wrote `tapped @e4 "<the secret>"` there. The actor now holds the same list (`Secrets::masked`) and masks the summary before it is written. The property test taps such a label while recording, and break B11 shows it failing.
+
 **Reopen if.** A real secret shows up in a reply in a changed form; masking a remembered secret hides something an agent needed to read.

@@ -972,6 +972,11 @@ async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
             .contains(r#""target":{"role":"button","text":"One"}"#),
         "{saved}"
     );
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert!(texts(&r)[0].ends_with("is as it was)"), "{r:?}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), saved);
 
     let r = rig.call("replay", json!({"file": path})).await;
     let text = texts(&r).join("\n");

@@ -33,6 +33,7 @@ use tokio::time::Instant;
 use super::DeviceSource;
 use super::checkbox;
 use super::journal::{self, Kept};
+use super::secrets::Secrets;
 use super::session::{Resolved, Session};
 use super::shell;
 use super::verify::{Expect, Verdict, Verify};
@@ -161,7 +162,12 @@ pub struct Job {
     pub reply: oneshot::Sender<(Result<Value, Error>, Phases)>,
 }
 
-pub fn spawn(id: String, source: Arc<dyn DeviceSource>, home: PathBuf) -> mpsc::Sender<Job> {
+pub fn spawn(
+    id: String,
+    source: Arc<dyn DeviceSource>,
+    home: PathBuf,
+    secrets: Arc<Secrets>,
+) -> mpsc::Sender<Job> {
     let (tx, rx) = mpsc::channel(32);
     let actor = Actor {
         id,
@@ -182,6 +188,7 @@ pub fn spawn(id: String, source: Arc<dyn DeviceSource>, home: PathBuf) -> mpsc::
         reshaped: None,
         names: Arc::default(),
         recording: None,
+        secrets,
     };
     tokio::spawn(actor.run(rx));
     tx
@@ -201,7 +208,7 @@ impl Taping {
         PathBuf::from(name)
     }
 
-    /// Adds an action that began at `at` to the steps file. The summary never holds typed text.
+    /// Adds an action that began at `at` to the steps file.
     fn step(&mut self, at: Instant, summary: &str) {
         use std::io::Write;
         let line =
@@ -318,6 +325,7 @@ struct Actor {
     shown: Mutex<Option<RawTree>>,
     names: Arc<Mutex<HashMap<String, String>>>,
     recording: Option<Taping>,
+    secrets: Arc<Secrets>,
 }
 
 async fn next_signal(live: &mut Option<Live>) -> Signal {
@@ -679,7 +687,6 @@ impl Actor {
                     ("key", json!(p.key)),
                     ("value", json!(p.value)),
                     ("values", json!(p.values)),
-                    ("open", json!(p.open)),
                 ] {
                     if !value.is_null() {
                         params[name] = value;
@@ -688,7 +695,7 @@ impl Actor {
                 if p.force {
                     params["force"] = json!(true);
                 }
-                let writes = p.value.is_some() || p.values.is_some() || p.open.is_some();
+                let writes = p.value.is_some() || p.values.is_some();
                 let done = self.setting(s, p).await?;
                 if writes {
                     s.journal.push(journal::call("setting", params));
@@ -844,7 +851,6 @@ impl Actor {
             p.grep.as_deref(),
             p.head.unwrap_or(shell::DEFAULT_HEAD),
         );
-        let output = tidy.text;
         let action = if settle {
             let summary = if p.secret {
                 format!("ran a command ({} chars)", p.command.chars().count())
@@ -863,7 +869,7 @@ impl Actor {
         };
         Ok(ShellResult {
             exit: reply.exit,
-            output,
+            output: tidy.text,
             omitted: tidy.omitted,
             timed_out: reply.timed_out,
             ms,
@@ -895,11 +901,22 @@ impl Actor {
                         },
                         (e, _) => e,
                     })?;
-                self.recording = Some(Taping {
+                let taping = Taping {
                     path: path.clone(),
                     began: Instant::now(),
                     steps: 0,
-                });
+                };
+                match std::fs::remove_file(taping.steps_path()) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                        return Err(Error::Refused {
+                            detail: format!(
+                                "the steps file of an earlier recording to this path cannot be replaced: {e}"
+                            ),
+                        });
+                    }
+                    _ => {}
+                }
+                self.recording = Some(taping);
                 Ok(json!({"path": path}))
             }
             RecordAction::Stop => {
@@ -1923,7 +1940,7 @@ impl Actor {
         }
         let mut result = acted?;
         if let Some(taping) = &mut self.recording {
-            taping.step(began, &result.summary);
+            taping.step(began, &self.secrets.masked(&result.summary));
         }
         s.journal.push(kept.step(&result));
         result.woke = woke;
@@ -1942,7 +1959,6 @@ impl Actor {
             }
             self.lap("crash_log", t);
         }
-        // Run i18: after a launch that changed nothing, an agent tapped the same icon again and again.
         s.idle = match s.idle.take() {
             _ if !result.settled || result.changed => None,
             Some((summary, n)) if summary == result.summary => Some((summary, n + 1)),

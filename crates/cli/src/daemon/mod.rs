@@ -107,7 +107,7 @@ pub struct Daemon {
     actors: Mutex<HashMap<String, mpsc::Sender<Job>>>,
     traces: Traces,
     told: Mutex<HashMap<String, String>>,
-    secrets: secrets::Secrets,
+    secrets: Arc<secrets::Secrets>,
     agents: Mutex<std::collections::HashSet<String>>,
     connections: AtomicUsize,
     last_activity: Mutex<Instant>,
@@ -132,7 +132,7 @@ impl Daemon {
             home: config.home,
             actors: Mutex::default(),
             told: Mutex::default(),
-            secrets: secrets::Secrets::default(),
+            secrets: Arc::default(),
             agents: Mutex::default(),
             connections: AtomicUsize::new(0),
             last_activity: Mutex::new(Instant::now()),
@@ -365,7 +365,14 @@ impl Daemon {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .entry(id.to_string())
-            .or_insert_with(|| actor::spawn(id.to_string(), self.source.clone(), self.home.clone()))
+            .or_insert_with(|| {
+                actor::spawn(
+                    id.to_string(),
+                    self.source.clone(),
+                    self.home.clone(),
+                    self.secrets.clone(),
+                )
+            })
             .clone()
     }
 

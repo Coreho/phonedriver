@@ -21,8 +21,8 @@ All checks are in `crates/cli/tests/secret_property.rs`. The fake phone there (`
 
 | Check | What it drives | Code it covers |
 |---|---|---|
-| `a_secret_reaches_no_reply_error_or_file_and_plain_text_no_password_field` | 256 sessions of 1 to 6 steps: `type` (secret or not; by ref, by name or into the focus; submit, append; alone or as a batch step), `shell` (secret or not; output echoing earlier secrets), taps on either field or on nothing, `snapshot`, `find`, `journal`, `record start` and `stop`; full traces on or off. After every call it searches the reply or error and every file under the home. At the end it searches the journal and the device's call log, and checks what the password field took. | `daemon/secrets.rs` (all of it). `daemon/mod.rs`: `Daemon::call`. `daemon/trace.rs`: `sanitize`, `hide_action`, `Traces::record`. `daemon/actor.rs`: the `Type` arm of `act_now` (the `secret_field` refusal, `withhold`, the focused-field lookup), `act` (`s.unsure`), `shell`, `batch`. `daemon/session.rs`: `unsure`, `set_last`. `daemon/journal.rs`: `Kept::of`, `Kept::step`. `core/device.rs`: `Debug` for `TextInput` and `ShellRequest`. `core/testing.rs`: `Call`. |
-| `the_sessions_that_leaked_before_the_fixes_stay_closed` | The four sessions behind findings F1 to F3, fixed. F3 needs a device failure at one exact step, which the random property meets about once in 3,000 sessions. | Same. |
+| `a_secret_reaches_no_reply_error_or_file_and_plain_text_no_password_field` | 256 sessions of 1 to 6 steps: `type` (secret or not; by ref, by name or into the focus; submit, append; alone or as a batch step), `shell` (secret or not; output echoing earlier secrets), taps on either field, on nothing or on a label that repeats what the note field holds, `snapshot`, `find`, `journal`, `record start` and `stop`; full traces on or off. After every call it searches the reply or error and every file under the home. At the end it searches the journal and the device's call log, and checks what the password field took. | `daemon/secrets.rs` (all of it). `daemon/mod.rs`: `Daemon::call`. `daemon/trace.rs`: `sanitize`, `hide_action`, `Traces::record`. `daemon/actor.rs`: the `Type` arm of `act_now` (the `secret_field` refusal, `withhold`, the focused-field lookup), `act` (`s.unsure`, and the summary it hands `Taping::step`), `shell`, `batch`. `daemon/session.rs`: `unsure`, `set_last`. `daemon/journal.rs`: `Kept::of`, `Kept::step`. `core/device.rs`: `Debug` for `TextInput` and `ShellRequest`. `core/testing.rs`: `Call`. |
+| `the_sessions_that_leaked_before_the_fixes_stay_closed` | The five sessions behind findings F1 to F3 and F5, fixed. F3 needs a device failure at one exact step, which the random property meets about once in 3,000 sessions. | Same. |
 | `every_kind_of_step_works_on_the_fake_phone` | One session with every kind of step; asserts three types went in and four secrets were tracked. It fails when the harness stops reaching the code (a renamed parameter makes every call an error, and a session of errors leaks nothing). | The harness. |
 | `survey` (ignored) | 3,000 deterministic sessions; prints every distinct kind of leak with a count and the first session that shows it. The property stops at its first failure; this lists them all. | Same as the first row. |
 
@@ -36,7 +36,7 @@ When you finish a change, run:
 git diff --stat be4cf0b -- crates/cli/src/daemon/secrets.rs crates/cli/src/daemon/mod.rs crates/cli/src/daemon/trace.rs crates/cli/src/daemon/actor.rs crates/cli/src/daemon/session.rs crates/cli/src/daemon/journal.rs crates/cli/src/wire.rs crates/core/src/device.rs crates/core/src/testing.rs
 ```
 
-Empty output means the check still describes the code. Otherwise read the diff for: a new method or action that takes secret text (add it to `secrets::carried` and to `Step` in the test); a new place the daemon writes (a file, a log line, a new process); a reply that leaves by another door than `Daemon::call`; a new string field whose content must not be masked (as `data_b64` is skipped); a change to when plain text is refused. Run the check. When it passes and you have confirmed the generators still reach the changed code, move the sync commit to the new hash. Do not move it only because the test passes: a new secret-carrying call the generators never send passes too.
+Empty output means the check still describes the code. Otherwise read the diff for: a new method or action that takes secret text (add it to `secrets::carried` and to `Step` in the test); a new place the daemon writes (a file, a log line, a new process: F5 was one, and such a place must mask with `Secrets::masked` itself); a reply that leaves by another door than `Daemon::call`; a new string field whose content must not be masked (as `data_b64` is skipped); a change to when plain text is refused. Run the check. When it passes and you have confirmed the generators still reach the changed code, move the sync commit to the new hash. Do not move it only because the test passes: a new secret-carrying call the generators never send passes too.
 
 ## Run
 
@@ -80,6 +80,7 @@ The script writes the file back with a new modification time, which is what make
 | B8 `Debug` prints a shell command | property |
 | B9 a failed step leaves the old focus trusted (`actor.rs`) | fixed sessions only |
 | B10 plain text goes into a password field | property, fixed sessions |
+| B11 the steps file of a recording is not masked (`actor.rs`) | fixed sessions |
 
 Before a commit that touches the covered files, run at least one break in the area you changed and confirm it still fails. A check that cannot fail is dead.
 
@@ -91,6 +92,7 @@ Found on the first run, 2026-11-15, and fixed in the sync commit (decision D70 h
 - **F2.** A secret `type` as a `batch` step was not masked at all. Only a client other than the CLI and MCP could send one.
 - **F3.** After a secret `type` whose tap moved the focus to the password field and whose text then failed, the next plain `type` with no target trusted the old screen and pasted plain text into the password field.
 - **F4.** `FakeDevice` kept a shell command as a `String`, so a failed assertion printing the call log printed a `shell --secret` command.
+- **F5.** Found by a review, not by this check, the day it was written: the steps file of a recording is written inside the actor, before `Daemon::call` masks anything, so a tap on a label that showed a remembered secret wrote the secret to `<video>.steps.jsonl`. The fake phone had no such label then. It has one now (`TapWhatTheNoteSays`).
 
 ## Not covered
 

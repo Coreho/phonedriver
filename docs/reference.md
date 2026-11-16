@@ -196,7 +196,7 @@ phonedriver setting set <key> <value> <key> <value>          # several writes in
 phonedriver setting open dark_ui_mode                        # shows that settings screen
 ```
 
-The API 37 emulator lists 182 settings on 196 screens; 105 can be written. A write answers with the value the device reports afterwards, and a refusal carries the device's reason. On a physical device, a setting the device marks as needing its user's confirmation (NFC, mobile data, the camera and microphone switches) is refused without `--force`. Older Android, iOS and the Simulator answer that the device has no settings by key: use `shell` there. Decision D57.
+The API 37 emulator lists 182 settings on 196 screens; 105 can be written. A write answers with the value the device reports afterwards, and a refusal carries the device's reason. On a physical device, a setting the device marks as needing its user's confirmation (NFC, mobile data, the camera and microphone switches) answers `unsupported` without `--force`. Older Android, iOS and the Simulator answer that the device has no settings by key: use `shell` there. Decision D57.
 
 ### Logs and crashes
 
@@ -211,6 +211,10 @@ hint: `phonedriver logs dev.phonedriver.testbed` prints its last log lines
 ```
 
 iOS devices and the Simulator answer that logs cannot be read. Decision D58.
+
+### Screens with no element list
+
+A web view with accessibility off, a Flutter screen or a game gives no list of elements. phonedriver then reads the screenshot's text on the machine the daemon runs on and adds the lines it finds, marked `(ocr)`; `tap "Send"` taps one. `snapshot --pixels` asks for this on any screen. macOS and Windows use the text recognition the system ships. Linux uses Tesseract when the `tesseract` program is on the `PATH` (`apt install tesseract-ocr`); without it, `--pixels` answers that pixels cannot be read and names the package. Decisions D61, D64 and D65.
 
 ### Saving and replaying a run
 

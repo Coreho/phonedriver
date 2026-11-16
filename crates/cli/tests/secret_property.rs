@@ -54,11 +54,17 @@ impl Screen {
             r#"{{"windows":[{{"id":1,"type":"application","package":"com.example","bounds":[0,0,360,800]}}],"nodes":[
             {{"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"}},
             {{"p":0,"w":1,"cls":"android.widget.EditText","text":"{}","desc":"Note","b":[0,100,360,160],"f":"vVeE{}","a":["tap","set_text"]}},
-            {{"p":0,"w":1,"cls":"android.widget.EditText","text":"{}","desc":"Password","b":[0,200,360,260],"f":"vVeEP{}","a":["tap","set_text"]}}]}}"#,
+            {{"p":0,"w":1,"cls":"android.widget.EditText","text":"{}","desc":"Password","b":[0,200,360,260],"f":"vVeEP{}","a":["tap","set_text"]}},
+            {{"p":0,"w":1,"cls":"android.widget.TextView","text":"{}","b":[0,300,360,360],"f":"vVe","a":["tap"]}}]}}"#,
             self.note,
             focused(Field::Note),
             "•".repeat(self.password.chars().count()),
             focused(Field::Password),
+            if self.note.is_empty() {
+                "Nothing yet"
+            } else {
+                &self.note
+            },
         );
         RawTree::from_android_json(&json, Scale { density: 1.0 }).unwrap()
     }
@@ -86,7 +92,7 @@ impl Screen {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Into {
+enum Aim {
     Note,
     Password,
     NoteByName,
@@ -99,7 +105,7 @@ enum Step {
     Snapshot,
     Type {
         flagged: bool,
-        into: Into,
+        into: Aim,
         submit: bool,
         append: bool,
         in_batch: bool,
@@ -110,6 +116,7 @@ enum Step {
     },
     Tap(Field),
     TapNothing,
+    TapWhatTheNoteSays,
     Find,
     Journal,
     RecordStart,
@@ -118,11 +125,11 @@ enum Step {
 
 fn steps() -> impl Strategy<Value = Vec<Step>> {
     let into = prop_oneof![
-        Just(Into::Note),
-        Just(Into::Password),
-        Just(Into::NoteByName),
-        Just(Into::PasswordByName),
-        Just(Into::Focused),
+        Just(Aim::Note),
+        Just(Aim::Password),
+        Just(Aim::NoteByName),
+        Just(Aim::PasswordByName),
+        Just(Aim::Focused),
     ];
     let typed = (
         any::<bool>(),
@@ -142,6 +149,7 @@ fn steps() -> impl Strategy<Value = Vec<Step>> {
         4 => typed,
         2 => any::<(bool, bool)>().prop_map(|(flagged, echoes)| Step::Shell { flagged, echoes }),
         1 => Just(Step::TapNothing),
+        1 => Just(Step::TapWhatTheNoteSays),
         2 => Just(Step::Snapshot),
         1 => Just(Step::Tap(Field::Note)),
         1 => Just(Step::Tap(Field::Password)),
@@ -252,6 +260,23 @@ async fn session(steps: &[Step], full: bool, deaf: bool, fails: bool, home: &Pat
                 )
                 .await,
             ),
+            Step::TapWhatTheNoteSays => {
+                let (_, shown) = call("snapshot", json!({})).await;
+                let label = shown
+                    .split("@e")
+                    .filter_map(|rest| rest.split_once(" text "))
+                    .map(|(number, _)| format!("e{number}"))
+                    .last()
+                    .unwrap_or_default();
+                (
+                    "tap the label",
+                    call(
+                        "act",
+                        json!({"action": {"kind": "tap", "target": {"ref": label}}}),
+                    )
+                    .await,
+                )
+            }
             Step::RecordStart => {
                 let path = home.join(format!("rec{i}.mp4"));
                 (
@@ -294,11 +319,11 @@ async fn session(steps: &[Step], full: bool, deaf: bool, fails: bool, home: &Pat
             } => {
                 let text = format!("Ty{i}mW4zR8nB3c");
                 let target = match into {
-                    Into::Note => Some(json!({"ref": "e1"})),
-                    Into::Password => Some(json!({"ref": "e2"})),
-                    Into::NoteByName => Some(json!({"text": "Note"})),
-                    Into::PasswordByName => Some(json!({"text": "Password"})),
-                    Into::Focused => None,
+                    Aim::Note => Some(json!({"ref": "e1"})),
+                    Aim::Password => Some(json!({"ref": "e2"})),
+                    Aim::NoteByName => Some(json!({"text": "Note"})),
+                    Aim::PasswordByName => Some(json!({"text": "Password"})),
+                    Aim::Focused => None,
                 };
                 if *flagged {
                     secrets.push(text.clone());
@@ -410,7 +435,7 @@ proptest! {
     }
 }
 
-fn typed(flagged: bool, into: Into, in_batch: bool) -> Step {
+fn typed(flagged: bool, into: Aim, in_batch: bool) -> Step {
     Step::Type {
         flagged,
         into,
@@ -422,16 +447,16 @@ fn typed(flagged: bool, into: Into, in_batch: bool) -> Step {
 
 #[test]
 fn the_sessions_that_leaked_before_the_fixes_stay_closed() {
-    let found: [(&str, Vec<Step>, bool); 4] = [
+    let found: [(&str, Vec<Step>, bool); 5] = [
         (
             "F1, a later look at a plain field",
-            vec![typed(true, Into::Note, false), Step::Snapshot, Step::Find],
+            vec![typed(true, Aim::Note, false), Step::Snapshot, Step::Find],
             false,
         ),
         (
             "F1, the device prints it back",
             vec![
-                typed(true, Into::Note, false),
+                typed(true, Aim::Note, false),
                 Step::Shell {
                     flagged: false,
                     echoes: true,
@@ -439,13 +464,23 @@ fn the_sessions_that_leaked_before_the_fixes_stay_closed() {
             ],
             false,
         ),
-        ("F2, a batch", vec![typed(true, Into::Note, true)], false),
+        ("F2, a batch", vec![typed(true, Aim::Note, true)], false),
+        (
+            "F5, a tap on a label that shows the secret, while recording",
+            vec![
+                Step::RecordStart,
+                typed(true, Aim::Note, false),
+                Step::TapWhatTheNoteSays,
+                Step::RecordStop,
+            ],
+            false,
+        ),
         (
             "F3, the focus moved under a step that failed",
             vec![
                 Step::Tap(Field::Note),
-                typed(true, Into::PasswordByName, false),
-                typed(false, Into::Focused, false),
+                typed(true, Aim::PasswordByName, false),
+                typed(false, Aim::Focused, false),
             ],
             true,
         ),
@@ -464,21 +499,21 @@ fn every_kind_of_step_works_on_the_fake_phone() {
         Step::Tap(Field::Note),
         Step::Type {
             flagged: true,
-            into: Into::Note,
+            into: Aim::Note,
             submit: false,
             append: false,
             in_batch: false,
         },
         Step::Type {
             flagged: true,
-            into: Into::Password,
+            into: Aim::Password,
             submit: false,
             append: false,
             in_batch: false,
         },
         Step::Type {
             flagged: true,
-            into: Into::Focused,
+            into: Aim::Focused,
             submit: false,
             append: true,
             in_batch: false,

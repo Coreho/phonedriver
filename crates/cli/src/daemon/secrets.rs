@@ -59,6 +59,13 @@ impl Secrets {
         all.sort_by_key(|s| std::cmp::Reverse(s.len()));
         all
     }
+
+    /// `text` with every remembered secret masked: for what the daemon writes to disk itself.
+    pub fn masked(&self, text: &str) -> String {
+        let mut text = text.to_string();
+        hide_text(&mut text, &self.with(Vec::new()));
+        text
+    }
 }
 
 fn hide_text(text: &mut String, secrets: &[String]) {

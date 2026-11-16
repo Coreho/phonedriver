@@ -11,6 +11,7 @@ BREAKS = {
     "B7-debug-prints-typed-text": ("crates/core/src/device.rs", 'write!(f, "{mode}({} chars)", text.chars().count())', 'write!(f, "{mode}({text})")'),
     "B8-debug-prints-a-shell-command": ("crates/core/src/device.rs", 'write!(f, "Shell({} chars)", self.command.chars().count())', 'write!(f, "Shell({})", self.command)'),
     "B9-a-failed-step-leaves-the-old-focus-trusted": ("crates/cli/src/daemon/actor.rs", ".filter(|_| !s.unsure)", ""),
+    "B11-the-steps-file-of-a-recording-is-not-masked": ("crates/cli/src/daemon/actor.rs", "taping.step(began, &self.secrets.masked(&result.summary));", "taping.step(began, &result.summary);"),
     "B10-plain-text-goes-into-a-password-field": ("crates/cli/src/daemon/actor.rs", "                if !secret\n                    && !text.is_empty()\n                    && let Some((f, kind)) = field", "                if false\n                    && let Some((f, kind)) = field"),
 }
 if len(sys.argv) != 2 or sys.argv[1] not in BREAKS:

@@ -250,6 +250,8 @@ async fn open_opens_the_screens_link_and_returns_the_screen() {
         fake.calls()
     );
     assert_eq!(r["summary"], "opened the settings screen dark_ui_mode");
+    let journal = d.call("default", "journal", json!({})).await.unwrap();
+    assert_eq!(journal["steps"].as_array().unwrap().len(), 1, "{journal}");
     let e = err(&d, json!({"open": "nfc_screen"})).await;
     assert_eq!(e.code, -32025);
     assert!(e.message.contains("cannot be opened"), "{}", e.message);
