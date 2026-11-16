@@ -72,7 +72,7 @@ This is my own test set. All three tools ran on the same Android emulator on 10 
 
 ## What the model sees
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/reads-dark.webp"><img alt="A phone screen drawn in characters. A line moves down it, and each row it passes becomes a numbered line of text beside the phone." src=".github/assets/reads-light.webp" width="100%"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/reads-dark.webp"><img alt="A recorded run on an Android emulator. The Settings screen is drawn in dots on the left; a line moves down it and each row becomes a numbered line of text on the right. Then phonedriver tap @e24 switches Dark theme on, the screen turns dark, and the reply lists the two lines that changed." src=".github/assets/reads-light.webp" width="100%"></picture></p>
 
 Each screen arrives as a short numbered list. This is the Settings app on an Android emulator:
 

@@ -1,0 +1,72 @@
+{
+  "screen": {
+    "w": 411,
+    "h": 923
+  },
+  "before": "reads-before.png",
+  "after": "reads-after.png",
+  "snapshot_command": "phonedriver snapshot",
+  "snapshot": [
+    {
+      "text": "app com.android.settings (Settings) · keyboard hidden · settled in 0ms"
+    },
+    {
+      "text": "@e13 group scrollable↑"
+    },
+    {
+      "text": "  @e14 group \"Display & touch\""
+    },
+    {
+      "text": "    @e15 button \"Navigate up\"",
+      "y": 82
+    },
+    {
+      "text": "  @e16 list 17 rows scrollable↓"
+    },
+    {
+      "text": "    @e17 text \"Brightness\"",
+      "y": 144
+    },
+    {
+      "text": "    @e18 button \"Brightness level\" \"83%\"",
+      "y": 200
+    },
+    {
+      "text": "    @e19 text \"Lock display\"",
+      "y": 272
+    },
+    {
+      "text": "    @e20 button \"Lock screen\" \"Show all notification content\"",
+      "y": 328
+    },
+    {
+      "text": "    @e21 button \"Screen timeout\" \"Not set\"",
+      "y": 403
+    },
+    {
+      "text": "    @e22 text \"Appearance\"",
+      "y": 476
+    },
+    {
+      "text": "    @e23 button \"Dark theme\" \"Will turn on when Bedtime starts\"",
+      "y": 532
+    },
+    {
+      "text": "      @e24 switch \"Dark theme\" off",
+      "y": 532
+    },
+    {
+      "text": "    ..."
+    }
+  ],
+  "tap_command": "phonedriver tap @e24",
+  "tap": {
+    "x": 353,
+    "y": 532
+  },
+  "reply": [
+    "ok tapped @e24 \"Dark theme\" at 353,532 · settled in 1350ms",
+    "~ @e23 button \"Dark theme\" \"Will turn on when Bedtime starts\" → \"Will never turn off automatically\"",
+    "~ @e24 switch \"Dark theme\" off → on"
+  ]
+}
