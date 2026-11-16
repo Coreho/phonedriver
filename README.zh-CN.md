@@ -29,6 +29,14 @@ phonedriver 让 Claude Code、Codex、Cursor 或任何 MCP 客户端都能使用
 ## 开始
 
 ```sh
+npx -y phonedriver init
+```
+
+这条命令会把 phonedriver 添加到它在你电脑上找到的每个智能体（Claude Code、Codex、Cursor、VS Code、Gemini CLI），然后检查 adb、你的设备和 Xcode，并告诉你需要修复什么。已经添加过的智能体不会被改动。加上 `--dry-run` 只显示它将要做什么。
+
+只给某一个智能体手动添加：
+
+```sh
 claude mcp add phonedriver -- npx -y phonedriver mcp
 ```
 

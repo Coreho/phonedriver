@@ -2622,3 +2622,7 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Test first: `press_landscape_and_portrait_turn_the_screen_and_an_unknown_key_lists_them` failed with `no variant, associated function, or constant named Landscape`, then passed (`--test daemon press_`: 6 passed).
 - Live, iPhone 17 Simulator, Safari: `press landscape` -> `ok pressed landscape · settled in 808ms · new screen` / `874x402pt · landscape`; `screenshot` -> `land.png 874x402`, looked at: Safari on its side, tab bar across the top; `press portrait` -> `402x874pt · portrait`. `cargo test -p phonedriver-ios --test device_live landscape -- --ignored` on that simulator: 1 passed in 9.88 s.
 - Not run: anything on Android (no emulator today; its test in `states.rs` is written and unrun), a physical iPhone, a tap in landscape.
+
+## 2026-11-16: the translated READMEs start with `init` too
+
+- `README.ja.md`, `README.ko.md` and `README.zh-CN.md` opened with `claude mcp add`; they now open with `npx -y phonedriver init` and the same paragraph as the English one, then the by-hand command. I wrote the three translations myself; no native speaker has read them.

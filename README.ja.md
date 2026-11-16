@@ -29,6 +29,14 @@ phonedriver は、Claude Code、Codex、Cursor、その他あらゆる MCP ク�
 ## 始め方
 
 ```sh
+npx -y phonedriver init
+```
+
+このコマンドは、お使いのコンピューターで見つけたすべてのエージェント（Claude Code、Codex、Cursor、VS Code、Gemini CLI）に phonedriver を追加し、続いて adb、デバイス、Xcode を確認して、直すべき点を伝えます。すでに追加済みのエージェントには手を加えません。`--dry-run` を付けると、何をするかだけを表示します。
+
+エージェントを 1 つだけ手動で追加する場合:
+
+```sh
 claude mcp add phonedriver -- npx -y phonedriver mcp
 ```
 
