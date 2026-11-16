@@ -1,7 +1,7 @@
 ---
 title: phonedriver vs mobile-mcp
 seo: phonedriver vs mobile-mcp: an alternative with 6.9x fewer tokens
-updated: 2026-11-14
+updated: 2026-11-16
 meta: On nine real phone jobs mobile-mcp used 6.9x the tokens of phonedriver and passed 17 of 18 runs against 27 of 27. Platforms, telemetry and install compared.
 description: Two MCP servers that let an AI agent control a phone. On nine real phone jobs on one emulator, mobile-mcp used 6.9 times the tokens of phonedriver and passed 17 of 18 runs against 27 of 27. What each reads, installs, waits for and sends, and what I have not measured.
 ---
@@ -10,7 +10,7 @@ description: Two MCP servers that let an AI agent control a phone. On nine real 
 
 **On nine phone jobs on one emulator, 10 November 2026, mobile-mcp used 6.9 times the tokens of phonedriver:** 4,567,200 against 657,542 as the sum of per-job medians, with 17 of 18 runs passed against 27 of 27. Wall time summed to 523 s against 306 s.
 
-Both are MCP servers that give an agent a phone. phonedriver keeps a resident agent on Android, returns a settled diff after every action, asks before a tap that spends money, and sends no telemetry. mobile-mcp reaches cloud devices through Mobile Next Cloud, which phonedriver does not. I have no per-operation speed comparison with mobile-mcp. The feature rows below are from its README and from my reading of its source, and the rows say which.
+Both are MCP servers that give an agent a phone. mobile-mcp reaches cloud devices through Mobile Next Cloud, which phonedriver does not. I have no per-operation speed comparison with mobile-mcp. The feature rows below are from its README and from my reading of its source, and the rows say which.
 
 ## Side by side
 
@@ -24,7 +24,7 @@ Both are MCP servers that give an agent a phone. phonedriver keeps a resident ag
 | Telemetry | None | Anonymous usage telemetry through PostHog and Scarf, on by default. Opt out with `MOBILEMCP_DISABLE_TELEMETRY=1` (its README) |
 | Install | `claude mcp add phonedriver -- npx -y phonedriver mcp`, or Homebrew or a shell installer ([install](/docs/install/)) | `npx @mobilenext/mobile-mcp@latest install`, which configures detected clients (its README) |
 | License | AGPL-3.0-only | Apache-2.0 |
-| Adoption | New: first released on 10 November 2026 | About 10.4k GitHub stars on 2026-11-06 |
+| Adoption | New: first released on 10 November 2026 | About 10.6k GitHub stars, checked on 2026-11-16 |
 
 ## What mobile-mcp has that phonedriver does not
 
@@ -54,9 +54,11 @@ On 10 November 2026 both tools ran on the same Android emulator, one agent at a 
 | log-code | 3/3, 53,962 | 2/2, 151,038 | 2.8x |
 | Sum | 27/27, 657,542 | 17/18, 4,567,200 | 6.9x |
 
-Tool calls summed to 99 for phonedriver and 276.5 for mobile-mcp, and wall time to 306 s and 523 s. mobile-mcp's one failure was chrome-prefs, which ended with "Always use secure connections" off. It was 5.0 times phonedriver's tokens on 7 November, on an earlier emulator of the same image. It is a test set I wrote, and mobile-mcp may do better on a job I did not think of. The runs, the checks and what I threw away are in [the benchmark post](/blog/phonedriver-vs-mobile-mcp-vs-phone-harness-vs-adb-real-phone-jobs/) and on the [benchmarks page](/benchmarks/#jobs).
+Tool calls summed to 99 for phonedriver and 276.5 for mobile-mcp. mobile-mcp's one failure was chrome-prefs, which ended with "Always use secure connections" off. It was 5.0 times phonedriver's tokens on 7 November, on an earlier emulator of the same image.
 
-Setup matters for it. In my earlier token run, mobile-mcp took screenshots and launched apps but failed taps and UI listing with "device server did not start within 5s", and, against a remote adb server, an `adb forward` bind error. Its helper forwards a port to its device server, and a remote adb server binds that port on the wrong machine. In that run it also left an on-device server (`com.mobilenext.mobilecli.DeviceServer`) holding the accessibility bridge, which made other tools fail with `another UiAutomation client` until I killed it between runs. Both were faults of my setup on a tunnelled emulator, not a measured capability. I have no per-operation speed comparison with mobile-mcp.
+It is a test set I wrote, and mobile-mcp may do better on a job I did not think of. The runs, the checks and what I threw away are in [the benchmark post](/blog/phonedriver-vs-mobile-mcp-vs-phone-harness-vs-adb-real-phone-jobs/) and on the [benchmarks page](/benchmarks/#jobs).
+
+Setup matters for it. In my earlier token run, mobile-mcp took screenshots and launched apps but failed taps and UI listing with "device server did not start within 5s", and, against a remote adb server, an `adb forward` bind error. Its helper forwards a port to its device server, and a remote adb server binds that port on the wrong machine. In that run it also left an on-device server (`com.mobilenext.mobilecli.DeviceServer`) holding the accessibility bridge, which made other tools fail with `another UiAutomation client` until I killed it between runs. Both were faults of my setup on a tunnelled emulator, not a measured capability.
 
 ## Use which
 

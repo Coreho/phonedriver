@@ -42,7 +42,7 @@ WebDriverAgent is an XCTest runner that takes WebDriver requests over HTTP. phon
 | Taps (59 elements) | 12.9 ms | 108.8 ms | 26.1 ms | 2.02x |
 | Settings (168 elements) | 24.7 ms | 477.4 ms | 49.7 ms | 2.01x |
 
-Against WebDriverAgent with only `snapshotMaxDepth` set, the runner is 8 to 19 times faster. Against fully tuned WebDriverAgent it is 2.0 times faster. This is a simulator, not an iPhone, and a tuned Appium setup is closer than its defaults suggest. The method is in [how phonedriver works](/blog/how-phonedriver-works/#ios-my-own-runner).
+Against WebDriverAgent with only `snapshotMaxDepth` set, the runner is 8 to 19 times faster. This is a simulator, not an iPhone, and a tuned Appium setup is closer than its defaults suggest. The method is in [how phonedriver works](/blog/how-phonedriver-works/#ios-my-own-runner).
 
 ## What I have not measured
 

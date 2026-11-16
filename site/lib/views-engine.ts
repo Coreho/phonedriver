@@ -9,6 +9,8 @@ const FLIGHT = 520;
 const CELL = 5;
 const SHED = 64;
 const LAND = 300;
+const SHORT = 6;
+const OPEN = 300;
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
 const easeInOut = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
@@ -29,8 +31,12 @@ export function mountViews(el: HTMLElement): () => void {
   const readout = el.querySelector<HTMLElement>(".tv-readout")!;
   const rows = [...lines.children] as HTMLElement[];
   const count = lines.querySelectorAll("[data-i]").length;
-  const rest = Number(el.dataset.on);
-  let on = rest;
+  const more = el.querySelector<HTMLButtonElement>(".tv-more")!;
+  const narrow = matchMedia("(max-width:899px)");
+  const kept = rows.slice(0, SHORT).filter((r) => r.dataset.i).length;
+  const short = () => "short" in el.dataset && narrow.matches;
+  const rest = () => (short() ? Math.min(Number(el.dataset.on), kept) : Number(el.dataset.on));
+  let on = Number(el.dataset.on);
   let timers: number[] = [];
   let off = () => {};
 
@@ -214,7 +220,7 @@ export function mountViews(el: HTMLElement): () => void {
       window.setTimeout(
         () => {
           stop();
-          set(rest);
+          set(rest());
         },
         START + SCAN + HOLD + CLEAR + 80,
       ),
@@ -227,18 +233,33 @@ export function mountViews(el: HTMLElement): () => void {
     if ("run" in el.dataset) stop();
     set(Number(hit.dataset.i));
   };
+  const open = () => {
+    if (!short()) return;
+    const from = pane.offsetHeight;
+    delete el.dataset.short;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    pane.style.overflow = "hidden";
+    pane.animate([{ height: `${from}px` }, { height: `${pane.offsetHeight}px` }], { duration: OPEN, easing: getComputedStyle(el).getPropertyValue("--out").trim() || "ease-out" }).finished.then(() => {
+      pane.style.overflow = "";
+    }, () => undefined);
+  };
   const onKey = (e: KeyboardEvent) => {
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
     if (!step) return;
     e.preventDefault();
     stop();
-    set(Math.min(count, Math.max(1, on + step)));
+    const to = Math.min(count, Math.max(1, on + step));
+    if (to > kept) open();
+    set(to);
   };
 
   el.addEventListener("pointerover", pick);
   el.addEventListener("click", pick);
   el.addEventListener("life", read);
   lines.addEventListener("keydown", onKey);
+  more.addEventListener("click", open);
+  el.dataset.short = "";
+  if (short()) set(rest());
   const ro = new ResizeObserver(draw);
   ro.observe(el);
   el.dataset.live = "";
@@ -250,5 +271,7 @@ export function mountViews(el: HTMLElement): () => void {
     el.removeEventListener("click", pick);
     el.removeEventListener("life", read);
     lines.removeEventListener("keydown", onKey);
+    more.removeEventListener("click", open);
+    delete el.dataset.short;
   };
 }

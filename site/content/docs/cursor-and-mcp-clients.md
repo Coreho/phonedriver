@@ -6,7 +6,9 @@ description: Add phonedriver to Cursor, Gemini CLI, Zed, Cline or any MCP client
 updated: 2026-11-14
 ---
 
-Any client that starts a stdio MCP server can use phonedriver: the command is `npx` with the arguments `-y phonedriver mcp`. I test with Claude Code. I have not run a session in Cursor, Gemini CLI, Zed or Cline, so the steps below come from each client's own documentation, read on 14 November 2026, and not from something I watched work. [Codex](/docs/codex/) and [VS Code](/docs/vs-code/) have their own pages.
+Any client that starts a stdio MCP server can use phonedriver: the command is `npx` with the arguments `-y phonedriver mcp`. [Codex](/docs/codex/) and [VS Code](/docs/vs-code/) have their own pages.
+
+I test with Claude Code. I have not run a session in Cursor, Gemini CLI, Zed or Cline, so the steps below come from each client's own documentation, read on 14 November 2026, and not from something I watched work.
 
 ## The entry
 

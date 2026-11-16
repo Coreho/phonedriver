@@ -25,6 +25,10 @@ a:focus-visible,button:focus-visible,summary:focus-visible,pre:focus-visible,[ta
 .skip{position:absolute;left:-999px;padding:12px 16px;background:var(--or);color:#0b0b0c;font:600 14px/1 var(--jb);letter-spacing:-.01em;text-align:center;text-decoration:none}
 .skip:focus{position:fixed;inset:0 0 auto;z-index:20;display:grid;place-items:center;min-height:69px;outline-offset:-5px;outline-color:#0b0b0c}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.who{list-style:none;margin:0;padding:0;display:flex;align-items:center;gap:14px}
+.who li{display:flex;opacity:0;translate:0 5px}
+[data-on]>.who li{opacity:.9;translate:0 0;transition:opacity .2s linear calc(var(--n)*35ms + var(--base,0ms)),translate .32s var(--out) calc(var(--n)*35ms + var(--base,0ms))}
+.who svg{display:block;width:20px;height:20px;fill:currentColor}
 .nb{white-space:nowrap}
 main :where(p,li,dd,td,figcaption) a{padding-block:4px}
 .wrap{max-width:1440px;margin:0 auto;padding:0 var(--gut)}

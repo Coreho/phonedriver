@@ -38,7 +38,9 @@ The tap timed on the device itself, from the host sending it to the testbed's to
 
 ## Tokens
 
-An agent given only adb finished three Android tasks in a token run as follows: it set an alarm in 2 calls and 18,607 tokens using the `SET_ALARM` intent, which the task allows, found Grace Hopper's birth date in 9 calls and 72,554 tokens, and failed the web form, a WebView with no accessibility nodes, because it could use nothing but adb. When the job has an intent, adb is hard to beat. When the screen is the only way in, it is not ([token benchmark](/benchmarks/#tokens)). On the two mixed jobs of the [real phone jobs benchmark](/blog/phonedriver-vs-mobile-mcp-vs-phone-harness-vs-adb-real-phone-jobs/), where any route was allowed, adb passed 4 of 4 with 203,751 tokens in total, and phonedriver passed 6 of 6 with 92,737 for the same two jobs (10 November 2026).
+An agent given only adb finished three Android tasks in a token run as follows: it set an alarm in 2 calls and 18,607 tokens using the `SET_ALARM` intent, which the task allows, found Grace Hopper's birth date in 9 calls and 72,554 tokens, and failed the web form, a WebView with no accessibility nodes, because it could use nothing but adb. When the job has an intent, adb is hard to beat. When the screen is the only way in, it is not ([token benchmark](/benchmarks/#tokens)).
+
+On the two mixed jobs of the [real phone jobs benchmark](/blog/phonedriver-vs-mobile-mcp-vs-phone-harness-vs-adb-real-phone-jobs/), where any route was allowed, adb passed 4 of 4 with 203,751 tokens in total, and phonedriver passed 6 of 6 with 92,737 for the same two jobs (10 November 2026).
 
 ## Where adb is better
 

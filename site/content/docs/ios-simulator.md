@@ -7,7 +7,9 @@ seo: How to let an AI agent control the iOS Simulator over MCP
 updated: 2026-11-14
 ---
 
-To let an AI agent control the iOS Simulator, boot a Simulator on a Mac with Xcode and add phonedriver to your agent as an MCP server. The agent reads the screen as text and taps through an XCTest runner that phonedriver builds for you. The iOS Simulator is a tested target: the 12-scenario suite passes on iOS 26.5, three runs in a row. One scenario, `settings-dark-appearance`, failed twice in six full runs and I have not found the cause.
+To let an AI agent control the iOS Simulator, boot a Simulator on a Mac with Xcode and add phonedriver to your agent as an MCP server. The agent reads the screen as text and taps through an XCTest runner that phonedriver builds for you.
+
+The iOS Simulator is a tested target: the 12-scenario suite passes on iOS 26.5, three runs in a row. One scenario, `settings-dark-appearance`, failed twice in six full runs and I have not found the cause.
 
 ## What you need
 

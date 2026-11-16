@@ -100,7 +100,7 @@ export const FAQ_MORE = [
   ]
 ] as [string, string][];
 
-const ON_HOME = ["What is the best MCP server for controlling a phone?", "Is there an alternative to mobile-mcp?", "Is phonedriver an Appium alternative for AI agents?", "Can Codex or Cursor control a phone?", "Does it install anything on my phone?", "Does phonedriver send telemetry?"];
+const ON_HOME = ["Is there an alternative to mobile-mcp?"];
 export const HOME_FAQ = [...FAQ, ...FAQ_MORE.filter(([q]) => ON_HOME.includes(q))];
 
 export const FAQ_EXTRA = [

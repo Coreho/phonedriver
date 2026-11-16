@@ -19,7 +19,7 @@ phonedriver ios setup                    # signing team, pairing, Developer Mode
 phonedriver --device ios:<udid> snapshot
 ```
 
-`ios setup` prints one line for each step and says what to do for a step that needs you. The runner on the iPhone is signed with your Apple developer team. phonedriver reads the team from this Mac's Apple Development certificate. To make one, sign in under Xcode > Settings > Accounts, choose Manage Certificates and add an Apple Development certificate. With certificates for several teams, set `PHONEDRIVER_TEAM` to the ID of the one to use.
+`ios setup` prints one line for each step and says what to do for a step that needs you. phonedriver reads the signing team from this Mac's Apple Development certificate. To make one, sign in under Xcode > Settings > Accounts, choose Manage Certificates and add an Apple Development certificate. With certificates for several teams, set `PHONEDRIVER_TEAM` to the ID of the one to use.
 
 Without a team, the command stops with exit code 3 and says so. If the iPhone has never been used with that team, the command asks for `phonedriver ios register`. That lets Xcode add the iPhone to the team's Apple developer account, which holds 100 iPhones a year. If you set `PHONEDRIVER_TEAM`, run `phonedriver daemon stop` afterwards: the daemon reads it when it starts.
 

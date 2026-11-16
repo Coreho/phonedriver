@@ -167,6 +167,7 @@ export function mountHero(hero: HTMLElement): () => void {
   const set = q(".hx-set");
   const view = q(".lg-view");
   const quip = q(".hx-quip");
+  const who = q(".hx-who");
   const rows = [...view.querySelectorAll<HTMLElement>("li")];
   const rowTimes = rows.map((r) => Number(r.dataset.t));
   const ask = q(".lg-ask");
@@ -322,6 +323,7 @@ export function mountHero(hero: HTMLElement): () => void {
     drawn.quip = key;
     const say = QUIPS[key];
     flag(quip, "on", !!say);
+    flag(who, "on", key === "paste");
     clearInterval(typing);
     if (!say) return;
     flag(quip, "key", !!say.key);
@@ -330,6 +332,8 @@ export function mountHero(hero: HTMLElement): () => void {
     const x = Math.max(14, Math.min(W - quip.offsetWidth - 14, s.x + box.x + (209 + (QUIP_AT[0] - 209) * size) * k));
     quip.style.left = `${x - s.x}px`;
     quip.style.top = `${box.y + QUIP_AT[1] * size * k}px`;
+    who.style.left = quip.style.left;
+    who.style.top = `${box.y + QUIP_AT[1] * size * k + quip.offsetHeight}px`;
     if (reduce) return;
     let n = 0;
     quip.textContent = "";
@@ -551,7 +555,7 @@ export function mountHero(hero: HTMLElement): () => void {
     if (!(e.target as HTMLElement).closest("[data-copy]")) return;
     const busy = started && !video.paused;
     aside = { t0: performance.now() - (busy ? TIP[0] * 1000 : 0), capOnly: busy };
-    if (!busy && !hero.dataset.held) remark("paste", 2400);
+    if (!busy && !hero.dataset.held) remark("paste", 3400);
     kick();
   });
 

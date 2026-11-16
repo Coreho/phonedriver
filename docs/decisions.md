@@ -745,3 +745,25 @@ Over USB the HONOR's median tap is 456 ms before and 471 ms now, which is noise.
 
 **Reopen if.** A real phone shows the held row trembling while an answer above it folds (then close the other answer first), or the fade feels like a page change (then shorten it or scroll in steps).
 
+
+## D72. The home page says each thing once, and reference lives in the docs
+
+**Choice.** Each stop on the home page is a heading, a lede of at most two sentences and one sentence of caption per figure. (1) The approval stop keeps three facts (the three answers, the eleven languages and what they miss, password fields) in the left column under the lede, beside the recorded prompt, and one link to the approval guard doc; `PHONEDRIVER_ASK`, `autonomous: true` and `PHONEDRIVER_GUARD=off` are in that doc only. (2) "How it works" ends at the device table and the tool list; no cable, slow links and the 30-second hand-over are in the phone guides and the changelog only. (3) The limits are five one-thought items. (4) The home page shows the four questions in `FAQ`; the six search-shaped ones are on `/faq/` only, and that page's structured data picks them up because it lists every question the home page does not. (5) A caption does not repeat a number its figure already shows.
+
+**Why.** The user asked whether the page was too wordy and then for it to be as clean as possible. Captured on the Mac mini before the change: 18 screens at 1440x900 and 27 at 390x844, about 2,190 words in view, the node and line counts stated three times in the read stop, "the human said no, nothing was charged" twice in a row, and five fact blocks under the approval prompt in a second band while the column beside the prompt stood empty.
+
+**Limits.** The home page gives up the six search-shaped questions as on-page text and in its own FAQ structured data; they stay indexed on `/faq/`. The approval lede names four of the seven guarded labels. Judged from headless captures in dark, light, tablet and phone widths, not by a person on a phone.
+
+**Reopen if.** Search traffic to the home page for those six questions drops, or a reader asks on the page for something that moved to the docs.
+
+**Reopened the same day.** The home page shows five questions: "Is there an alternative to mobile-mcp?" is back. On 14 November Brave ranked the home page fifth for "mobile-mcp alternative", and on 16 November Google had not yet crawled `/compare/mobile-mcp/` (Search Console: discovered, not indexed), so the home page is the only indexed page that answers it. The tool names in the token chart and "adb" in the speed lede now link to their comparison pages; before, the home page had no link to `/compare/mobile-mcp/`. Take the question off the home page again once the comparison page ranks for that query.
+
+## D73. The race runs at real speed on request, a copied prompt says where it goes, and the read is six lines on a phone
+
+**Choice.** (1) The race has a two-way switch, "25x slower" and "Real speed" (`site/lib/race-engine.ts`). Slowed, each ball loops on its own trip time as before. At real speed all eight leave together every 4.7 s (the slowest trip plus 1.1 s of rest); a ball that is back lights its figure, and a trip under 60 ms, too short to draw, leaves a streak along its lane. Choosing a speed starts the race even with reduced motion on, since the reader asked for it. (2) After the setup prompt is copied, the page says "Copied. Paste it into your agent." with the marks of the eight clients the docs cover. In the hero the chauffeur already says that line, so the marks appear under it; from the dock and the install box it is a notice under the dock for 4.2 s (`site/components/Paste.tsx`, `copy-engine.ts`). A copied shell command or config gets no notice. (3) Below 900 px the snapshot in the read shows its first six lines and a "Show all 14 lines" row, which opens by its height in 300 ms and does not close again (`views-engine.ts`). The line selected at rest is then `@e4`, the last one in view.
+
+**Why.** The user picked these three from a list of ideas. A reader told "170x" learns a number; watching phonedriver's ball come home before adb's has left the start is the same fact felt. Copying the prompt is the page's one job and "Copied" did not say what to do with it. The read was five screens on a phone.
+
+**Limits.** The marks are from Simple Icons 16.38.0 (CC0 data); each is its owner's trademark, used to name a client. Only Claude Code is a client I test with, and the docs say so. The streak stands for a trip the screen cannot show: at 60 Hz a 9 ms trip is under one frame. With JavaScript off there is no switch, no notice and all 14 lines.
+
+**Reopen if.** A trademark owner objects to a mark, or the real-speed round reads as broken (four orange balls that never seem to move) to someone who has not read the caption.

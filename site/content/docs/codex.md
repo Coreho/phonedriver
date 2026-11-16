@@ -7,7 +7,9 @@ updated: 2026-11-14
 date: 2026-11-14
 ---
 
-Codex can operate an Android phone or an iPhone through phonedriver. Run `codex mcp add phonedriver -- npx -y phonedriver mcp`, connect a device, and ask in plain language. phonedriver is tested with Claude Code. In Codex 0.167.0 I installed the plugin and saw its MCP server and its skill load. The benchmarks on this site were not run in Codex.
+Codex can operate an Android phone or an iPhone through phonedriver. Run `codex mcp add phonedriver -- npx -y phonedriver mcp`, connect a device, and ask in plain language.
+
+phonedriver is tested with Claude Code. In Codex 0.167.0 I installed the plugin and saw its MCP server and its skill load. The benchmarks on this site were not run in Codex.
 
 ## Add the server
 

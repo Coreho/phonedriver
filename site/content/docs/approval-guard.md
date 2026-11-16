@@ -6,7 +6,7 @@ description: phonedriver stops taps on Pay, Place order and Delete account and a
 updated: 2026-11-14
 ---
 
-An agent that can drive any app can place an order. phonedriver's approval guard classifies the element the agent is about to tap and, for a button that spends money or cannot be undone, asks the human instead of tapping. It is on by default. The reasoning is in [Letting Claude order dinner without letting it spend your money](/blog/letting-claude-order-dinner-without-letting-it-spend-your-money/).
+The guard classifies the element the agent is about to tap and, for a button that spends money or cannot be undone, asks the human instead of tapping. It is on by default. The reasoning is in [Letting Claude order dinner without letting it spend your money](/blog/letting-claude-order-dinner-without-letting-it-spend-your-money/).
 
 ## What is guarded
 
@@ -57,7 +57,7 @@ Switch the guard off only when you have decided the agent may spend money or del
 
 ## What it does not catch
 
-- A fixed list of labels in English, Spanish, Portuguese, French, German, Italian, Dutch, Japanese, Chinese (Simplified), Korean and Hindi. A button in another language, or an icon with no label, is not guarded. A missing prompt is not evidence a tap is safe.
+- A fixed list of labels in the eleven languages above. A button in another language, or an icon with no label, is not guarded. A missing prompt is not evidence a tap is safe.
 - A tap on a container that merges the label of a guarded child is guarded only when the merged label matches.
 - `shell` is out of scope: `input tap` through the shell is not seen.
 - An agent can pass `autonomous: true` over MCP, or add `--autonomous` on the CLI, when you never granted it. The guard stops a model that follows the rules or is steered by screen text. It does not stop a model set on bypassing it.
