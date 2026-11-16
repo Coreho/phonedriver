@@ -187,6 +187,8 @@ phonedriver sends no telemetry. After the first download from GitHub, it connect
 
 **Does it work with an iPhone?** Yes, from a Mac with Xcode, on the Simulator or on an iPhone or iPad. `phonedriver ios setup` signs the runner with your Apple developer team, and `phonedriver ios wifi on` lets you unplug the cable.
 
+**Why does an iPhone need a Mac, and why does the signing expire?** Apple lets a computer drive an iPhone only through its developer tools: a small test app (the runner) that Xcode builds and signs with your Apple ID. A free Apple ID's signature lasts 7 days, then `phonedriver ios setup` signs it again; a paid developer account's lasts a year. The Simulator needs no signing. phonedriver never enters a passcode and can't pass Face ID on a real phone, on purpose: unlock it yourself, and it stays awake while the agent works.
+
 **Can my agent buy things with it?** Not without your answer, unless you have told it to run autonomously. See [Asking before it pays](#asking-before-it-pays).
 
 **Can I use it at work?** Yes. It is AGPL-3.0: you can use it freely. If you change it and offer it to others as a network service, you must publish your changes.
