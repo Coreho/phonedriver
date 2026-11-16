@@ -144,6 +144,10 @@ pub enum Button {
     Fingerprint,
     /// A touch by a finger that is not enrolled.
     WrongFingerprint,
+    /// Turn the screen on its side, as when the device is turned a quarter to the left.
+    Landscape,
+    /// Turn the screen upright.
+    Portrait,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

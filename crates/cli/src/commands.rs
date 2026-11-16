@@ -481,6 +481,7 @@ pub(crate) enum Verb {
         text: Option<String>,
     },
     /// Press a button or key: home, back, recents, notifications, lock, volume-up, volume-down, enter, hide-keyboard.
+    /// `landscape` turns the screen on its side and `portrait` upright (on Android auto-rotate goes off).
     /// On an Android emulator, `fingerprint` touches the fingerprint sensor with the enrolled finger and
     /// `wrong-fingerprint` with another. On an iOS Simulator they show Face ID a face that matches or one that
     /// does not.

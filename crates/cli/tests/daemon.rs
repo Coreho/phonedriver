@@ -4384,6 +4384,33 @@ fn press_key(key: &str) -> Value {
 }
 
 #[tokio::test(start_paused = true)]
+async fn press_landscape_and_portrait_turn_the_screen_and_an_unknown_key_lists_them() {
+    use phonedriver_core::device::Button;
+    let (source, fake) = FakeSource::with(vec![tree(&["A"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "act", press_key("landscape")).await;
+    ok(&d, "default", "act", press_key("portrait")).await;
+    let turned: Vec<Call> = fake
+        .calls()
+        .into_iter()
+        .filter(|c| matches!(c, Call::Button(_)))
+        .collect();
+    assert_eq!(
+        turned,
+        [
+            Call::Button(Button::Landscape),
+            Call::Button(Button::Portrait)
+        ]
+    );
+    let e = err(&d, "default", "act", press_key("sideways")).await;
+    let valid = e.data["valid"].to_string();
+    assert!(
+        valid.contains("\"landscape\"") && valid.contains("\"portrait\""),
+        "{valid}"
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn press_hide_keyboard_hides_a_shown_keyboard_and_says_how() {
     let (source, fake) = FakeSource::with(vec![ime_tree(true), ime_tree(false)]);
     let (d, _home) = daemon(source);

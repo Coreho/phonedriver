@@ -17,6 +17,10 @@ BOOL PUButton(NSString *name, NSError **error)
 #else
         [device pressButton:[name isEqualToString:@"volume_up"] ? XCUIDeviceButtonVolumeUp : XCUIDeviceButtonVolumeDown];
 #endif
+    } else if ([name isEqualToString:@"landscape"]) {
+        device.orientation = UIDeviceOrientationLandscapeLeft;
+    } else if ([name isEqualToString:@"portrait"]) {
+        device.orientation = UIDeviceOrientationPortrait;
     } else {
         if (error) *error = PUError(PURunnerErrorBadRequest, [NSString stringWithFormat:@"unknown button %@", name]);
         return NO;

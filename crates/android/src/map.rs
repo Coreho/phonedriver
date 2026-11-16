@@ -48,7 +48,11 @@ pub fn button_keycode(b: Button) -> Option<i32> {
         Button::Home => Some(KEYCODE_HOME),
         Button::Back => Some(KEYCODE_BACK),
         Button::Recents => Some(KEYCODE_APP_SWITCH),
-        Button::Notifications | Button::Fingerprint | Button::WrongFingerprint => None,
+        Button::Notifications
+        | Button::Fingerprint
+        | Button::WrongFingerprint
+        | Button::Landscape
+        | Button::Portrait => None,
         Button::Lock => Some(KEYCODE_SLEEP),
         Button::VolumeUp => Some(KEYCODE_VOLUME_UP),
         Button::VolumeDown => Some(KEYCODE_VOLUME_DOWN),

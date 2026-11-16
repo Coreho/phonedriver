@@ -626,6 +626,8 @@ impl Device for IosDevice {
             Button::Lock => "lock",
             Button::VolumeUp => "volume_up",
             Button::VolumeDown => "volume_down",
+            Button::Landscape => "landscape",
+            Button::Portrait => "portrait",
             Button::Back => return self.back().await.map(|_| ()),
             Button::Notifications => {
                 return self.gesture(map::notifications_swipe(self.screen())).await;

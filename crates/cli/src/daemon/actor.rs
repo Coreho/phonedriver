@@ -4122,6 +4122,8 @@ async fn press(device: &dyn Device, key: &str) -> Result<Option<&'static str>, E
             "hide-keyboard".into(),
             "fingerprint".into(),
             "wrong-fingerprint".into(),
+            "landscape".into(),
+            "portrait".into(),
         ],
     })
 }

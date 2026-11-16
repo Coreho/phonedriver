@@ -226,6 +226,31 @@ async fn tap_lands_on_b10(rig: &Rig) {
 
 #[tokio::test]
 #[ignore = "needs PHONEDRIVER_TEST_DEVICE"]
+async fn press_landscape_turns_the_screen_and_press_portrait_turns_it_back() {
+    let rig = Rig::new().await;
+    rig.tab("taps").await;
+    let was = sh(&rig, "settings get system accelerometer_rotation").await;
+    let _restore = Restore::new(
+        &rig,
+        &[
+            "settings put system user_rotation 0",
+            &format!("settings put system accelerometer_rotation {}", was.trim()),
+        ],
+    );
+    let text = rig.ok(&["press", "landscape"]);
+    assert!(text.contains("landscape"), "{text}");
+    until("landscape", || async { screen_width(&rig).await > 500.0 }).await;
+    tap_lands_on_b10(&rig).await;
+    rig.ok(&["press", "portrait"]);
+    until("portrait again", || async {
+        screen_width(&rig).await < 500.0
+    })
+    .await;
+    tap_lands_on_b10(&rig).await;
+}
+
+#[tokio::test]
+#[ignore = "needs PHONEDRIVER_TEST_DEVICE"]
 async fn rotating_the_display_changes_the_header_and_taps_still_land() {
     let rig = Rig::new().await;
     rig.tab("taps").await;

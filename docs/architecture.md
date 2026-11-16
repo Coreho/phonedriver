@@ -449,6 +449,7 @@ phonedriver scroll <up|down|left|right> [--within <target>] [--until "text"|@ref
 phonedriver gesture <json>                   multi-finger paths with timing
 phonedriver press <home|back|recents|notifications|lock|volume-up|volume-down|enter|hide-keyboard|...>
 phonedriver press <fingerprint|wrong-fingerprint>     answer a fingerprint prompt on an Android emulator or Face ID on an iOS Simulator (D63, D69)
+phonedriver press <landscape|portrait>                turn the screen (D78)
 phonedriver launch <app name|package|bundle id> [--restart]
 phonedriver open <url>                       deep link or web URL in its handler app
 phonedriver apps [install <path> | stop|clear|uninstall <app>]   list launchable apps, or manage one

@@ -325,6 +325,19 @@ impl Device for AndroidDevice {
         match b {
             Button::Fingerprint => return self.touch_sensor(ENROLLED_FINGER).await,
             Button::WrongFingerprint => return self.touch_sensor(OTHER_FINGER).await,
+            Button::Landscape | Button::Portrait => {
+                // With auto-rotate on, Android ignores `user_rotation`, so it is turned off first.
+                let quarter = u8::from(b == Button::Landscape);
+                self.adb
+                    .shell(
+                        &self.serial,
+                        &format!(
+                            "settings put system accelerometer_rotation 0; settings put system user_rotation {quarter}"
+                        ),
+                    )
+                    .await?;
+                return Ok(());
+            }
             _ => {}
         }
         match map::button_keycode(b) {

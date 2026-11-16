@@ -2615,3 +2615,10 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Live on the mini (I shut the iPhone 17 Simulator down by hand first): `phonedriver boot` -> the table with that one simulator; `phonedriver boot "iphone 17"` -> `booted sim:E02F... · iPhone 17 · iOS 26.5`, 4.5 s; again -> `already on: ...`; `boot Watch` -> `error: no device named "Watch" is off; can be started: iPhone 17 (iOS 26.5)`. Real MCP server: `devices {"boot": "iPhone 17"}` 8.7 s, then `snapshot` listed the home screen's icons.
 - Not done: Android emulators (no host could run one today); the nothing-connected message on a real machine (fake source only); a never-booted simulator.
 - `no_device_exits_4_with_the_message_then_the_hint` (`--test cli`) reads the host's real simulators, so on a Mac with Xcode and nothing booted its first line now ends in `can be started: ...`. The test accepts both forms. Not run in that state: the mini has simulators booted (the test fails there as before, on the exit code), and I do not build on the MacBook.
+
+## 2026-11-16: `press landscape` and `press portrait` (D78)
+
+- Asked for: rotate. Two new names for `press`; iOS through the runner (`ios-runner/Runner/Buttons.m`, `XCUIDevice.orientation`), Android through two `settings` commands (`crates/android/src/device.rs`).
+- Test first: `press_landscape_and_portrait_turn_the_screen_and_an_unknown_key_lists_them` failed with `no variant, associated function, or constant named Landscape`, then passed (`--test daemon press_`: 6 passed).
+- Live, iPhone 17 Simulator, Safari: `press landscape` -> `ok pressed landscape · settled in 808ms · new screen` / `874x402pt · landscape`; `screenshot` -> `land.png 874x402`, looked at: Safari on its side, tab bar across the top; `press portrait` -> `402x874pt · portrait`. `cargo test -p phonedriver-ios --test device_live landscape -- --ignored` on that simulator: 1 passed in 9.88 s.
+- Not run: anything on Android (no emulator today; its test in `states.rs` is written and unrun), a physical iPhone, a tap in landscape.

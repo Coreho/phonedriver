@@ -350,6 +350,18 @@ On an Android emulator, `phonedriver press fingerprint` touches the fingerprint 
 
 On an iOS Simulator the same two keys answer Face ID (or Touch ID): `press fingerprint` shows a face that matches, `press wrong-fingerprint` one that does not, and the system says `Face Not Recognised`. A Simulator with no face enrolled is enrolled by the first press, so when an app says Face ID is not set up, press `fingerprint` once and ask again. An iPhone answers that its Face ID takes its owner. Decision D69.
 
+### Turning the screen
+
+`phonedriver press landscape` turns the screen on its side and `phonedriver press portrait` turns it upright; the reply is the screen as it is afterwards.
+
+```console
+$ phonedriver press landscape
+ok pressed landscape · settled in 808ms · new screen
+device sim:E02FE8A6-5F1E-405E-A263-2E828218BE5F · iPhone 17 · iOS 26.5 · 874x402pt · landscape
+```
+
+An app that supports one orientation only stays as it is, and so does an iPhone's home screen. On Android both keys turn auto-rotate off (`accelerometer_rotation`), because Android ignores a set rotation while it is on; turn it on again in the quick settings or with `setting`. A lane keeps the shape it was made with. Decision D78.
+
 ### Recording the screen
 
 On Android and on the iOS Simulator, `phonedriver record start` begins a video of the screen and `phonedriver record stop` finishes it and prints the file:

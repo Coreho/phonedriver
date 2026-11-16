@@ -245,7 +245,7 @@ Every request carries `id` and `op`. A reply echoes `id` and adds `ok: true` plu
 | `screenshot` | `quality (0..100, default 80), format: "jpeg"|"png"|"luma"` (default `jpeg`), `scale?` (output pixels per point, above 0 and at most 4; 0 or absent means native pixels; required for `luma`) | `{data_b64, w, h}` (`w`, `h` in pixels); `luma` is one byte of gray per pixel, rows top to bottom, no header |
 | `type` | `text`, `speed?` (characters per second, default 60) | `{}` |
 | `key` | `key` (an `XCUIKeyboardKey` string or a character), `modifiers?` (`"command"`, `"shift"`, `"option"`, `"control"`) | `{}` after the key is delivered |
-| `button` | `name: "home"|"volume_up"|"volume_down"|"lock"` | `{}`; volume is `unsupported` on the Simulator |
+| `button` | `name: "home"|"volume_up"|"volume_down"|"lock"|"landscape"|"portrait"` | `{}`; volume is `unsupported` on the Simulator; `landscape` and `portrait` set `XCUIDevice.orientation` (decision D78) |
 | `activate` | `bundle_id` | `{}` |
 | `open_url` | `url` | `{}` (`XCUIDevice.shared.system.openURL`; unlike `simctl openurl`, raises no "Open in …?" confirmation) |
 

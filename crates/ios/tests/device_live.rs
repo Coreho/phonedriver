@@ -451,3 +451,25 @@ fn the_tree_right_after_a_launch_is_the_launched_app() {
         );
     }
 }
+
+#[test]
+#[ignore = "needs PHONEDRIVER_TEST_DEVICE"]
+fn landscape_turns_an_app_that_can_turn_and_portrait_turns_it_back() {
+    let d = device();
+    let udid = udid();
+    let screen = |d: &IosDevice| tree(d).windows[0].bounds;
+    std::process::Command::new("xcrun")
+        .args(["simctl", "launch", &udid, "com.apple.mobilesafari"])
+        .status()
+        .unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    let upright = screen(&d);
+    assert!(upright.h > upright.w, "{upright:?}");
+    RT.block_on(d.button(Button::Landscape)).unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    let turned = screen(&d);
+    assert_eq!((turned.w, turned.h), (upright.h, upright.w));
+    RT.block_on(d.button(Button::Portrait)).unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    assert_eq!(screen(&d), upright);
+}
