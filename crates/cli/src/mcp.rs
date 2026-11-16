@@ -1385,11 +1385,12 @@ impl Mcp {
                 return bad("the daemon sent bad image data");
             };
             let last = self.last_shot.lock().await.replace(Shot {
-                device: a.device.clone(),
+                device: globals.device.clone(),
                 png: now.clone(),
             });
             if compare {
-                let Some(before) = last.filter(|s| s.device == a.device).map(|s| s.png) else {
+                let Some(before) = last.filter(|s| s.device == globals.device).map(|s| s.png)
+                else {
                     return bad(
                         "`compare` needs an earlier screenshot of this device: take one, act, then compare",
                     );
