@@ -2539,3 +2539,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Now: a box is the element's when more than half of the box lies inside it and the element's label, value or hint is that text (`crates/core/src/ocr.rs`). Test first: `a_line_of_text_inside_a_row_that_says_it_is_dropped` failed with `left: [Some("Network & internet"), Some("Network & internet"), Some("Mobile, Wi-Fi, hotspot"), Some("Sign in")]`.
 - Mac mini: `cargo test --locked -p phonedriver-core --lib ocr`: `8 passed`; `cargo test --locked -p phonedriver --test ocr`: `8 passed`; clippy clean.
 - Not done: a hyphen the recognizer reads as another character (`Wi‑Fi` against `Wi-Fi`) still makes two lines; the status bar's clock and signal are still read on a screen with no element list (`@e1 text "9:05" (ocr)`), because the agent drops the bars before the host learns where they are.
+
+## 2026-11-16: a call on a link that stalled ends in bounded time
+
+- Seen in a lanes run: the ssh tunnel to win-pc's adb server stalled without closing, and `tap` waited 631 s (`round 1: 631.3 s | ... | error: device android:emulator-5554+b disconnected`), with `devices` queued behind it. `Control::request` waited for the reply with no limit.
+- Now a request says how long it may itself run on the device (zero for most, the limit of a shell command, the length of a gesture), and a reply that has not come 30 s after that is `DeviceGone`, which makes the actor reconnect on the next call (`crates/android/src/control.rs`; the row in architecture section 8).
+- Tests (`control::tests`, the crate's first with paused time, so `tokio`'s `test-util` is a dev-dependency there): a request never answered ends as a gone device after exactly its own 60 s plus 30; a reply with the request's id is the answer. I wrote them with the change; to see the first one fail I set the margin to 31 s on the mini only: `left: 91s right: 90s`.
+- Mac mini: `phonedriver-android --lib` 64 passed; `--test daemon` 175 passed; `--test lanes` 7 passed; clippy clean.
+- Not done: iOS has its own request path and was not looked at; no live run cut a link on purpose.

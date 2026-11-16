@@ -163,7 +163,9 @@ impl AndroidDevice {
     }
 
     async fn simple(&self, op: Op, req: Value) -> Result<Value> {
-        self.control.request(op, req).await
+        self.control
+            .request(op, req, std::time::Duration::ZERO)
+            .await
     }
 
     async fn video_caught_up(&self, op: Op) -> Result<()> {
@@ -298,7 +300,19 @@ impl Device for AndroidDevice {
     }
 
     async fn gesture(&self, g: Gesture) -> Result<()> {
-        self.simple(Op::Gesture, map::gesture_request(&g, self.density))
+        let length = g
+            .fingers
+            .iter()
+            .filter_map(|f| f.last())
+            .map(|p| p.t_ms)
+            .max()
+            .unwrap_or(0);
+        self.control
+            .request(
+                Op::Gesture,
+                map::gesture_request(&g, self.density),
+                std::time::Duration::from_millis(length.into()),
+            )
             .await?;
         Ok(())
     }
@@ -554,9 +568,11 @@ impl Device for AndroidDevice {
 
     async fn shell(&self, req: &ShellRequest) -> Result<ShellReply> {
         let reply = self
-            .simple(
+            .control
+            .request(
                 Op::Shell,
                 json!({"op": "shell", "command": req.command, "timeout_ms": req.timeout.as_millis() as u64}),
+                req.timeout,
             )
             .await?;
         Ok(ShellReply {

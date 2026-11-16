@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use phonedriver_core::device::DeviceEvent;
 use phonedriver_core::error::{DeviceId, Error, Op};
@@ -17,6 +18,10 @@ use crate::agent::{read_frame, write_frame};
 use crate::map;
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Value>>>>;
+
+/// Observed through an ssh tunnel to the adb server that stalled without closing: a tap waited 631 s for its reply,
+/// until the kernel gave up on the connection, and every other call on the device queued behind it.
+const NO_REPLY_MARGIN: Duration = Duration::from_secs(30);
 
 pub struct Control {
     device: DeviceId,
@@ -65,7 +70,9 @@ impl Control {
     }
 
     /// Sends `req` (an object with an `op`) and returns the agent's reply. `op` names the operation in errors.
-    pub async fn request(&self, op: Op, mut req: Value) -> Result<Value> {
+    /// `runs_for` is how long the request itself may take on the device (a shell command's limit, a gesture's
+    /// length); a reply that has not come `NO_REPLY_MARGIN` after that means the link is gone.
+    pub async fn request(&self, op: Op, mut req: Value, runs_for: Duration) -> Result<Value> {
         let gone = || Error::DeviceGone {
             id: self.device.clone(),
         };
@@ -86,7 +93,14 @@ impl Control {
                 .remove(&id);
             return Err(gone());
         }
-        let reply = rx.await.map_err(|_| gone())?;
+        let Ok(reply) = tokio::time::timeout(runs_for + NO_REPLY_MARGIN, rx).await else {
+            self.pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+            return Err(gone());
+        };
+        let reply = reply.map_err(|_| gone())?;
         if reply["ok"] == true {
             Ok(reply)
         } else {
@@ -101,5 +115,59 @@ impl Control {
 impl Drop for Control {
     fn drop(&mut self) {
         self.reader.abort();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use tokio::net::TcpListener;
+
+    use super::*;
+
+    async fn connected() -> (Control, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let host = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (agent, _) = listener.accept().await.unwrap();
+        let (events, _) = broadcast::channel(4);
+        (Control::new("android:x".into(), host, 2.0, events), agent)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_request_the_agent_never_answers_ends_as_a_gone_device_after_its_own_time_and_the_margin()
+     {
+        let (control, _agent) = connected().await;
+        let started = tokio::time::Instant::now();
+        let e = control
+            .request(Op::Shell, json!({"op": "shell"}), Duration::from_secs(60))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            e,
+            Error::DeviceGone {
+                id: "android:x".into()
+            }
+        );
+        assert_eq!(started.elapsed(), Duration::from_secs(90));
+    }
+
+    #[tokio::test]
+    async fn a_reply_with_the_request_id_is_the_answer() {
+        let (control, mut agent) = connected().await;
+        let answer = tokio::spawn(async move {
+            let asked = read_frame(&mut agent).await.unwrap();
+            write_frame(&mut agent, &json!({"id": asked["id"], "ok": true, "n": 7}))
+                .await
+                .unwrap();
+            agent
+        });
+        let reply = control
+            .request(Op::Tree, json!({"op": "tree"}), Duration::ZERO)
+            .await
+            .unwrap();
+        assert_eq!(reply["n"], 7);
+        drop(answer.await.unwrap());
     }
 }
