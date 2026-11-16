@@ -27,6 +27,14 @@ phonedriver lets Claude Code, Codex, Cursor or any MCP client use an Android pho
 ## Start
 
 ```sh
+npx -y phonedriver init
+```
+
+That adds phonedriver to every agent it finds on your machine (Claude Code, Codex, Cursor, VS Code, Gemini CLI), then checks adb, your devices and Xcode and says what to fix. An agent that already has it is left alone. `--dry-run` shows what it would do.
+
+To add it to one agent by hand:
+
+```sh
 claude mcp add phonedriver -- npx -y phonedriver mcp
 ```
 

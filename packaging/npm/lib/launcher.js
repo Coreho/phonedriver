@@ -122,7 +122,7 @@ async function main(argv, opts = {}) {
   const log = opts.log || ((line) => process.stderr.write(`${line}\n`));
   const binary = await ensureBinary({ env, platform: opts.platform, arch: opts.arch, log });
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, argv, { stdio: "inherit", env });
+    const child = spawn(binary, argv, { stdio: "inherit", env: { ...env, PHONEDRIVER_NPX: "1" } });
     const forward = (sig) => () => child.kill(sig);
     const handlers = ["SIGINT", "SIGTERM", "SIGHUP"].map((sig) => [sig, forward(sig)]);
     for (const [sig, fn] of handlers) process.on(sig, fn);

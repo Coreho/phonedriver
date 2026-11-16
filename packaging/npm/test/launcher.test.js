@@ -82,6 +82,12 @@ test("first run downloads, verifies, caches and passes args, stdin and exit code
   assert.strictEqual(second.stderr, "");
 });
 
+test("the binary is told that npx started it, so init registers npx and not the cached file", { skip: !posix }, () => {
+  const { release } = fakeRelease('#!/bin/sh\necho "npx:$PHONEDRIVER_NPX"\n');
+  const told = run(["init"], release, tmp());
+  assert.strictEqual(told.stdout, "npx:1\n");
+});
+
 test("a bad checksum installs nothing and says so", { skip: !posix }, () => {
   const { release } = fakeRelease("#!/bin/sh\necho hi\n", { badSum: true });
   const cache = tmp();

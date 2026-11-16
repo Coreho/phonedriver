@@ -9,9 +9,25 @@ One line gets you the prebuilt binary. Each artifact has the Android agent insid
 The shortest route is `npx`. The `phonedriver` npm package is a small launcher: on first run it downloads the binary for your platform from GitHub Releases, checks its SHA-256, caches it and runs it. It contacts GitHub only for that download and sends no telemetry.
 
 ```sh
+npx -y phonedriver init                                   # add it to every agent on this machine, then check the devices
 npx -y phonedriver --version                              # try it
-claude mcp add phonedriver -- npx -y phonedriver mcp      # Claude Code
+claude mcp add phonedriver -- npx -y phonedriver mcp      # or add it to Claude Code by hand
 ```
+
+`init` looks for five agents and prints one line for each:
+
+```console
+$ npx -y phonedriver init
+Claude Code  added, for every project
+Codex        already there
+Cursor       added to /Users/you/.cursor/mcp.json
+VS Code      not found
+Gemini CLI   not found
+
+Restart your agent so that it loads phonedriver, then ask it: Open Settings and turn on dark mode.
+```
+
+The doctor checks follow (`--register-only` leaves them out, `--dry-run` changes nothing). Claude Code and Codex are asked through their own `mcp add` (Claude Code with `--scope user`). Cursor (`~/.cursor/mcp.json`), VS Code (the user profile's `mcp.json`) and Gemini CLI (`~/.gemini/settings.json`) get the entry in their file; the file's other keys are kept, and its keys come back in alphabetical order. A file that is not plain JSON, or that already has another `phonedriver` entry, is not touched: the line says why and prints the entry to paste. Started through `npx`, the entry is `npx -y phonedriver mcp` (`cmd /c npx ...` on Windows); started as an installed binary, it is `phonedriver mcp`, or the binary's full path when that name is not on `PATH`.
 
 The installers below put a permanent `phonedriver` on your `PATH` instead.
 

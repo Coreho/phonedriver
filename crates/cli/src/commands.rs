@@ -528,6 +528,17 @@ pub(crate) enum Verb {
     /// Runs `adb tcpip 5555` on the phone (USB or Wi-Fi), lists its addresses by interface and connects to the first that answers. adb then listens on every network the phone joins until it reboots, so use it only on networks you trust or with Tailscale; `adb usb` or a reboot turns it off.
     #[cfg(feature = "android")]
     Untether,
+    /// Add phonedriver to every agent on this machine, then check the devices.
+    ///
+    /// Claude Code and Codex are asked with their own `mcp add`; Cursor, VS Code and Gemini CLI get the entry in their JSON file. An agent that already has it is left as it is. Run through `npx phonedriver init` the entry is `npx -y phonedriver mcp`, otherwise this binary.
+    Init {
+        /// Print what would be done and change nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Stop after the agents; do not run the doctor checks.
+        #[arg(long)]
+        register_only: bool,
+    },
     /// Serve the tools over MCP on stdio.
     Mcp,
     /// Print SKILL.md, the instructions an agent reads before it uses phonedriver.
@@ -593,6 +604,10 @@ pub fn run(cli: Cli) -> ExitCode {
         #[cfg(feature = "android")]
         Verb::Untether => crate::wireless::untether(cli.device.as_deref()),
         Verb::Mcp => crate::mcp::run(cli.device),
+        Verb::Init {
+            dry_run,
+            register_only,
+        } => crate::init::run(&socket::home(), dry_run, register_only),
         Verb::Skill => {
             print!("{}", include_str!("../../../SKILL.md"));
             ExitCode::SUCCESS
@@ -1245,6 +1260,7 @@ pub(crate) async fn execute_with(
         Verb::Pair | Verb::Untether => Ok(String::new()),
         Verb::Daemon { .. }
         | Verb::Doctor
+        | Verb::Init { .. }
         | Verb::Ios { .. }
         | Verb::Mcp
         | Verb::Skill
