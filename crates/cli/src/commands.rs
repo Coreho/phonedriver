@@ -2211,6 +2211,11 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
     }
     if let Some(n) = r.unchanged_repeats {
         out.push_str(&format!("\nhint: this action has changed nothing {n} times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"));
+    } else if r.settled
+        && !r.changed
+        && matches!(r.summary.as_str(), "pressed landscape" | "pressed portrait")
+    {
+        out.push_str("\nhint: the screen did not turn: it was already that way, or the app in front supports one orientation only (an iPhone's home screen, most launchers)");
     } else if r.settled && !r.changed {
         out.push_str("\nhint: nothing changed; the tap may have missed, or changed only what the element list does not show (a web checkbox): `phonedriver screenshot` shows the picture");
     }
@@ -2498,6 +2503,20 @@ mod tests {
             head.ends_with("still animating after 9150ms, read as it is now"),
             "{head}"
         );
+    }
+
+    #[test]
+    fn a_turn_that_changed_nothing_says_the_app_may_not_turn_and_says_nothing_about_taps() {
+        for key in ["landscape", "portrait"] {
+            let mut v = action(false, "diff", "");
+            v["summary"] = json!(format!("pressed {key}"));
+            let shown = show_action(&v, false).unwrap();
+            let hint = shown.lines().find(|l| l.starts_with("hint: ")).unwrap();
+            assert_eq!(
+                hint,
+                "hint: the screen did not turn: it was already that way, or the app in front supports one orientation only (an iPhone's home screen, most launchers)"
+            );
+        }
     }
 
     #[test]

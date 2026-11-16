@@ -2704,3 +2704,7 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 
 - Before a release I compared this branch with `origin/main`: 43 commits ahead and 2 behind (`7d95841`, `ee92800`, both the site). They conflicted in `docs/decisions.md` and `progress.md`, and both sides had a D70 and a D71.
 - Merged. The site's two decisions are now D80 (a phone layout for a thumb) and D81 (nothing changes size or place in one frame); this branch's D70 (secrets masked) and D71 (`page`) keep their numbers because code, tests and the verify skill cite them. `site/README.md` cites the new numbers. The site's own entries below still say D70 and D71, as they were written.
+
+## 2026-11-16: a turn that changed nothing gets its own hint
+
+- Seen on the Android emulator: `press landscape` on the home screen answered `no change after 504ms` with the hint for a tap that may have missed. Now: `hint: the screen did not turn: it was already that way, or the app in front supports one orientation only (an iPhone's home screen, most launchers)`. Test first (`a_turn_that_changed_nothing_says_the_app_may_not_turn_and_says_nothing_about_taps` failed with the old hint as `left`); `--lib` 112 passed, `--test daemon` 178, `--test mcp` 46; clippy clean.
