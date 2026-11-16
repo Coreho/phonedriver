@@ -440,6 +440,17 @@ async fn installed_apps(provider: &dyn IdeviceProvider, id: &str) -> Result<Vec<
     let found = client.get_apps(None, None).await.map_err(gone)?;
     let mut apps: Vec<App> = found
         .iter()
+        .filter(|(_, info)| {
+            let tags: Vec<&str> = info
+                .as_dictionary()
+                .and_then(|d| d.get("SBAppTags"))
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|t| t.as_string())
+                .collect();
+            !crate::map::hidden(&tags)
+        })
         .map(|(id, info)| {
             let field = |k: &str| {
                 info.as_dictionary()

@@ -433,12 +433,27 @@ pub fn notifications_swipe(screen: Size) -> Gesture {
     )
 }
 
+/// An app whose `SBAppTags` holds `hidden` is not on the home screen and is not one a person opens. Seen on an
+/// iPhone with iOS 27.0.1: CarPlay's settings app is named "Settings" too, so `launch Settings` matched two apps.
+pub fn hidden(tags: &[&str]) -> bool {
+    tags.contains(&"hidden")
+}
+
 /// Parses `simctl listapps` output converted to JSON by `plutil`.
 pub fn apps(json: &Value) -> Vec<App> {
     let mut out: Vec<App> = json
         .as_object()
         .into_iter()
         .flatten()
+        .filter(|(_, info)| {
+            let tags: Vec<&str> = info["SBAppTags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            !hidden(&tags)
+        })
         .map(|(id, info)| App {
             id: AppId(id.clone()),
             name: info["CFBundleDisplayName"]
@@ -893,6 +908,16 @@ mod tests {
         assert!(path[0].at.x <= 2.0);
         assert!(path.last().unwrap().at.x > SCREEN.w / 2.0);
         assert!(path.windows(2).all(|w| w[1].t_ms >= w[0].t_ms));
+    }
+
+    #[test]
+    fn an_app_ios_hides_from_the_home_screen_is_not_listed() {
+        let json = json!({
+            "com.apple.Preferences": {"CFBundleDisplayName": "Settings", "ApplicationType": "System", "SBAppTags": []},
+            "com.apple.CarPlaySettings": {"CFBundleDisplayName": "Settings", "ApplicationType": "System", "SBAppTags": ["hidden"]}
+        });
+        let ids: Vec<String> = apps(&json).into_iter().map(|a| a.id.0).collect();
+        assert_eq!(ids, ["com.apple.Preferences"]);
     }
 
     #[test]
