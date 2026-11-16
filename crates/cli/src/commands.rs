@@ -230,6 +230,9 @@ pub(crate) enum Verb {
     },
     /// Save a screenshot at one pixel per point and print its path.
     Screenshot {
+        /// Write the PNG to this file, as `-o` does.
+        #[arg(conflicts_with = "output")]
+        file: Option<PathBuf>,
         /// Write the PNG here, on this machine, instead of printing the path on the daemon's machine.
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -920,7 +923,12 @@ pub(crate) async fn execute_with(
             }
             Ok(out)
         }
-        Verb::Screenshot { output, marks } => {
+        Verb::Screenshot {
+            file,
+            output,
+            marks,
+        } => {
+            let output = output.or(file);
             let mut params = json!({"marks": marks});
             if output.is_some() {
                 params["inline"] = json!(true);
@@ -2187,6 +2195,29 @@ mod tests {
         );
         let help = command().render_help().to_string();
         assert!(!help.contains("\n  back"), "{help}");
+    }
+
+    #[test]
+    fn a_screenshot_takes_its_file_as_a_plain_argument_or_after_the_flag() {
+        for words in [
+            ["phonedriver", "screenshot", "shot.png"].as_slice(),
+            ["phonedriver", "screenshot", "-o", "shot.png"].as_slice(),
+        ] {
+            let Some(Verb::Screenshot { output, file, .. }) =
+                Cli::try_parse_from(words).unwrap().command
+            else {
+                panic!("{words:?} is a screenshot");
+            };
+            assert_eq!(
+                output.or(file),
+                Some(PathBuf::from("shot.png")),
+                "{words:?}"
+            );
+        }
+        assert!(
+            Cli::try_parse_from(["phonedriver", "screenshot", "a.png", "-o", "b.png"]).is_err(),
+            "two files for one picture"
+        );
     }
 
     #[test]

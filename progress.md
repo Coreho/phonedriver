@@ -2553,3 +2553,8 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - `doctor_says_which_step_failed_when_the_agent_cannot_start` failed twice today in the whole suite on the mini and passed alone. The line that failed is `assert!(!out.contains("fix: Run \`phonedriver doctor\`"))`. The mini has three real simulators attached, the test's doctor probes them too, and under load a probe timed out; the iOS branch printed the transport error's hint as the fix, which is to run doctor. The Android branch already filtered that hint.
 - Both branches now go through `fix_for` (`crates/cli/src/doctor.rs`). Test: `a_fix_never_sends_the_reader_back_to_doctor`. Mac mini: `cargo test --locked -p phonedriver --lib doctor`: `6 passed`; clippy clean.
 - My reading of the cause is from the assertion's line and the code, not from a captured failing output; the whole suite has not been rerun under load since.
+
+## 2026-11-16: `phonedriver screenshot shot.png`
+
+- I typed `phonedriver screenshot /tmp/pd-hidden.png` in a live script and got `error: unexpected argument '/tmp/pd-hidden.png' found`. The file is the natural first guess (`simctl io screenshot f.png`, `screencap f.png`), so it is taken now, as `-o` is; both at once is refused.
+- Test first: `a_screenshot_takes_its_file_as_a_plain_argument_or_after_the_flag` (it did not compile before the field existed). Mac mini: `cargo test --locked -p phonedriver --lib`: `102 passed`; clippy clean; `phonedriver screenshot --help` shows `Usage: phonedriver screenshot [OPTIONS] [FILE]`. `docs/reference.md` says it.

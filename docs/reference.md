@@ -149,7 +149,7 @@ phonedriver snapshot
 
 On the other machine, run any `phonedriver` command once, or `phonedriver daemon`, so that the socket exists. Both machines need the same `phonedriver` version. If the forward is down, the error names `PHONEDRIVER_SOCKET`.
 
-Two things differ from a local run. `phonedriver screenshot` prints a path on the machine that has the device; `phonedriver screenshot -o shot.png` writes the file on your machine instead. The MCP `screenshot` tool returns the image itself, so it works unchanged.
+Two things differ from a local run. `phonedriver screenshot` prints a path on the machine that has the device; `phonedriver screenshot shot.png` (or `-o shot.png`) writes the file on your machine instead. The MCP `screenshot` tool returns the image itself, so it works unchanged.
 
 ### Several agents on one Android phone
 
