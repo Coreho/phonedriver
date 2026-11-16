@@ -15,6 +15,7 @@ Not released yet.
 - **App permissions**: `phonedriver apps grant <app> <permission>` and `revoke` work without launching the app.
 - **Crashes**: an action during which the app crashed says so in its reply, and `phonedriver logs` prints the app's last lines and its last crash.
 - **Several agents on one Android phone**: a device id that ends in `+a`, `+b` and so on gives each agent a hidden screen of its own (Android 13 and later).
+- **An Android phone in use stays awake**: while phonedriver has used a phone in the last 10 minutes it resets the phone's screen timeout every 10 seconds, on the phone's own screen and with `PHONEDRIVER_DISPLAY=hidden`, so the phone no longer locks while an agent thinks. `phonedriver release` stops it. Tested on a HONOR X8.
 - **Fingerprint and Face ID**: `press fingerprint` and `press wrong-fingerprint` on an Android emulator and on an iOS Simulator.
 - **`press landscape` and `press portrait`** turn the screen.
 - **`phonedriver compare a.png b.png`** says in text what changed between two screenshots.
@@ -25,7 +26,7 @@ Not released yet.
 - **Fixed on iOS**: a system permission prompt over the home screen was listed twice, so `tap "Don’t Allow"` matched two elements.
 - **Fixed on iPhone**: `launch Settings` matched CarPlay's hidden settings app as well on iOS 27. Apps that iOS hides from the home screen are no longer listed.
 - **Fixed on Android**: a screenshot taken right after an action could show the screen from before it.
-- **Fixed on Android**: with `PHONEDRIVER_DISPLAY=hidden` on a locked phone, `launch` waited 9 s and blamed the app, and opening the hidden screen turned the phone's screen on. It now says the phone is locked and leaves it asleep. The hidden screen works only while the phone is unlocked: taps there do not keep the phone's own screen on. Tested on a HONOR X8.
+- **Fixed on Android**: with `PHONEDRIVER_DISPLAY=hidden` on a locked phone, `launch` waited 9 s and blamed the app, and opening the hidden screen turned the phone's screen on. It now says the phone is locked and leaves it asleep. The hidden screen works only while the phone is unlocked. Tested on a HONOR X8.
 - **Fixed on Android**: a request the phone never answered waited ten minutes. It now ends as a lost device.
 - The third action in a row that changes nothing says so and tells the agent to stop repeating it.
 - `launch` waits for an app that is slow to start, and a submit that left the keyboard up says so.

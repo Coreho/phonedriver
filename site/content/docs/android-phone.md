@@ -38,7 +38,7 @@ The first address and the six-digit code are on the pairing screen. The second a
 
 ## A hidden screen for the agent
 
-On Android 13 and later, the agent can work on a hidden second screen, so your own screen stays yours. Set `PHONEDRIVER_DISPLAY=hidden` in the MCP config, or pass `--display hidden` to the CLI. It has been tested on an emulator and on the HONOR X8. The phone has to be unlocked: while it is locked the hidden screen shows the lock screen too, so phonedriver says the phone is locked and leaves it asleep. Taps on the hidden screen do not count as using the phone, so it locks after its own screen timeout once you put it down. On the phone, launching Settings and Calculator, tapping, typing, pressing back and home, and taking screenshots all worked on the hidden screen while the phone's own screen kept showing another app.
+On Android 13 and later, the agent can work on a hidden second screen, so your own screen stays yours. Set `PHONEDRIVER_DISPLAY=hidden` in the MCP config, or pass `--display hidden` to the CLI. It has been tested on an emulator and on the HONOR X8. The phone has to be unlocked: while it is locked the hidden screen shows the lock screen too, so phonedriver says the phone is locked and leaves it asleep. While the agent works, phonedriver keeps the phone's own screen on, so it does not lock under the agent; `phonedriver release` lets it sleep again. On the phone, launching Settings and Calculator, tapping, typing, pressing back and home, and taking screenshots all worked on the hidden screen while the phone's own screen kept showing another app.
 
 Typing into an app's own fields leaves no trace on your screen. Typing into a web page shows the system's clipboard note, and your clipboard is put back after. `press lock` and `press notifications` are not available in this mode. The first launch took 8.4 s on the HONOR X8 while the screen and the video encoder started, and later launches settled in about 1.1 s. Switching modes restarts the agent, which takes a few seconds. Some makers' builds may refuse a hidden screen, and I have not tried Xiaomi, Samsung or Oppo phones.
 
@@ -49,6 +49,8 @@ I have tested one physical Android phone, a HONOR X8 (MagicOS, Android 13), over
 ## What stays with you
 
 Unlocking the phone, a USB debugging prompt and a biometric prompt are yours. When one blocks the agent, the error says what to do on the device and the command line exits with code 3. The agent tells you and continues when you say it is done.
+
+phonedriver keeps the phone awake while it is in use: for 10 minutes after each command it resets the screen timeout every 10 seconds, on the phone's own screen and on the hidden one, and `phonedriver release` stops that. This comes with 0.1.5.
 
 ## Safety on a real phone
 

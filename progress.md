@@ -2881,3 +2881,27 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - HONOR X8, `--display hidden`, unlocked: `snapshot` 4.65 s (agent start and display), `launch Settings` 5.5 s, `screenshot` 0.28 s (looked at: Settings, dark, the account row masked as the phone shows it), `tap "Display & brightness"` -> `settled in 1203ms · new screen` in 1.6 s, `screenshot` right after 0.38 s, `compare` of the two -> `changed: 2 regions, 64.5% of the screen` with the titles that went and came.
 - Then the phone locked itself, about 30 s after the owner's last touch, while `compare` ran: every call after it answered `The device is locked`, and with a fresh connection each takes 0.8 s. The second unlock had locked again before its turn came (the iPhone ran first). Input on a hidden display is not use of the phone's own screen, so it does not hold the screen-off timer: in hidden mode a phone with a PIN works for its own screen timeout after the owner puts it down. Not changed here; the release notes and the README say the phone has to be unlocked.
 - `compare` took 29.2 s on the MacBook in that run and 0.38 s when run again on the same files: the first Accurate read of a program compiles Vision's model (D64). On the Mac mini, whose disk is nearly full and which caches nothing, it is 10.6 to 14.8 s every time.
+
+## 2026-11-16: the HONOR X8 unlocked again; Settings on the hidden screen and on its own screen
+
+- The owner unlocked the phone at 21:33:22 and a waiting script (`phonedriver` built from `ca9a5b3`, stopped daemon first) ran both modes with nobody touching the phone.
+- `PHONEDRIVER_DISPLAY=hidden`: `launch Settings` -> `ok launched Settings · settled in 1384ms · new screen` in 3.11 s (agent start and display); `tap "Display & brightness"` 1.21 s; `screenshot` right after 0.39 s; `press back` -> `the screen before the last one is back, unchanged` 0.80 s; `type battery --into "Search query"` -> `ok typed 7 chars into @e32 · verified` 0.95 s; `press back` twice; `batch "scroll down" "scroll up"` -> `ok 2 steps` 1.64 s; `release` 0.03 s. Focus on the phone's own screen afterwards: the HONOR launcher, as the owner left it.
+- `PHONEDRIVER_DISPLAY=main`: `launch Settings` 2.30 s; `tap "Display & brightness"` 1.10 s; six screenshots 0.28 to 0.29 s each; `press back`; `scroll down --until "About phone"` -> `ok scrolled down 3 times to @e89 "About phone"` 5.52 s; `tap "About phone"` 1.09 s; `press back`; `scroll up`; `press home` -> `app com.hihonor.android.launcher`; `release`. Every call exited 0; done at 21:33:48.
+- The phone locked itself about 30 s later, as before: the keep-awake below is the answer.
+
+## 2026-11-16: an Android phone in use stays awake, on its own screen and in hidden mode (D86)
+
+- Asked: "can u do like keepawake", after the HONOR X8 locked under an agent working on the hidden display.
+- Found: the shell user holds `android.permission.DEVICE_POWER: granted=true` on the HONOR X8, and the vendored scrcpy `PowerManager` wrapper already has `userActivity(displayId)`. The host talks to the agent only when a call comes in, so the agent can tell use from idle by itself.
+- Changed: `Control.usedAt` stamps each request; `Monitor` calls `userActivity(0)` every 10 s while the last request is under 10 minutes old, the phone is unlocked, its own screen is on and the lane has a connection. No host change, no new op.
+- Test first: `a_phone_in_use_has_its_screen_timeout_reset_every_ten_seconds` in `crates/android/tests/agent_live.rs` (ignored; needs `PHONEDRIVER_TEST_DEVICE` and an unlocked phone; launches the bare agent, installs nothing). Built on the mini twice, with the old jar and the new one, and both run from the MacBook against the HONOR X8 by `scratchpad/awake/proof.sh` once the owner unlocked it:
+  - old agent: `no user activity in 12 s with a host connected: 10812571 then 10812571`, `test result: FAILED`;
+  - new agent: `test result: ok. 1 passed`.
+- Then the CLI built with it, nobody touching the phone (`deviceLocked`, `mWakefulness` and `lastUserActivityTime` from `dumpsys trust` and `dumpsys power`):
+  - hidden display, `launch Settings` and then no call: `21:47:26 deviceLocked=0 mWakefulness=Awake ... (2105 ms ago) hidden, 15 s` ... `21:48:12 deviceLocked=0 mWakefulness=Awake ... (7542 ms ago) hidden, 60 s`; `press back` ok; `release`.
+  - own screen, the same: `21:48:33 ... (7482 ms ago) own screen, 15 s` ... `21:49:19 deviceLocked=0 mWakefulness=Awake ... (2385 ms ago) own screen, 60 s`; `press home` ok; `release`.
+  - after release: `21:49:38 deviceLocked=0 ... (18413 ms ago)`, `21:49:53 deviceLocked=1 mWakefulness=Asleep ... (33795 ms ago)`.
+  - a call on the locked phone: `press home` -> `error: The device is locked.`; host still connected: `21:50:18 deviceLocked=1 mWakefulness=Awake ... (8475 ms ago)`, `21:50:23 deviceLocked=1 mWakefulness=Asleep ... (12887 ms ago)`.
+- Seen once, not explained: the first hidden `launch Settings` of that run answered `still animating after 6066ms, read as it is now`, where the run at 21:33 settled in 1384 ms.
+- On the mini: `cargo clippy -p phonedriver-android --tests -- -D warnings` prints nothing; `rustfmt --check` on the test file passes. CI on `ca9a5b3` passed on all three systems before this change.
+- Not run: an emulator (win-pc's emulator belongs to another session), Android before 12, a 15 s screen timeout.

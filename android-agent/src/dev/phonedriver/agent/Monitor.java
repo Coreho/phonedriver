@@ -8,6 +8,10 @@ import org.json.JSONObject;
 final class Monitor {
     private static final long POLL_MS = 100;
     private static final long KEYGUARD_POLL_MS = 500;
+    /** For this long after the host's last request, the phone's own screen is kept on (decision D86). */
+    private static final long KEEP_AWAKE_MS = 600_000;
+    /** Android's shortest screen timeout is 15 s, and the screen dims about 3 s before it goes off. */
+    private static final long NUDGE_MS = 10_000;
 
     static void start() {
         Thread t = new Thread(Monitor::loop, "monitor");
@@ -27,6 +31,7 @@ final class Monitor {
         Boolean locked = null;
         Boolean screenOn = null;
         long keyguardAt = 0;
+        long nudgedAt = 0;
         while (!Lane.here().closed) {
             try {
                 DisplayInfo now = ServiceManager.getDisplayManager().getDisplayInfo(Hidden.displayId());
@@ -53,6 +58,12 @@ final class Monitor {
                         emit(Json.put(Json.put(e, "locked", l), "screen_on", on));
                     }
                     locked = l;
+                    Control c = Lane.here().control;
+                    if (!l && c != null && keyguardAt - c.usedAt < KEEP_AWAKE_MS && keyguardAt - nudgedAt >= NUDGE_MS
+                            && ServiceManager.getPowerManager().isScreenOn(0)) {
+                        nudgedAt = keyguardAt;
+                        ServiceManager.getPowerManager().userActivity(0);
+                    }
                 }
             } catch (Throwable t) {
                 System.err.println("monitor: " + t);
