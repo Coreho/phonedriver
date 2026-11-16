@@ -131,12 +131,19 @@ fn scroll_position(n: &Value) -> Option<(bool, u32, f32)> {
 /// width of the row holding an unlabeled switch, the control itself (Settings and SwiftUI `Toggle`); a tap at the row's center does not toggle it, so the row takes
 /// the inner switch's bounds and the inner switch goes.
 fn tidy(reply: &mut Value) {
+    // Seen on an iOS 26.5 simulator, 2026-11-16: with SpringBoard itself in front, its permission prompt is in the
+    // app's tree and in `alerts` both, so each button was listed twice and `tap "Don’t Allow"` matched two elements.
+    let prompt_listed_apart = reply["app"]["bundle_id"] == "com.apple.springboard"
+        && reply["alerts"].as_array().is_some_and(|a| !a.is_empty());
     let Some(nodes) = reply["nodes"].as_array_mut() else {
         return;
     };
     let parent = |n: &Value| usize::try_from(n["p"].as_i64().unwrap_or(-1)).ok();
     let is_switch = |n: &Value| n["cls"] == "XCUIElementTypeSwitch";
-    let mut drop: Vec<bool> = nodes.iter().map(scroll_indicator).collect();
+    let mut drop: Vec<bool> = nodes
+        .iter()
+        .map(|n| scroll_indicator(n) || (prompt_listed_apart && n["cls"] == "XCUIElementTypeAlert"))
+        .collect();
     for i in 0..nodes.len() {
         if drop[i]
             && let Some(p) = parent(&nodes[i])
@@ -535,6 +542,40 @@ mod tests {
             })
         );
         assert_eq!(screen_of(&json!({"nodes": []})), None);
+    }
+
+    #[test]
+    fn a_prompt_of_springboard_in_front_is_listed_once() {
+        let prompt = |parent: i64| {
+            json!([
+                {"p": parent, "cls": "XCUIElementTypeAlert", "text": "Allow “Maps” to use your location?", "b": [41, 268, 361, 634], "f": "vVe"},
+                {"p": parent + 1, "cls": "XCUIElementTypeButton", "text": "Don’t Allow", "b": [57, 570, 345, 618], "f": "vVe", "a": ["tap"]}
+            ])
+        };
+        let mut nodes = vec![
+            json!({"p": -1, "cls": "XCUIElementTypeApplication", "text": " ", "b": [0, 0, 402, 874], "f": "vVe"}),
+            json!({"p": 0, "cls": "XCUIElementTypeButton", "text": "Maps", "b": [20, 100, 80, 160], "f": "vVe", "a": ["tap"]}),
+        ];
+        nodes.extend(prompt(0).as_array().unwrap().iter().cloned().map(|mut n| {
+            if n["cls"] == "XCUIElementTypeButton" {
+                n["p"] = 2.into();
+            }
+            n
+        }));
+        let listed = |bundle: &str| {
+            let reply = json!({"app": {"bundle_id": bundle, "pid": 1}, "nodes": nodes, "alerts": [prompt(-1)]});
+            let tree = raw_tree(&reply, SCREEN).unwrap();
+            phonedriver_core::prune::prune(&tree)
+                .iter()
+                .filter(|n| n.label.as_deref() == Some("Don’t Allow"))
+                .count()
+        };
+        assert_eq!(listed("com.apple.springboard"), 1);
+        assert_eq!(
+            listed("com.example.app"),
+            2,
+            "an app's own alert is not SpringBoard's"
+        );
     }
 
     #[test]

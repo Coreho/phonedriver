@@ -2862,3 +2862,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Also seen, not changed: a Maps location prompt lists `Don’t Allow` twice (`@e20` in the alert and `@e27` in a group under it), so `tap "Don’t Allow"` is ambiguous and needs the ref. I raised that prompt on the test Simulator by launching Maps and dismissed it.
 - Not run: the Android emulator suite. win-pc's emulator booted, then stopped answering `adb shell` (32 `rustc` processes from other work on that machine); I ended its process.
 
+## 2026-11-16: SpringBoard's permission prompt is listed once
+
+- Found while probing (entry above): with Maps just launched, `snapshot` listed the location prompt as `@e1 alert` with its text and three buttons, then again as `@e6 group "2 pages"` and `@e9 group` with the same three buttons, and `tap "Don’t Allow"` answered `error: 2 elements match "Don’t Allow"`.
+- Cause, from the runner's reply read straight off its port: `app.bundle_id` was `com.apple.springboard`, whose own 43 nodes hold the alert, and `alerts` holds it again. `add_alerts` was written for an app in front whose tree does not hold SpringBoard's prompt.
+- Changed: `tidy` in `crates/ios/src/map.rs` drops the `XCUIElementTypeAlert` subtree from SpringBoard's own tree when `alerts` is not empty.
+- Test first, seen failing (`left: 2 right: 1`): `a_prompt_of_springboard_in_front_is_listed_once`, which also checks that another app's own alert stays. On the mini: `cargo test -p phonedriver-ios --lib` 72 passed; clippy prints nothing.
+- Proof on the iPhone 17 Simulator after `simctl privacy reset location com.apple.Maps` and a launch of Maps: `snapshot` prints the alert line, `@e1 alert`, its text and `@e3` to `@e5`, five lines; `phonedriver tap 'Don’t Allow'` -> `ok tapped @e5 "Don’t Allow" at 201,594 · settled in 495ms · new screen` and Maps is in front. The location permission of Maps on that Simulator is left at "not allowed".
+
