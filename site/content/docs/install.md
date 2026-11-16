@@ -22,7 +22,9 @@ The rest of this page is the same setup by hand.
 
 ## By hand: npx
 
-The `phonedriver` npm package is a small launcher. On first run it downloads the binary for your platform from GitHub Releases, checks its SHA-256 against the `.sha256` file published beside it, caches it (`~/Library/Caches/phonedriver/npm` on macOS, `~/.cache/phonedriver/npm` on Linux, `%LOCALAPPDATA%\phonedriver\npm` on Windows) and runs it. Later runs use the cache and make no network request. The launcher contacts GitHub only to download the binary and sends no telemetry. It needs Node 18 or later.
+The `phonedriver` npm package is a small launcher. On first run it downloads the binary for your platform from GitHub Releases, checks its SHA-256 against the `.sha256` file published beside it, caches it and runs it. Later runs use the cache and make no network request. The launcher contacts GitHub only to download the binary and sends no telemetry. It needs Node 18 or later.
+
+The cache is `~/Library/Caches/phonedriver/npm` on macOS, `~/.cache/phonedriver/npm` on Linux and `%LOCALAPPDATA%\phonedriver\npm` on Windows.
 
 ```sh
 npx -y phonedriver --version

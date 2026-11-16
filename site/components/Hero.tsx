@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Clients } from "@/components/Paste";
 import { board, ratio, speed } from "@/lib/bench";
 import { MCP_CONFIG, NPX } from "@/lib/data";
 import { SAY } from "@/lib/hero-engine";
@@ -105,6 +106,9 @@ export function Hero() {
         </div>
         <canvas className="hx-fig" aria-hidden="true" />
         <p className="hx-quip" aria-hidden="true" />
+        <div className="hx-who" aria-hidden="true">
+          <Clients />
+        </div>
       </div>
       <svg className="hx-route" aria-hidden="true">
         <defs>

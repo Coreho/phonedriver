@@ -13,7 +13,7 @@ updated: 2026-11-11
 phonedriver doctor
 ```
 
-It checks the toolchain, devices and the socket, and says how to fix each problem. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`.
+It checks the toolchain, devices and the socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`.
 
 ## Where the evidence is
 

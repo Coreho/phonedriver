@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Arrow, Html, JsonLd, Pane, Star } from "@/components/Bits";
 import { DotsEngine, EndEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
 import { Hero } from "@/components/Hero";
+import { Paste } from "@/components/Paste";
 import { Route } from "@/components/Route";
 import { HARNESSES, PHONE, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, tokens, type Cell, type Harness } from "@/lib/bench";
 import { mark, PAINT } from "@/lib/chauffeur";
@@ -155,7 +156,7 @@ export default function Home() {
             </li>
           ))}
         </ol>
-        <button type="button" className="btn dock-cp" data-copy={BOOT}>
+        <button type="button" className="btn dock-cp" data-copy={BOOT} data-next="">
           <span data-label>Copy</span>
           <span data-rest>
             {" "}
@@ -195,8 +196,8 @@ export default function Home() {
             <div>
               <h2>{fewer} fewer tokens than mobile&#8209;mcp on nine real phone jobs.</h2>
               <p className="lede">
-                Tokens are what an agent&apos;s usage limit is spent on. I ran nine jobs that only a phone can do with Claude Sonnet 5.5 and three MCP servers, all on one
-                Android emulator on {b.date}. A script checked the phone&apos;s own data afterwards, not the model&apos;s report.
+                Nine jobs only a phone can do, run with Claude Sonnet 5.5 through three MCP servers on one Android emulator on {b.date}. A script checked the
+                phone&apos;s own data afterwards, not the model&apos;s report.
               </p>
             </div>
             <p className="hm-big" aria-hidden="true" data-land="" data-at=".07">
@@ -210,7 +211,7 @@ export default function Home() {
                 <div className={h === "phonedriver" ? "df-row us" : "df-row"} key={h}>
                   <p className="df-head">
                     <span className="df-who">
-                      {h} <span>{VERSIONS[h]}</span>
+                      {h === "phonedriver" ? h : <Link href={`/compare/${h}/`}>{h}</Link>} <span>{VERSIONS[h]}</span>
                     </span>
                     <span className="df-num">
                       <b title={`${tokens(t.tokens)} tokens`} data-tokens={t.tokens}>
@@ -299,10 +300,9 @@ export default function Home() {
               })}
             </div>
             <p className="hm-foot">
-              Each row shows median tokens, then runs passed. The orange square marks the fewest tokens among tools that passed every run: phone-harness wins two jobs.
-              Open a row for tool calls, wall time and why the job cannot be done from a shell. This is my own test set. Every run, the versions, the checks and what
-              was thrown away are <Link href="/benchmarks/#jobs">published</Link>. If you maintain one of these tools and think I set it up wrong,{" "}
-              <a href={`${REPO}/issues`}>open an issue</a> and I will rerun it.
+              Median tokens, then runs passed. The orange square marks the fewest tokens among tools that passed every run: phone-harness wins two jobs. This is my
+              own test set, and every run, version and check is <Link href="/benchmarks/#jobs">published</Link>. If you maintain one of these tools and think I set it
+              up wrong, <a href={`${REPO}/issues`}>open an issue</a> and I will rerun it.
             </p>
           </details>
         </div>
@@ -390,17 +390,20 @@ export default function Home() {
                       );
                     })}
                   </ol>
+                  <button type="button" className="tv-more">
+                    <span>Show all {screen.lines.length} lines</span>
+                    <i aria-hidden="true">+</i>
+                  </button>
                 </Pane>
               </div>
               <p className="tv-cap">
-                What the model sees. Android&apos;s accessibility tree for this screen has <b>{screen.nodes} nodes</b>; phonedriver sends these{" "}
-                <b>{screen.lines.length} lines</b>. <span className="if-fine">Point at a line to see what it is on the screen.</span>
+                <span className="if-fine">Point at a line to see what it is on the screen.</span>
                 <span className="if-touch">Tap a line to unfold the strip of screen it stands for.</span>
               </p>
               <Pane title="then, one screen later" note="only what changed" lines={TAPDIFF} label="phonedriver tap output" />
               <p className="tv-cap">
-                After every tap, phonedriver waits until the screen stops changing and replies with the difference: <code>+</code> a line that appeared, <code>-</code>{" "}
-                one that left, <code>~</code> one that changed. The model doesn&apos;t poll or guess how long a screen takes to load.
+                After every tap, phonedriver waits for the screen to settle and replies with only the lines that changed. The model never polls or guesses how long a
+                screen takes to load.
               </p>
             </div>
             <svg className="tv-link" aria-hidden="true">
@@ -418,16 +421,25 @@ export default function Home() {
           <div className="hm-head">
             <h2>{ratio(read.adb / read.phonedriver)} faster than adb at reading the screen.</h2>
             <p className="lede">
-              A small helper process on the phone keeps the accessibility connection open, where adb starts a new process and writes XML on every call. Each ball below
-              is one call, out to the phone and back.
+              A helper on the phone keeps the accessibility connection open. <Link href="/compare/adb/">adb</Link> starts a new process and writes XML on every call.
             </p>
           </div>
           <figure className="race pane" data-slow={SLOW} data-land="" data-at=".72" data-life="" data-point="li:first-child .race-lane.us .race-ms" data-point-at="900">
             <figcaption className="pane-head">
-              <span>four calls, slowed down {SLOW} times</span>
-              <button type="button" className="race-btn" hidden>
-                Play
-              </button>
+              <span>four calls</span>
+              <div className="race-ctl" hidden>
+                <div className="race-seg" role="group" aria-label="Speed">
+                  <button type="button" className="race-btn" data-speed="slow" aria-pressed="true">
+                    {SLOW}x slower
+                  </button>
+                  <button type="button" className="race-btn" data-speed="real" aria-pressed="false">
+                    Real speed
+                  </button>
+                </div>
+                <button type="button" className="race-btn race-play">
+                  Play
+                </button>
+              </div>
             </figcaption>
             <ol>
               {race.map(({ label, o }) => (
@@ -454,9 +466,8 @@ export default function Home() {
               ))}
             </ol>
             <p className="race-cap">
-              One second here is {1000 / SLOW} ms. Each ball leaves your agent on the left, reaches the phone on the right and comes back in the time one call takes: the
-              median of 50 runs on an Android 17 emulator. adb is <code>adb shell uiautomator dump</code>, <code>screencap</code> and <code>input</code>.{" "}
-              <Link href="/benchmarks/#speed">Method and raw data</Link>
+              Each ball is one call, out to the phone and back. Medians of 50 runs on an Android 17 emulator, against <code>uiautomator dump</code>,{" "}
+              <code>screencap</code> and <code>input</code>. <Link href="/benchmarks/#speed">Method and raw data</Link>
             </p>
             <canvas className="pf" aria-hidden="true" />
             <i className="pf-ring" aria-hidden="true" />
@@ -484,98 +495,87 @@ export default function Home() {
         <Route n={4} say={STOPS[3][2]} short={STOPS[3][3]} />
         <div className="wrap">
           <div className="hm-split rev">
-          <div>
-            <h2>It asks you before it taps Pay.</h2>
-            <p className="lede">
-              When a tap lands on a button labeled Pay, Buy now, Buy with GPay, Place order, Start subscription, Transfer or Delete account, phonedriver holds the tap and
-              asks you in Claude Code&apos;s own prompt. The model never sees that question and can&apos;t answer it.
-            </p>
-          </div>
-          <div className="hm-sticky">
-            <div className="ask-stage" data-land="">
-              <Pane title="Claude Code · Opus 5.5" note={`recorded ${run.date}`} label="The approval question from the recorded run">
-                <div className="ask" data-life="">
-                  <p className="ask-you" style={at(0)}>
-                    <i aria-hidden="true">❯</i>
-                    <span>
-                      {ROWS[0].text!.split(". ")[0]}. <em>…</em>
-                    </span>
-                  </p>
-                  <p className="ask-gap" style={at(500)}>
-                    {run.calls} calls and {run.worked.replace("Worked for ", "")} later
-                  </p>
-                  <div className="ask-q" style={at(1100)}>
-                    {ASKED.map((l, i) => (
-                      <p key={i} style={at(1100 + i * 140)}>
-                        {l}
-                      </p>
-                    ))}
-                    <p className="ask-pick" style={at(PICK)}>
-                      <i aria-hidden="true"> </i>✔ Your answer: Allow
+            <div>
+              <h2>It asks you before it taps Pay.</h2>
+              <p className="lede">
+                When a tap lands on Pay, Buy now, Place order or Delete account, phonedriver holds it and asks you in Claude Code&apos;s own prompt. The model never sees
+                that question and can&apos;t answer it.
+              </p>
+            </div>
+            <div className="hm-sticky">
+              <div className="ask-stage" data-land="">
+                <Pane title="Claude Code · Opus 5.5" note={`recorded ${run.date}`} label="The approval question from the recorded run">
+                  <div className="ask" data-life="">
+                    <p className="ask-you" style={at(0)}>
+                      <i aria-hidden="true">❯</i>
+                      <span>
+                        {ROWS[0].text!.split(". ")[0]}. <em>…</em>
+                      </span>
                     </p>
-                    <p className="ask-pick" style={at(PICK + 200)}>
-                      <i className="ask-ca" aria-hidden="true" style={at(PICK + 500)}>
-                        ❯
-                      </i>
-                      Accept
-                      <i className="ask-cd" aria-hidden="true" style={at(PICK + 1100)}>
-                        ❯
-                      </i>
-                      <b style={at(PICK + 1100)}>Decline</b>
+                    <p className="ask-gap" style={at(500)}>
+                      {run.calls} calls and {run.worked.replace("Worked for ", "")} later
+                    </p>
+                    <div className="ask-q" style={at(1100)}>
+                      {ASKED.map((l, i) => (
+                        <p key={i} style={at(1100 + i * 140)}>
+                          {l}
+                        </p>
+                      ))}
+                      <p className="ask-pick" style={at(PICK)}>
+                        <i aria-hidden="true"> </i>✔ Your answer: Allow
+                      </p>
+                      <p className="ask-pick" style={at(PICK + 200)}>
+                        <i className="ask-ca" aria-hidden="true" style={at(PICK + 500)}>
+                          ❯
+                        </i>
+                        Accept
+                        <i className="ask-cd" aria-hidden="true" style={at(PICK + 1100)}>
+                          ❯
+                        </i>
+                        <b style={at(PICK + 1100)}>Decline</b>
+                      </p>
+                    </div>
+                    <p className="ask-no" style={at(PICK + 1500)}>
+                      {DECLINED}
                     </p>
                   </div>
-                  <p className="ask-no" style={at(PICK + 1500)}>
-                    {DECLINED}
-                  </p>
-                </div>
-              </Pane>
-              <canvas className="ask-fig" aria-hidden="true" />
-              <PalmEngine />
+                </Pane>
+                <canvas className="ask-fig" aria-hidden="true" />
+                <PalmEngine />
+              </div>
+              <p className="tv-cap">
+                From the run at the top of this page. <a href="/assets/demo.mp4">Watch all 43 seconds (MP4)</a>
+              </p>
             </div>
-            <p className="tv-cap">
-              From the run at the top of this page. phonedriver held the tap on Buy with GPay, the human said no, and nothing was charged.{" "}
-              <a href="/assets/demo.mp4">Watch the whole run (MP4, 43 s)</a>
-            </p>
+            <div className="hm-side">
+              <dl className="hm-facts">
+                <div>
+                  <dt>You answer</dt>
+                  <dd>Allow, Allow for this session, or Decline. In a client that can&apos;t show the prompt, the tap waits and the model has to ask you in chat.</dd>
+                </div>
+                <div>
+                  <dt>Eleven languages</dt>
+                  <dd>It reads button labels in eleven languages. It does not catch a button that is only an icon, or one labeled in another language.</dd>
+                </div>
+                <div>
+                  <dt>Passwords</dt>
+                  <dd>
+                    The model can&apos;t type plain text into a password or one-time code field. It has to use <code>secret</code>, which keeps the text out of logs
+                    and traces.
+                  </dd>
+                </div>
+              </dl>
+              <p className="hm-end-links">
+                <Link href="/docs/approval-guard/">
+                  How the guard decides
+                  <Arrow />
+                </Link>
+              </p>
+            </div>
           </div>
-          </div>
-            <p className="hm-say">
-              The human said no. <b>Nothing was charged.</b>
-            </p>
-            <dl className="hm-facts">
-              <div>
-                <dt>You answer</dt>
-                <dd>
-                  Allow, Allow for this session, or Decline. In a client that can&apos;t show such a prompt, the tap waits and the model has to ask you in chat.
-                </dd>
-              </div>
-              <div>
-                <dt>Eleven languages</dt>
-                <dd>
-                  It reads button labels in English, Spanish, Portuguese, French, German, Italian, Dutch, Japanese, Chinese (Simplified), Korean and Hindi. It does not
-                  catch a payment button that is only an icon, or one labeled in another language.
-                </dd>
-              </div>
-              <div>
-                <dt>More to ask about</dt>
-                <dd>
-                  Set <code>PHONEDRIVER_ASK=send,delete,install</code> to be asked before it sends a message, deletes something or installs an app.
-                </dd>
-              </div>
-              <div>
-                <dt>Passwords</dt>
-                <dd>
-                  The model can&apos;t type plain text into a password or one-time code field. It gets an error that tells it to use <code>secret</code>, which keeps
-                  the text out of logs and traces.
-                </dd>
-              </div>
-              <div>
-                <dt>Your call</dt>
-                <dd>
-                  An agent you told to run without asking passes <code>autonomous: true</code>. <code>PHONEDRIVER_GUARD=off</code> turns the check off.{" "}
-                  <Link href="/docs/approval-guard/">How the guard decides</Link>
-                </dd>
-              </div>
-            </dl>
+          <p className="hm-say">
+            The human said no. <b>Nothing was charged.</b>
+          </p>
         </div>
       </section>
 
@@ -586,7 +586,7 @@ export default function Home() {
             <h2>Your screen stays yours.</h2>
             <p className="lede">
               On Android 13 and later, the agent can work on a hidden second screen while you keep using the phone. Set <code>PHONEDRIVER_DISPLAY=hidden</code> in the MCP
-              config, or pass <code className="nb">--display hidden</code> to the CLI.
+              config.
             </p>
           </div>
           <div className="hd" data-life="">
@@ -613,8 +613,8 @@ export default function Home() {
               <figcaption>The hidden screen, same minute (its top left corner)</figcaption>
             </figure>
             <p className="hm-note">
-              Tested on an emulator and on a {PHONE.name} ({PHONE.os}). Typing into an app&apos;s own fields leaves no trace on your screen. Typing into a web page shows
-              the system&apos;s clipboard note, and your clipboard is put back after. The two captures are from one run on a tablet emulator on 8 November 2026.
+              Tested on an emulator and on a {PHONE.name} ({PHONE.os}). Typing into a web page shows the system&apos;s clipboard note, and your clipboard is put back
+              after. Both captures are from one run on a tablet emulator on 8 November 2026.
             </p>
           </div>
         </div>
@@ -652,8 +652,7 @@ export default function Home() {
               <li>
                 <h3>A helper on the phone</h3>
                 <p>
-                  It reads the accessibility tree and streams the screen as H.264 video, which is how phonedriver knows when the screen has stopped changing. On iOS, an
-                  XCTest runner does the same job.
+                  It reads the accessibility tree and streams the screen as video, which is how phonedriver knows the screen has stopped changing.
                 </p>
               </li>
             </ol>
@@ -686,35 +685,12 @@ export default function Home() {
                   ))}
                 </ul>
                 <p className="hm-note">
-                  phonedriver sends no telemetry. After the first download from GitHub it connects only to your device, and a test runs the whole tool in a sandbox that
-                  blocks every other connection. <a href={raw("docs/architecture.md")}>Architecture</a> and <a href={raw("docs/decisions.md")}>design decisions</a> are in
-                  the repository.
+                  phonedriver sends no telemetry. After the first download it connects only to your device, and a test runs the whole tool in a sandbox that blocks
+                  every other connection. <a href={raw("docs/architecture.md")}>Architecture</a> and <a href={raw("docs/decisions.md")}>design decisions</a> are in the
+                  repository.
                 </p>
               </div>
             </div>
-            <dl className="hm-facts">
-              <div>
-                <dt>No cable</dt>
-                <dd>
-                  The cable can come off after setup. <code>phonedriver ios wifi on</code> keeps an iPhone in reach while it shares a Wi-Fi network with the Mac.{" "}
-                  <code>phonedriver pair</code> or <code>phonedriver untether</code> does the same for an <Link href="/docs/android-phone/">Android phone</Link>.
-                </dd>
-              </div>
-              <div>
-                <dt>Slow links</dt>
-                <dd>
-                  When the phone is far away, on a tunnel or a mobile network, phonedriver sends a smaller screen stream and compressed screen trees. On a link shaped to
-                  3G, the median tap on an emulator took 1.4 s, down from 2.8 s.
-                </dd>
-              </div>
-              <div>
-                <dt>30-second hand-over</dt>
-                <dd>
-                  A device you used from a terminal goes to your agent after 30 seconds idle. Your own <code>phonedriver snapshot</code> no longer blocks the agent for 10
-                  minutes.
-                </dd>
-              </div>
-            </dl>
           </div>
         </div>
       </section>
@@ -727,17 +703,14 @@ export default function Home() {
             <ul className="limits" data-land="">
               <li>
                 Tested on Android emulators (API 26 and 37), a {PHONE.name} ({PHONE.os}), the iOS Simulator, an iPhone 13 Pro Max, an iPhone 14 Plus and an iPad Pro. Other
-                Android phones use the same path. Bug reports from them are welcome.
+                Android phones use the same path.
               </li>
               <li>
                 A tap takes {Math.round(op("tap_paced").phonedriver)} to {Math.round(op("tap").phonedriver)} ms on an Android emulator and 450 to 530 ms on a real iPhone.
               </li>
               <li>The model can do anything on the phone you could do with your finger. For unattended runs, use an emulator or a spare phone.</li>
-              <li>
-                phonedriver never enters a passcode and can&apos;t pass Face ID or a fingerprint check. On a locked phone a command stops and says the device is locked, so
-                a phone that locks mid-task stops the task. Since 0.1.4, phonedriver keeps an iPhone awake while an agent is using it. Screens that block screenshots, as some banking
-                apps do, come out black in a screenshot, though their text can still be read.
-              </li>
+              <li>phonedriver never enters a passcode and can&apos;t pass Face ID or a fingerprint check, so a phone that locks mid-task stops the task.</li>
+              <li>Screens that block screenshots, as some banking apps do, come out black in a screenshot. Their text can still be read.</li>
             </ul>
             <div className="faq" id="faq">
               {HOME_FAQ.map(([q, a], i) => (
@@ -762,8 +735,7 @@ export default function Home() {
           <div className="end-copy">
             <h2>Give your agent a phone.</h2>
             <p className="lede">
-              Paste one prompt. Your agent checks your machine, adds the server and tells you what to plug in: an Android phone with USB debugging on, an emulator, or the
-              iOS Simulator.
+              Paste one prompt. Your agent checks your machine, adds the server and tells you what to plug in.
             </p>
             <p className="hm-end-links">
               <Link href="/docs/">
@@ -812,7 +784,7 @@ export default function Home() {
                       <button type="button" className="btn ghost ins-share" data-share={`${c.say}\n\n${url("/")}`}>
                         Send it to yourself
                       </button>
-                      <button type="button" className="btn" data-copy={c.say}>
+                      <button type="button" className="btn" data-copy={c.say} data-next="">
                         Copy the prompt
                       </button>
                     </p>
@@ -839,8 +811,8 @@ export default function Home() {
               )}
             </div>
             <p className="hm-note">
-              The first run downloads one binary (macOS, Linux or Windows) and caches it. To add the server by hand, pick your client above. Homebrew, the shell installer
-              and real iPhones are in the <Link href="/docs/install/">install guide</Link>.
+              The first run downloads one binary for macOS, Linux or Windows. Homebrew, the shell installer and real iPhones are in the{" "}
+              <Link href="/docs/install/">install guide</Link>.
             </p>
           </div>
           <div className="end-asks">
@@ -858,6 +830,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      <Paste />
       <JourneyEngine />
     </>
   );

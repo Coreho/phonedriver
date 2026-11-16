@@ -51,11 +51,8 @@ function Speed({ o }: { o: Op }) {
         </div>
       ))}
       <p>
-        {ratio(o.adb / o.phonedriver)} faster than adb (95% CI {fmt(o.adb_ratio_ci[0])} to {fmt(o.adb_ratio_ci[1])})
-        {o.phone_harness && o.phone_harness_ratio_ci
-          ? `, ${ratio(o.phone_harness / o.phonedriver)} faster than phone-harness (${fmt(o.phone_harness_ratio_ci[0])} to ${fmt(o.phone_harness_ratio_ci[1])})`
-          : ""}
-        .
+        {ratio(o.adb / o.phonedriver)} faster than adb
+        {o.phone_harness && o.phone_harness_ratio_ci ? `, ${ratio(o.phone_harness / o.phonedriver)} faster than phone-harness` : ""}.
       </p>
     </div>
   );
@@ -123,8 +120,8 @@ export default function Benchmarks() {
       >
         <h1>Benchmarks</h1>
         <p className="lede">
-          On nine real phone jobs, mobile-mcp used {ratio(mm.tokens / us.tokens)} the tokens of phonedriver. Reading a screen takes {fmt(read.phonedriver)} ms where adb
-          takes {fmt(read.adb)} ms. This page has every number, what was thrown away, and the raw data.
+          On nine real phone jobs, mobile-mcp used {ratio(mm.tokens / us.tokens)} the tokens of phonedriver, and reading a screen takes {fmt(read.phonedriver)} ms
+          where adb takes {fmt(read.adb)} ms. Every number, what was thrown away and the raw data are below.
         </p>
         <ul className="jump">
           <li>
@@ -147,8 +144,12 @@ export default function Benchmarks() {
             <h2 id="jobs">Nine jobs only a phone can do</h2>
             <p>
               The result of each job cannot be produced by adb, <code>am</code>, <code>cmd</code>, <code>settings</code>, <code>content</code> or a web search. A
-              script checks each one from the phone&apos;s own data, never from the agent&apos;s report. All tools ran on the same emulator on {b.date} with Claude
-              Sonnet 5.5 through <code>claude -p</code>, one agent at a time: phonedriver three passes, the others two. The phonedriver build is <code>cfa37b2</code>; release 0.1.0 is that build plus Windows build and test fixes. Totals are sums of per-job medians.
+              script checks each one from the phone&apos;s own data, never from the agent&apos;s report.
+            </p>
+            <p>
+              All tools ran on the same emulator on {b.date} with Claude Sonnet 5.5 through <code>claude -p</code>, one agent at a time: phonedriver three passes, the
+              others two. The phonedriver build is <code>cfa37b2</code>; release 0.1.0 is that build plus Windows build and test fixes. Totals are sums of per-job
+              medians.
             </p>
             <div className="tk-wrap wide">
               <table className="tk full">
@@ -247,9 +248,9 @@ export default function Benchmarks() {
 
             <h2 id="speed">Speed against adb and phone-harness</h2>
             <p>
-              p50 of 50 runs after 20 warm-ups, on an Android 17 emulator (API 37, headless, software rendering). Everything ran on the emulator&apos;s own host with the
-              three tools interleaved. phonedriver 0.1.1, 11 November 2026. Host CPU load was 31% to 80% around the rows, from other work on the machine. Bars are drawn to scale within each operation; the
-              tick is p95.
+              p50 of 50 runs after 20 warm-ups, on an Android 17 emulator (API 37, headless, software rendering), with phonedriver 0.1.1 on 11 November 2026. The three
+              tools ran interleaved on the emulator&apos;s own host, where CPU load was 31% to 80% from other work. Bars are drawn to scale within each operation;
+              the tick is p95.
             </p>
             <div className="mgrid two wide">
               {ops.map((o) => (
@@ -257,7 +258,10 @@ export default function Benchmarks() {
               ))}
             </div>
             <h3>Every operation, fastest gain first</h3>
-            <p>How many times faster phonedriver is, then each tool&apos;s median time with its slowest 1 in 20 (p95) under it.</p>
+            <p>
+              How many times faster phonedriver is, with the 95% confidence interval under it, then each tool&apos;s median time with its slowest 1 in 20 (p95) under
+              it.
+            </p>
             <div className="tw">
               <table className="figs">
                 <thead>
@@ -317,7 +321,6 @@ export default function Benchmarks() {
                 </tbody>
               </table>
             </div>
-            <p className="small">The range under each ratio is its 95% confidence interval.</p>
             <h3 id="phone">On a real phone</h3>
             <p>
               A smaller pass on a {PHONE.name} ({PHONE.os}) over USB, on 9 November 2026. 30 samples per phonedriver row and 20 per adb row; the two tools never ran at
@@ -387,9 +390,8 @@ export default function Benchmarks() {
 
             <h2 id="tokens">An earlier token run: three small tasks</h2>
             <p>
-              Before the nine jobs, a smaller run: Claude Sonnet 5.5 through <code>claude -p</code>, each tool the only tool, three tasks checked
-              from device state (the alarm database, the testbed event log, the answer text). Tokens are input, output, cache creation and cache read. Device: a
-              2560x1600 tablet emulator.
+              Before the nine jobs, a smaller run on a 2560x1600 tablet emulator: Claude Sonnet 5.5 through <code>claude -p</code>, each tool the only tool, three tasks
+              checked from device state (the alarm database, the testbed event log, the answer text). Tokens are input, output, cache creation and cache read.
             </p>
             <div className="tw">
               <table>

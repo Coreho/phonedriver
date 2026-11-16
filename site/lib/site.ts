@@ -6,6 +6,7 @@ export const VERSION = "0.1.4";
 export const BOOT =
   "Set up phonedriver so you can use my phone. Run `npx -y phonedriver doctor` and help me fix what it flags. Add its MCP server to this client (the server command is `npx -y phonedriver mcp`). Then run `npx -y phonedriver skill`, follow it, and show me what is on my phone's screen.";
 export const TODAY = "2026-11-14";
+export const HOME = "2026-11-16";
 export const PUBLISHED = "2026-11-10";
 export const ROOT = join(process.cwd(), "..");
 

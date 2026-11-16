@@ -45,7 +45,9 @@ Claude Sonnet 5.5 through `claude -p`, each tool the only one available, nine jo
 | log-code | 3/3, 53,962 | 2/2, 129,294 |
 | Sum | 27/27, 657,542 | 14/18, 1,127,495 |
 
-Tool calls summed to 99 for phonedriver and 104.5 for phone-harness. phone-harness failed four runs: relay-code twice (no contact was saved), wakelock-restrict once, and qa-signup once, which hit the 10-minute limit. The failed runs are part of its sum. These are small samples on a test set I wrote. I also ran a smaller, earlier test with three tasks, where phonedriver's medians were 218,357 tokens against phone-harness's 330,375 (34% fewer), phone-harness was ahead on the Wikipedia task, and all runs passed. phonedriver's fixed per-turn cost is higher: the first turn of a one-word `claude -p` is 5,606 tokens against 5,214 ([benchmarks](/benchmarks/#tokens)).
+Tool calls summed to 99 for phonedriver and 104.5 for phone-harness. phone-harness failed four runs: relay-code twice (no contact was saved), wakelock-restrict once, and qa-signup once, which hit the 10-minute limit. The failed runs are part of its sum. These are small samples on a test set I wrote.
+
+I also ran a smaller, earlier test with three tasks, where phonedriver's medians were 218,357 tokens against phone-harness's 330,375 (34% fewer), phone-harness was ahead on the Wikipedia task, and all runs passed. phonedriver's fixed per-turn cost is higher: the first turn of a one-word `claude -p` is 5,606 tokens against 5,214 ([benchmarks](/benchmarks/#tokens)).
 
 ## How they differ
 

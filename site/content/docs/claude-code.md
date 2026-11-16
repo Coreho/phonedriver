@@ -25,7 +25,7 @@ For the first run, boot one simulator or connect one device, so no device settin
 claude mcp add --env PHONEDRIVER_DEVICE=android:emulator-5554 phonedriver -- npx -y phonedriver mcp
 ```
 
-`phonedriver devices` lists the ids. `PHONEDRIVER_DEVICE` is optional when one device is connected.
+`phonedriver devices` lists the ids.
 
 ## Or install the plugin
 

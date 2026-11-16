@@ -1,5 +1,20 @@
+const SHOWN = 4200;
+
 export function mountCopy(root: HTMLElement): () => void {
   const timers = new Map<HTMLElement, number>();
+  let shown = 0;
+  const next = () => {
+    const toast = root.querySelector<HTMLElement>(".paste");
+    const say = root.querySelector<HTMLElement>("[data-paste]");
+    if (!toast || !say) return;
+    toast.dataset.on = "";
+    say.textContent = say.dataset.paste!;
+    clearTimeout(shown);
+    shown = window.setTimeout(() => {
+      delete toast.dataset.on;
+      say.textContent = "";
+    }, SHOWN);
+  };
   const copy = (btn: HTMLElement, text: string) =>
     navigator.clipboard.writeText(text).then(() => {
       const label = btn.querySelector<HTMLElement>("[data-label]") ?? btn;
@@ -8,6 +23,7 @@ export function mountCopy(root: HTMLElement): () => void {
       label.textContent = "Copied";
       btn.dataset.done = "";
       navigator.vibrate?.(8);
+      if ("next" in btn.dataset) next();
       clearTimeout(timers.get(btn));
       timers.set(
         btn,
@@ -33,5 +49,6 @@ export function mountCopy(root: HTMLElement): () => void {
     root.removeEventListener("click", onClick);
     root.removeEventListener("touchstart", press);
     timers.forEach((t) => clearTimeout(t));
+    clearTimeout(shown);
   };
 }

@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.hridaya423/phonedriver",
   "title": "phonedriver",
-  "description": "Let AI agents see and control Android and iOS phones over stdio.",
+  "description": "MCP server and CLI that lets AI agents see and control Android phones and iPhones (iOS) as text.",
   "repository": { "url": "https://github.com/hridaya423/phonedriver", "source": "github" },
   "websiteUrl": "https://phonedriver.dev",
   "version": "0.1.4",

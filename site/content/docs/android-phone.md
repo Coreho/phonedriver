@@ -20,7 +20,7 @@ phonedriver devices
 phonedriver doctor
 ```
 
-The phone appears as `android:<serial>`. Nothing is installed on it: the daemon pushes a small agent over adb and starts it as the shell user. No accessibility service has to be switched on.
+The phone appears as `android:<serial>`. The daemon pushes a small agent over adb and starts it as the shell user.
 
 ## Over Wi-Fi
 
