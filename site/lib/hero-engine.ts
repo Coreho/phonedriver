@@ -546,6 +546,7 @@ export function mountHero(hero: HTMLElement): () => void {
     if (video.paused) play();
     else video.pause();
   });
+  on(set, "change", () => (set.dataset.used = ""));
   on<MouseEvent>(set, "click", (e) => {
     if (!(e.target as HTMLElement).closest("[data-copy]")) return;
     const busy = started && !video.paused;
@@ -758,6 +759,7 @@ export function mountHero(hero: HTMLElement): () => void {
 
   const io = new IntersectionObserver(([e]) => {
     visible = e.isIntersecting;
+    flag(hero, "away", !visible);
     if (visible) kick();
   });
   io.observe(hero);
@@ -775,6 +777,8 @@ export function mountHero(hero: HTMLElement): () => void {
     { threshold: [0.2, 0.5] },
   );
   watch.observe(ip);
+  const near = new IntersectionObserver(([e]) => flag(hero, "early", !e.isIntersecting && e.boundingClientRect.top > 0), { rootMargin: "0px 0px -42% 0px" });
+  near.observe(ip);
   document.addEventListener("visibilitychange", kick);
   const scheme = matchMedia("(prefers-color-scheme: dark)");
   const recolor = () => {
@@ -826,6 +830,7 @@ export function mountHero(hero: HTMLElement): () => void {
     cleanups.forEach((f) => f());
     io.disconnect();
     watch.disconnect();
+    near.disconnect();
     ro.disconnect();
     fig?.destroy();
     document.removeEventListener("visibilitychange", kick);

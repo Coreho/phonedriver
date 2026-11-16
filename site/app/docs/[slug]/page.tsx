@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Crumbs, Html, JsonLd, OnPage } from "@/components/Bits";
+import { RailEngine } from "@/components/Engines";
 import { DOCS, faqLd, page } from "@/lib/content";
 import { meta } from "@/lib/meta";
 import { AUTHOR, PUBLISHED, PUBLISHER, ttl, url } from "@/lib/site";
@@ -54,6 +55,7 @@ export default async function Doc({ params }: Props) {
                 </Link>
               ))}
             </nav>
+            <RailEngine />
           </aside>
           <article className="prose">
             <h1>{p.meta.title}</h1>

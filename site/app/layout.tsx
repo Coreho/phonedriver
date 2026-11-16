@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ViewTransition } from "react";
-import { CopyEngine } from "@/components/Engines";
+import { CopyEngine, FoldEngine, JumpEngine } from "@/components/Engines";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { SITE_URL } from "@/lib/site";
@@ -36,6 +36,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </ViewTransition>
         <Footer />
         <CopyEngine />
+        <FoldEngine />
+        <JumpEngine />
       </body>
     </html>
   );

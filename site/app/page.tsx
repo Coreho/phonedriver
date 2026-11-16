@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Arrow, Html, JsonLd, Pane, Star } from "@/components/Bits";
-import { DotsEngine, EndEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
+import { DotsEngine, EndEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
 import { Hero } from "@/components/Hero";
 import { Route } from "@/components/Route";
 import { HARNESSES, PHONE, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, tokens, type Cell, type Harness } from "@/lib/bench";
@@ -27,15 +27,15 @@ const CLIENTS = [
   { id: "other", name: "Other", file: "your client's MCP config" },
 ];
 
-const STOPS = [
-  ["real-jobs", "Tokens"],
-  ["what-the-model-sees", "The read"],
-  ["speed", "Speed"],
-  ["asking-before-it-pays", "Approval"],
-  ["hidden-display", "Your screen"],
-  ["how-it-works", "How it works"],
-  ["limits", "Limits"],
-  ["install", "Set up"],
+const STOPS: [id: string, name: string, say: string, short?: string][] = [
+  ["real-jobs", "Tokens", "Doesn't that eat my tokens?", "And my tokens?"],
+  ["what-the-model-sees", "The read", "How is it that cheap?"],
+  ["speed", "Speed", "And is it quick?"],
+  ["asking-before-it-pays", "Approval", "Can it spend my money?"],
+  ["hidden-display", "Your screen", "Do I have to put my phone down?", "And my own phone?"],
+  ["how-it-works", "How it works", "What is it made of?"],
+  ["limits", "Limits", "Anything I should know?"],
+  ["install", "Set up", "Fine. Set it up."],
 ];
 
 const ASKS = [
@@ -82,6 +82,11 @@ const DECLINED = ROWS.find((r) => r.k === "declined")!.lines![0];
 
 const REFS = screen.lines.filter((l) => l.ref);
 const REST = REFS.findIndex((l) => l.text.includes("Display & touch")) + 1;
+const SHOT = [720, 1616];
+const strip = (top: number, height: number) => {
+  const tall = Math.min(height, 0.11);
+  return { "--ar": `${SHOT[0]} / ${SHOT[1] * tall}`, "--at": `${(top / (1 - tall)) * 100}%` } as React.CSSProperties;
+};
 
 export const metadata = meta({ path: "/", title: "phonedriver: MCP server for AI agents on Android and iOS phones", description: HOME_DESC, og: "/assets/og-home.png" });
 
@@ -133,6 +138,13 @@ export default function Home() {
       <canvas className="weave" aria-hidden="true" />
       <nav className="dock" inert aria-label="On this page">
         <a className="dock-top" href="#main" aria-label="Back to the top" dangerouslySetInnerHTML={{ __html: mark("text", PAINT.icon, 30) }} />
+        <button type="button" className="dock-now" popoverTarget="stops">
+          <i aria-hidden="true" />
+          <span className="vh">On this page: </span>
+          <span className="dock-name">{STOPS[0][1]}</span>
+          <span className="dock-n" aria-hidden="true">1/{STOPS.length}</span>
+        </button>
+        <i className="dock-bar" aria-hidden="true" />
         <ol className="dock-map">
           {STOPS.map(([id, name]) => (
             <li key={id}>
@@ -144,12 +156,40 @@ export default function Home() {
           ))}
         </ol>
         <button type="button" className="btn dock-cp" data-copy={BOOT}>
-          <span data-label>Copy the setup prompt</span>
+          <span data-label>Copy</span>
+          <span data-rest>
+            {" "}
+            <span>the setup </span>prompt
+          </span>
         </button>
       </nav>
+      <div className="menu stops" id="stops" popover="auto">
+        <p className="menu-top">
+          <span>On this page</span>
+          <button type="button" popoverTarget="stops" popoverTargetAction="hide">
+            Close
+          </button>
+        </p>
+        <nav aria-label="Stops on this page">
+          <ol>
+            {STOPS.map(([id, name, say]) => (
+              <li key={id}>
+                <a href={`#${id}`}>
+                  <i aria-hidden="true" />
+                  <b>{name}</b>
+                  <span>{say}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+          <a className="stops-top" href="#main">
+            Back to the top
+          </a>
+        </nav>
+      </div>
 
       <section className="stop" id="real-jobs">
-        <Route n={1} say="Doesn't that eat my tokens?" short="And my tokens?" />
+        <Route n={1} say={STOPS[0][2]} short={STOPS[0][3]} />
         <div className="wrap">
           <div className="hm-stat">
             <div>
@@ -269,7 +309,7 @@ export default function Home() {
       </section>
 
       <section className="stop" id="what-the-model-sees">
-        <Route n={2} say="How is it that cheap?" />
+        <Route n={2} say={STOPS[1][2]} short={STOPS[1][3]} />
         <div className="wrap">
           <div className="hm-stat">
             <div>
@@ -293,8 +333,8 @@ export default function Home() {
               <div className="tv-screen">
                 <img
                   src="/assets/screen-settings.jpg"
-                  width={720}
-                  height={1616}
+                  width={SHOT[0]}
+                  height={SHOT[1]}
                   alt="The Settings app on a Pixel 9 emulator: a search field, then rows for Google, Network & internet, Connected devices, Apps, Notifications, Sound & vibration, Modes, Display & touch, Wallpaper & style and Storage."
                   decoding="async"
                   loading="lazy"
@@ -311,6 +351,17 @@ export default function Home() {
                   </i>
                 ))}
               </div>
+              <div className="tv-read pane" aria-hidden="true">
+                <p className="pane-head">
+                  <span>what the model sees</span>
+                  <span className="if-fine">point at a row</span>
+                  <span className="if-touch">tap a row</span>
+                </p>
+                <p className="tv-readout">
+                  <b>{REFS[REST - 1].ref}</b>
+                  {REFS[REST - 1].text.trimStart().slice(REFS[REST - 1].ref!.length)}
+                </p>
+              </div>
               <figcaption>
                 What you see <span>{screen.nodes} nodes in Android&apos;s accessibility tree</span>
               </figcaption>
@@ -326,6 +377,11 @@ export default function Home() {
                         <li key={i} data-i={at} data-on={at === REST ? "" : undefined} style={{ "--i": n } as React.CSSProperties}>
                           <b>{l.ref}</b>
                           {l.text.trimStart().slice(l.ref.length)}
+                          <span className="tv-peek" aria-hidden="true">
+                            <span>
+                              <i style={strip(l.box![1], l.box![3])} />
+                            </span>
+                          </span>
                         </li>
                       ) : (
                         <li key={i} className="tv-meta">
@@ -338,7 +394,8 @@ export default function Home() {
               </div>
               <p className="tv-cap">
                 What the model sees. Android&apos;s accessibility tree for this screen has <b>{screen.nodes} nodes</b>; phonedriver sends these{" "}
-                <b>{screen.lines.length} lines</b>. Point at a line to see what it is on the screen.
+                <b>{screen.lines.length} lines</b>. <span className="if-fine">Point at a line to see what it is on the screen.</span>
+                <span className="if-touch">Tap a line to unfold the strip of screen it stands for.</span>
               </p>
               <Pane title="then, one screen later" note="only what changed" lines={TAPDIFF} label="phonedriver tap output" />
               <p className="tv-cap">
@@ -356,7 +413,7 @@ export default function Home() {
       </section>
 
       <section className="stop" id="speed">
-        <Route n={3} say="And is it quick?" />
+        <Route n={3} say={STOPS[2][2]} short={STOPS[2][3]} />
         <div className="wrap">
           <div className="hm-head">
             <h2>{ratio(read.adb / read.phonedriver)} faster than adb at reading the screen.</h2>
@@ -424,7 +481,7 @@ export default function Home() {
       </section>
 
       <section className="stop" id="asking-before-it-pays">
-        <Route n={4} say="Can it spend my money?" />
+        <Route n={4} say={STOPS[3][2]} short={STOPS[3][3]} />
         <div className="wrap">
           <div className="hm-split rev">
           <div>
@@ -523,7 +580,7 @@ export default function Home() {
       </section>
 
       <section className="stop" id="hidden-display" data-weave="thin">
-        <Route n={5} say="Do I have to put my phone down?" short="And my own phone?" />
+        <Route n={5} say={STOPS[4][2]} short={STOPS[4][3]} />
         <div className="wrap">
           <div className="hm-head">
             <h2>Your screen stays yours.</h2>
@@ -564,7 +621,7 @@ export default function Home() {
       </section>
 
       <section className="stop" id="how-it-works">
-        <Route n={6} say="What is it made of?" />
+        <Route n={6} say={STOPS[5][2]} short={STOPS[5][3]} />
         <div className="wrap">
           <div className="hm-head">
             <h2>How it works.</h2>
@@ -663,7 +720,7 @@ export default function Home() {
       </section>
 
       <section className="stop" id="limits" data-weave="thin">
-        <Route n={7} say="Anything I should know?" />
+        <Route n={7} say={STOPS[6][2]} short={STOPS[6][3]} />
         <div className="wrap hm-rail">
           <h2>Limits and questions.</h2>
           <div>
@@ -700,7 +757,7 @@ export default function Home() {
       </section>
 
       <section className="stop hm-end" id="install">
-        <Route n={8} say="Fine. Set it up." />
+        <Route n={8} say={STOPS[7][2]} short={STOPS[7][3]} />
         <div className="wrap end">
           <div className="end-copy">
             <h2>Give your agent a phone.</h2>
@@ -724,6 +781,7 @@ export default function Home() {
             <canvas className="end-fig" aria-hidden="true" />
             <EndEngine />
             <div className="ins" role="group" aria-label="Your client" data-land="">
+              <TabsEngine />
               <div className="ins-tabs">
                 {CLIENTS.map((c, i) => (
                   <label key={c.id}>
@@ -751,6 +809,9 @@ export default function Home() {
                     </blockquote>
                     <p>
                       <span>Paste it into Claude Code, Codex, Cursor or any agent that can run commands.</span>
+                      <button type="button" className="btn ghost ins-share" data-share={`${c.say}\n\n${url("/")}`}>
+                        Send it to yourself
+                      </button>
                       <button type="button" className="btn" data-copy={c.say}>
                         Copy the prompt
                       </button>
