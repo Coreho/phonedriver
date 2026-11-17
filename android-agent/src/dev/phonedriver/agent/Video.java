@@ -14,7 +14,6 @@ import com.genymobile.scrcpy.wrappers.SurfaceControl;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 final class Video {
     private static final int[] MAX_SIZE_FALLBACK = {2560, 1920, 1600, 1280, 1024, 800};
@@ -22,30 +21,55 @@ final class Video {
     private static final long DISPLAY_POLL_NS = 100_000_000L;
     private static final int FLAG_BARRIER = 4;
     private static final int OUTPUT_WAIT_US = 10_000;
-    private static volatile boolean syncRequested;
-    private static final ConcurrentLinkedQueue<Long> barriers = new ConcurrentLinkedQueue<>();
+
     private static final int BIT_RATE = 8_000_000;
-    private static final int FPS = 30;
-    private static volatile int bitRate = BIT_RATE;
-    private static volatile int fps = FPS;
-    private static volatile boolean constantRate;
+    static final int FPS = 30;
+
+    private static final long REPEAT_US = 100_000L;
+
+    // A frame's presentation time is the System.nanoTime at which the screen showed it: on the API 37 emulator every
+    // frame left the encoder between 30 ms and 5 s after its own. An encoder whose times are further off than this
+    // is on another clock; its frames are not timed, and a barrier then passes once the output on hand is written.
+    private static final long CLOCK_LIMIT_US = 60_000_000L;
 
     private final DataOutputStream out;
+    private final Lane lane = Lane.here();
+    private long wroteAtUs;
+    private long wrotePtsUs;
     private int maxSize;
+    private final int bitRate;
+    private final int fps;
 
     Video(DataOutputStream out, int maxSize, int bitRate, int fps) {
         this.out = out;
         this.maxSize = maxSize;
-        Video.bitRate = bitRate > 0 ? bitRate : BIT_RATE;
-        Video.fps = fps > 0 ? fps : FPS;
+        this.bitRate = bitRate > 0 ? bitRate : BIT_RATE;
+        this.fps = fps > 0 ? fps : FPS;
     }
 
     static void requestSyncFrame() {
-        syncRequested = true;
+        Lane.here().syncRequested = true;
     }
 
-    static void requestBarrier(long id) {
-        barriers.add(id);
+    /** Milliseconds the barrier may take longer than usual, because the encoder is that far behind the screen. */
+    static long requestBarrier(long id) {
+        Lane lane = Lane.here();
+        lane.barriers.add(new long[] {id, System.nanoTime() / 1000});
+        long lag = lane.videoLagUs;
+        return lag > REPEAT_US ? (REPEAT_US + 2 * lag) / 1000 : 0;
+    }
+
+    // Two lanes on the API 37 emulator, both animating after a tap: the software encoder stood still for up to 611 ms
+    // at a time, the frames queued, and each came out up to 1.45 s after the screen had shown it. A barrier written
+    // then, after the output on hand, was followed by the frames of the tap, and four screenshots in five showed the
+    // screen before it. An encoder that keeps up is not waited for. One that is behind is waited for until it gives
+    // a frame shown after the barrier was asked for, which a screen that changed in the last second has, because
+    // the last frame is repeated for about that long; or until it has given nothing for longer than it was behind.
+    private boolean encodedUpTo(long askedUs) {
+        long lag = lane.videoLagUs;
+        return lag <= REPEAT_US
+                || wrotePtsUs >= askedUs
+                || System.nanoTime() / 1000 - wroteAtUs >= REPEAT_US + 2 * lag;
     }
 
     static int[] fit(int w, int h, int maxSize, int align) {
@@ -57,7 +81,12 @@ final class Video {
         return new int[] {w & ~(align - 1), h & ~(align - 1)};
     }
 
-    static MediaFormat format(int w, int h) {
+    /** The format of a hidden display's stream: its encoder starts before the video connection that could ask for less. */
+    static MediaFormat format(int w, int h, int fps) {
+        return format(w, h, BIT_RATE, fps, false);
+    }
+
+    private static MediaFormat format(int w, int h, int bitRate, int fps, boolean constantRate) {
         MediaFormat f = new MediaFormat();
         f.setString(MediaFormat.KEY_MIME, "video/avc");
         f.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
@@ -68,7 +97,7 @@ final class Video {
         f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         f.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
         f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 10);
-        f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000);
+        f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, REPEAT_US);
         f.setInteger(MediaFormat.KEY_PRIORITY, 0);
         f.setInteger(MediaFormat.KEY_LATENCY, 1);
         f.setFloat("max-fps-to-encoder", (float) fps);
@@ -95,7 +124,7 @@ final class Video {
                 codec.getCodecInfo().getCapabilitiesForType("video/avc").getVideoCapabilities();
         int align = Math.max(caps.getWidthAlignment(), caps.getHeightAlignment());
         // Asked for 400 kbit/s without a rate mode, the HONOR X8's encoder sent 853 kbit/s of its lock screen.
-        constantRate = codec.getCodecInfo().getCapabilitiesForType("video/avc").getEncoderCapabilities()
+        boolean constantRate = codec.getCodecInfo().getCapabilitiesForType("video/avc").getEncoderCapabilities()
                 .isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR);
         boolean first = true;
         int fallback = -1;
@@ -110,7 +139,7 @@ final class Video {
             IBinder legacyDisplay = null;
             boolean started = false;
             try {
-                codec.configure(format(size[0], size[1]), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                codec.configure(format(size[0], size[1], bitRate, fps, constantRate), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                 surface = codec.createInputSurface();
                 try {
                     display = ServiceManager.getDisplayManager().createVirtualDisplay("phonedriver", size[0], size[1], 0, surface);
@@ -172,23 +201,24 @@ final class Video {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         long lastCheck = 0;
         while (true) {
-            if (syncRequested) {
-                syncRequested = false;
+            if (lane.syncRequested) {
+                lane.syncRequested = false;
                 Bundle b = new Bundle();
                 b.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0);
                 codec.setParameters(b);
             }
-            if (!barriers.isEmpty()) {
+            if (!lane.barriers.isEmpty()) {
                 int ready;
                 while ((ready = codec.dequeueOutputBuffer(info, 0)) >= 0) {
                     writeOutput(codec, ready, info);
                 }
-                Long barrier;
-                while ((barrier = barriers.poll()) != null) {
+                long[] barrier;
+                while ((barrier = lane.barriers.peek()) != null && encodedUpTo(barrier[1])) {
+                    lane.barriers.poll();
                     out.writeLong(0);
                     out.writeByte(FLAG_BARRIER);
                     out.writeInt(8);
-                    out.writeLong(barrier);
+                    out.writeLong(barrier[0]);
                     out.flush();
                 }
             }
@@ -211,6 +241,15 @@ final class Video {
         }
     }
 
+    private void wrote(long ptsUs) {
+        long now = System.nanoTime() / 1000;
+        long lag = now - ptsUs;
+        boolean timed = lag >= 0 && lag < CLOCK_LIMIT_US;
+        lane.videoLagUs = timed ? lag : 0;
+        wrotePtsUs = ptsUs;
+        wroteAtUs = now;
+    }
+
     private void writeOutput(MediaCodec codec, int id, MediaCodec.BufferInfo info) throws IOException {
         try {
             if (info.size > 0) {
@@ -230,6 +269,9 @@ final class Video {
                 out.writeInt(data.length);
                 out.write(data);
                 out.flush();
+                if ((flags & 1) == 0) {
+                    wrote(info.presentationTimeUs);
+                }
             }
         } finally {
             codec.releaseOutputBuffer(id, false);

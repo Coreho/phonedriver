@@ -64,7 +64,7 @@ fn lines_of(raw: &str) -> Vec<String> {
     lines
 }
 
-fn matcher(grep: &str) -> impl Fn(&str) -> bool {
+pub fn matcher(grep: &str) -> impl Fn(&str) -> bool {
     let alternatives: Vec<String> = grep
         .split('|')
         .filter(|a| !a.is_empty())

@@ -204,6 +204,12 @@ const DIRECTIONS: [&str; 4] = ["up", "down", "left", "right"];
 pub(crate) enum Verb {
     /// List devices, tier, capabilities and leases.
     Devices,
+    /// Start an iOS simulator or an Android virtual device that is off, by name or id. Without a name, list the
+    /// ones that can be started.
+    Boot {
+        /// The model (`"iPhone 17"`, `Pixel_9`; any case; the newest system when several have the name) or the id.
+        name: Option<String>,
+    },
     /// Print what is on screen, or what changed since the last observation.
     Snapshot {
         /// Print only what changed since the last observation.
@@ -221,6 +227,10 @@ pub(crate) enum Verb {
         /// Read the screen's pixels with OCR and add the text the tree lacks. Done automatically when the tree is empty or a web view has no children.
         #[arg(long)]
         pixels: bool,
+        /// Add the screen's accessibility problems: controls with no name a screen reader can say, and tap targets
+        /// under 44x44pt on iOS or 48x48 on Android.
+        #[arg(long)]
+        audit: bool,
         /// Save the device's own tree and a screenshot as a test fixture.
         #[arg(long)]
         save_fixture: Option<String>,
@@ -230,6 +240,9 @@ pub(crate) enum Verb {
     },
     /// Save a screenshot at one pixel per point and print its path.
     Screenshot {
+        /// Write the PNG to this file, as `-o` does.
+        #[arg(conflicts_with = "output")]
+        file: Option<PathBuf>,
         /// Write the PNG here, on this machine, instead of printing the path on the daemon's machine.
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -299,14 +312,19 @@ pub(crate) enum Verb {
         #[arg(long)]
         app: Option<String>,
     },
-    /// List the apps that can be launched, or `install <path>`, `stop`, `clear` (data) or `uninstall` one by name or id.
-    /// On a physical device `clear` and `uninstall` only touch apps phonedriver installed.
+    /// List the apps that can be launched, or `install <path>`, `stop`, `clear` (data) or `uninstall` one by name or id,
+    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`.
+    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed.
     Apps {
         /// What to do to an app. Omit it to list apps.
-        #[arg(value_parser = ["install", "stop", "clear", "uninstall"])]
+        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke"])]
         action: Option<String>,
-        /// The app file to install (on the daemon's machine), or the app to stop, clear or uninstall.
+        /// The app file to install (on the daemon's machine), or the app to act on.
         target: Option<String>,
+        /// For `grant` and `revoke`: `notifications`, `camera`, `location`, or a full name such as
+        /// `android.permission.CAMERA` (Android); `photos`, `location` and the other `simctl privacy` services
+        /// (Simulator).
+        permissions: Vec<String>,
     },
     /// Drag from the middle of the screen, or of `--from`, the way a finger does.
     Swipe {
@@ -374,8 +392,8 @@ pub(crate) enum Verb {
         /// `@ref`, `x,y` or the field's text.
         target: String,
     },
-    /// Run a command in the device's shell (Android: the agent's shell, no `adb` spawn; Simulator: `simctl spawn`, or
-    /// `simctl <subcommand> ...` with the device filled in). Prints the exit code, trimmed output, and what changed on
+    /// Run a command in the device's shell (Android: the agent's shell, no `adb` spawn, or `emu <command>` for an
+    /// emulator's console; Simulator: `simctl spawn`, or `simctl <subcommand> ...` with the device filled in). Prints the exit code, trimmed output, and what changed on
     /// screen. Secrets come from stdin or PHONEDRIVER_SECRET.
     Shell {
         /// The command, such as `cmd uimode night yes`. Leave it out with `--secret`.
@@ -396,6 +414,73 @@ pub(crate) enum Verb {
         #[arg(long)]
         secret: bool,
     },
+    /// Save what this session has done so far as a steps file that `replay` runs again with no model. The
+    /// session's list of steps starts again empty.
+    Save {
+        /// Where to write the steps, one JSON object a line.
+        file: PathBuf,
+    },
+    /// Run a steps file from `save`, in order, with no model. It stops at the first step that fails, or that
+    /// changes nothing where it changed the screen when saved, prints the screen and says how to go on.
+    Replay {
+        /// The steps file.
+        file: PathBuf,
+        /// Start at this step (1 is the first), after doing the one before it yourself.
+        #[arg(long, default_value_t = 1)]
+        from: usize,
+        /// Compare the screen after each step with the screenshot this folder keeps for it, and stop at the first
+        /// whose text changed. A step with no screenshot there keeps its own. The status bar is left out.
+        #[arg(long, value_name = "DIR")]
+        screens: Option<PathBuf>,
+    },
+    /// Record the screen to an MP4 file (Android and the iOS Simulator): `record start`, the actions to show, then `record stop`, which
+    /// prints the file and, beside it, a `.steps.jsonl` file of the actions done meanwhile with their times.
+    Record {
+        /// What to do: `start` or `stop`.
+        #[arg(value_parser = ["start", "stop"])]
+        action: String,
+        /// With `start`: write the video to this path on the daemon's machine instead of under its `tmp` folder.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Print the last log lines of the app in front, or of the named app, and its last crash (Android).
+    Logs {
+        /// The app's name or id; the default is the app in front.
+        app: Option<String>,
+        /// Keep only lines containing one of these words, separated by `|`, ignoring case.
+        #[arg(long)]
+        grep: Option<String>,
+        /// Keep this many of the last lines (default 40, 0 keeps all).
+        #[arg(long)]
+        head: Option<usize>,
+        /// Read this many seconds back (default 60).
+        #[arg(long)]
+        since: Option<u64>,
+    },
+    /// Print the web page in front as text, whole, without scrolling (Android: Chrome, and the web views of debug builds).
+    Page {
+        /// Keep only lines containing one of these words, separated by `|`, ignoring case.
+        #[arg(long)]
+        grep: Option<String>,
+        /// Print the whole page, however long.
+        #[arg(long)]
+        all: bool,
+    },
+    /// A system setting without its screen (Android 17): `setting find dark` lists keys and what each accepts
+    /// (`find "dark theme|media volume"` runs several searches), `setting get <key>` reads one,
+    /// `setting set <key> <value> [<key> <value>...]` writes and prints the values afterwards, and
+    /// `setting open <screen key>` shows a settings screen.
+    Setting {
+        /// What to do: `find`, `get`, `set` or `open`.
+        #[arg(value_parser = ["find", "get", "set", "open"])]
+        action: String,
+        /// Words to look for, the key, keys each followed by its new value, or the screen's key.
+        #[arg(required = true)]
+        args: Vec<String>,
+        /// Write a setting the device marks as one its user must confirm, on a physical device.
+        #[arg(long)]
+        force: bool,
+    },
     /// Print the device clipboard, or set it with `clipboard set <text>`.
     Clipboard {
         /// `get` (the default) or `set`.
@@ -405,6 +490,10 @@ pub(crate) enum Verb {
         text: Option<String>,
     },
     /// Press a button or key: home, back, recents, notifications, lock, volume-up, volume-down, enter, hide-keyboard.
+    /// `landscape` turns the screen on its side and `portrait` upright (on Android auto-rotate goes off).
+    /// On an Android emulator, `fingerprint` touches the fingerprint sensor with the enrolled finger and
+    /// `wrong-fingerprint` with another. On an iOS Simulator they show Face ID a face that matches or one that
+    /// does not.
     Press {
         /// The key or button.
         key: String,
@@ -454,6 +543,29 @@ pub(crate) enum Verb {
     /// Runs `adb tcpip 5555` on the phone (USB or Wi-Fi), lists its addresses by interface and connects to the first that answers. adb then listens on every network the phone joins until it reboots, so use it only on networks you trust or with Tailscale; `adb usb` or a reboot turns it off.
     #[cfg(feature = "android")]
     Untether,
+    /// Add phonedriver to every agent on this machine, then check the devices.
+    ///
+    /// Claude Code and Codex are asked with their own `mcp add`; Cursor, VS Code and Gemini CLI get the entry in their JSON file. An agent that already has it is left as it is. Run through `npx phonedriver init` the entry is `npx -y phonedriver mcp`, otherwise this binary.
+    Init {
+        /// Print what would be done and change nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Stop after the agents; do not run the doctor checks.
+        #[arg(long)]
+        register_only: bool,
+    },
+    /// Say what changed between two screenshots, as text.
+    ///
+    /// With one file, the screen now is compared with it. Prints `same`, or the regions whose pixels differ and the text that differs in them (`~ "Save" → "Saved" at 130,208`), with the point to tap. Text is read from the pictures, so it works for any app.
+    Compare {
+        /// The earlier screenshot (PNG).
+        before: PathBuf,
+        /// The later screenshot. Without it, the screen now.
+        after: Option<PathBuf>,
+        /// Also write the later picture with the changed regions boxed.
+        #[arg(long)]
+        image: Option<PathBuf>,
+    },
     /// Serve the tools over MCP on stdio.
     Mcp,
     /// Print SKILL.md, the instructions an agent reads before it uses phonedriver.
@@ -519,6 +631,30 @@ pub fn run(cli: Cli) -> ExitCode {
         #[cfg(feature = "android")]
         Verb::Untether => crate::wireless::untether(cli.device.as_deref()),
         Verb::Mcp => crate::mcp::run(cli.device),
+        Verb::Compare {
+            before,
+            after: Some(after),
+            image,
+        } => {
+            let compared = read_picture(&before).and_then(|b| {
+                let a = read_picture(&after)?;
+                compared(&b, &a, image.as_deref())
+            });
+            match compared {
+                Ok(text) => {
+                    println!("{text}");
+                    ExitCode::SUCCESS
+                }
+                Err(why) => {
+                    eprintln!("error: {why}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Verb::Init {
+            dry_run,
+            register_only,
+        } => crate::init::run(&socket::home(), dry_run, register_only),
         Verb::Skill => {
             print!("{}", include_str!("../../../SKILL.md"));
             ExitCode::SUCCESS
@@ -806,10 +942,21 @@ pub(crate) async fn execute_with(
             if g.json {
                 return Ok(result.to_string());
             }
+            if result.as_array().is_some_and(Vec::is_empty) {
+                return Ok(no_devices(&client.call("boot", json!({})).await?));
+            }
             Ok(with_default_device(
                 device_table(&result),
                 g.device.as_deref(),
             ))
+        }
+        Verb::Boot { name } => {
+            let result = client.call("boot", json!({"name": name})).await?;
+            Ok(if g.json {
+                result.to_string()
+            } else {
+                show_boot(&result)
+            })
         }
         Verb::Snapshot {
             diff,
@@ -817,11 +964,12 @@ pub(crate) async fn execute_with(
             within,
             max_lines,
             pixels,
+            audit,
             save_fixture,
             fixture_dir,
         } => {
             let mut p = json!({
-                "diff": diff, "interactive": interactive, "max_lines": max_lines, "pixels": pixels,
+                "diff": diff, "interactive": interactive, "max_lines": max_lines, "pixels": pixels, "audit": audit,
                 "no_settle": g.no_settle, "elements": g.json, "capture": save_fixture.is_some(),
             });
             if let Some(w) = within {
@@ -838,13 +986,23 @@ pub(crate) async fn execute_with(
             if g.json {
                 return Ok(result.to_string());
             }
-            Ok(if obs.text.is_empty() {
+            let mut out = if obs.text.is_empty() {
                 "no change".to_string()
             } else {
                 obs.text
-            })
+            };
+            if obs.empty {
+                out.push('\n');
+                out.push_str(EMPTY_SCREEN);
+            }
+            Ok(out)
         }
-        Verb::Screenshot { output, marks } => {
+        Verb::Screenshot {
+            file,
+            output,
+            marks,
+        } => {
+            let output = output.or(file);
             let mut params = json!({"marks": marks});
             if output.is_some() {
                 params["inline"] = json!(true);
@@ -877,6 +1035,21 @@ pub(crate) async fn execute_with(
                 ),
                 None => format!("{path} {}x{}", shot.width, shot.height),
             })
+        }
+        Verb::Compare {
+            before,
+            after: _,
+            image,
+        } => {
+            let before = read_picture(&before).map_err(Failure::Local)?;
+            let result = client
+                .call("screenshot", with(json!({"marks": false, "inline": true})))
+                .await?;
+            let shot: ScreenshotResult = decode(&result)?;
+            let now = base64::engine::general_purpose::STANDARD
+                .decode(shot.data_b64.unwrap_or_default())
+                .map_err(|e| Failure::Local(format!("the daemon sent bad image data: {e}")))?;
+            compared(&before, &now, image.as_deref()).map_err(Failure::Local)
         }
         Verb::Wait { condition } => {
             let mut p = json!({"condition": wait_condition(&condition)});
@@ -934,6 +1107,143 @@ pub(crate) async fn execute_with(
             let r = client.call("shell", with(p)).await?;
             show_shell(&r, g.json)
         }
+        Verb::Save { file } => {
+            let cannot =
+                |e: std::io::Error| Failure::Local(format!("cannot write {}: {e}", file.display()));
+            let mut out = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(&file)
+                .map_err(cannot)?;
+            let r = client.call("journal", with(json!({}))).await?;
+            let steps = r["steps"].as_array().cloned().unwrap_or_default();
+            if !steps.is_empty() {
+                let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
+                out.set_len(0).map_err(cannot)?;
+                std::io::Write::write_all(&mut out, text.as_bytes()).map_err(cannot)?;
+            }
+            if g.json {
+                return Ok(
+                    json!({"path": file, "steps": steps.len(), "over": r["over"]}).to_string(),
+                );
+            }
+            Ok(show_saved(
+                &file.display().to_string(),
+                &steps,
+                r["over"] == true,
+            ))
+        }
+        Verb::Replay {
+            file,
+            from,
+            screens,
+        } => {
+            let text = std::fs::read_to_string(&file)
+                .map_err(|e| Failure::Local(format!("cannot read {}: {e}", file.display())))?;
+            let steps = text
+                .lines()
+                .enumerate()
+                .filter(|(_, l)| !l.trim().is_empty())
+                .map(|(i, l)| {
+                    serde_json::from_str::<Value>(l).map_err(|e| {
+                        Failure::Local(format!(
+                            "line {} of {} is not a step: {e}",
+                            i + 1,
+                            file.display()
+                        ))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let run = Replay {
+                file: file.display().to_string(),
+                steps,
+                from,
+                screens,
+            };
+            run.play(client, &act, &with, g.json).await
+        }
+        Verb::Record { action, output } => {
+            let mut params = json!({"action": action});
+            if let Some(out) = output {
+                if action == "stop" {
+                    return Err(Failure::Local(
+                        "`record stop` takes no file: the recording goes where `record start` said"
+                            .into(),
+                    ));
+                }
+                let path = std::path::absolute(&out).map_err(|e| {
+                    Failure::Local(format!("cannot resolve {}: {e}", out.display()))
+                })?;
+                params["path"] = json!(path);
+            }
+            let r = client.call("record", with(params)).await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_record(&r))
+        }
+        Verb::Logs {
+            app,
+            grep,
+            head,
+            since,
+        } => {
+            let r = client
+                .call(
+                    "logs",
+                    with(json!({"app": app, "grep": grep, "head": head, "since_s": since})),
+                )
+                .await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_logs(&r, since.unwrap_or(60)))
+        }
+        Verb::Page { grep, all } => {
+            let r = client
+                .call("page", with(json!({"grep": grep, "all": all})))
+                .await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_page(&r, grep.as_deref()))
+        }
+        Verb::Setting {
+            action,
+            args,
+            force,
+        } => {
+            let mut p = match (action.as_str(), args.as_slice()) {
+                ("find", words) => json!({"find": words.join(" ")}),
+                ("get", [key]) => json!({"key": key}),
+                ("set", [key, value]) => json!({"key": key, "value": value, "force": force}),
+                ("set", pairs) if pairs.len() % 2 == 0 => {
+                    let values: serde_json::Map<String, Value> = pairs
+                        .chunks(2)
+                        .map(|pair| (pair[0].clone(), json!(pair[1])))
+                        .collect();
+                    json!({"values": values, "force": force})
+                }
+                ("open", [screen]) => json!({"open": screen}),
+                ("get", _) => return Err(Failure::Local("setting get takes one key".into())),
+                ("set", _) => {
+                    return Err(Failure::Local(
+                        "setting set takes keys, each followed by its value\nexample: phonedriver setting set dark_ui_mode/dark_ui_activated true".into(),
+                    ));
+                }
+                _ => return Err(Failure::Local("setting open takes one screen key".into())),
+            };
+            p["settle"] = json!(!g.no_settle);
+            if let Some(t) = g.timeout {
+                p["timeout_ms"] = json!(t);
+            }
+            if let Some(t) = g.expect_change {
+                p["expect_change_ms"] = json!(t);
+            }
+            let r = client.call("setting", with(p)).await?;
+            show_setting(&r, &args.join(" "), g.json)
+        }
         Verb::Batch { steps } => {
             let steps = steps
                 .iter()
@@ -948,13 +1258,14 @@ pub(crate) async fn execute_with(
         Verb::Apps {
             action: Some(action),
             target,
+            permissions,
         } => {
             let target = target
                 .ok_or_else(|| Failure::Local(format!("apps {action} needs an app or a path")))?;
             let p = if action == "install" {
                 json!({"action": action, "path": target})
             } else {
-                json!({"action": action, "app": target})
+                json!({"action": action, "app": target, "permissions": permissions})
             };
             let r = client.call("app", with(p)).await?;
             if g.json {
@@ -1028,11 +1339,44 @@ pub(crate) async fn execute_with(
         Verb::Pair | Verb::Untether => Ok(String::new()),
         Verb::Daemon { .. }
         | Verb::Doctor
+        | Verb::Init { .. }
         | Verb::Ios { .. }
         | Verb::Mcp
         | Verb::Skill
         | Verb::Version => Ok(String::new()),
     }
+}
+
+fn read_picture(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))
+}
+
+/// The report on two screenshots, and with `image` the later one written with its changed regions boxed.
+pub(crate) fn compared(
+    before: &[u8],
+    after: &[u8],
+    image: Option<&std::path::Path>,
+) -> Result<String, String> {
+    let report = crate::compare::compare(before, after, 0.0)?;
+    let mut text = crate::compare::render(&report);
+    if let Some(path) = image.filter(|_| !report.regions.is_empty()) {
+        let marks: Vec<phonedriver_video::marks::Mark> = report
+            .regions
+            .iter()
+            .enumerate()
+            .map(|(i, r)| phonedriver_video::marks::Mark {
+                label: (i + 1).to_string(),
+                x: r.x,
+                y: r.y,
+                w: r.w,
+                h: r.h,
+            })
+            .collect();
+        let boxed = phonedriver_video::marks::draw_marks(after, &marks)?;
+        std::fs::write(path, boxed).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        text.push_str(&format!("\n{}", path.display()));
+    }
+    Ok(text)
 }
 
 fn wait_condition(condition: &str) -> Value {
@@ -1291,13 +1635,10 @@ fn show_batch(result: &Value, json: bool, sent: usize) -> Result<String, Failure
         head.push_str(&format!(" · not settled after {}ms", r.settle_ms));
     } else if !r.changed {
         head.push_str(&format!(" · no change after {}ms", r.settle_ms));
-    } else {
-        head.push_str(&format!(" · settled in {}ms", r.settle_ms));
-        if r.observation.kind == Kind::Full {
-            head.push_str(" · new screen");
-        } else if r.observation.text.is_empty() {
-            head.push_str(" · no element changed");
-        }
+    } else if r.observation.kind == Kind::Full {
+        head.push_str(" · new screen");
+    } else if r.observation.text.is_empty() {
+        head.push_str(" · no element changed");
     }
     let mut out = vec![head];
     out.extend(lines);
@@ -1325,13 +1666,50 @@ fn with_default_device(table: String, default: Option<&str>) -> String {
     }
 }
 
+const NO_DEVICES: &str = "no devices\nhint: Connect a device or start an emulator; `phonedriver doctor` says what is missing.";
+
+fn off_devices(boot: &Value) -> Vec<phonedriver_core::error::DeviceSummary> {
+    serde_json::from_value(boot["off"].clone()).unwrap_or_default()
+}
+
+/// What `devices` prints with nothing connected, given the `boot` reply that lists what is off.
+fn no_devices(boot: &Value) -> String {
+    match off_devices(boot).as_slice() {
+        [] => NO_DEVICES.into(),
+        off => format!(
+            "no devices\ncan be started: {}\nhint: Start one with `phonedriver boot <name>`.",
+            phonedriver_core::error::can_be_started(off)
+        ),
+    }
+}
+
+fn show_boot(result: &Value) -> String {
+    if let Some(id) = result["id"].as_str() {
+        let word = match result["already"].as_bool() {
+            Some(true) => "already on:",
+            _ => "booted",
+        };
+        return format!(
+            "{word} {id} · {} · {}",
+            result["model"].as_str().unwrap_or_default(),
+            result["os"].as_str().unwrap_or_default()
+        );
+    }
+    let off = off_devices(result);
+    if off.is_empty() {
+        return "nothing to start\nhint: `boot` starts iOS simulators and Android virtual devices that are off. Create one in Xcode or Android Studio.".into();
+    }
+    let mut rows = vec![vec!["ID".to_string(), "MODEL".into(), "OS".into()]];
+    rows.extend(off.into_iter().map(|d| vec![d.id, d.model, d.os]));
+    table(&rows)
+}
+
 fn device_table(result: &Value) -> String {
     let Ok(devices) = serde_json::from_value::<Vec<DeviceEntry>>(result.clone()) else {
         return result.to_string();
     };
     if devices.is_empty() {
-        return "no devices\nhint: Connect a device or start an emulator; `phonedriver doctor` says what is missing."
-            .into();
+        return NO_DEVICES.into();
     }
     let any_hidden = devices.iter().any(|d| d.hidden_display.is_some());
     let mut head = vec!["ID", "MODEL", "OS", "TIER", "LEASE"];
@@ -1359,6 +1737,10 @@ fn device_table(result: &Value) -> String {
         }
         rows.push(row);
     }
+    table(&rows)
+}
+
+fn table(rows: &[Vec<String>]) -> String {
     let columns = rows[0].len();
     let widths: Vec<usize> = (0..columns)
         .map(|c| rows.iter().map(|r| r[c].chars().count()).max().unwrap_or(0))
@@ -1408,6 +1790,534 @@ pub(crate) fn show_shell(result: &Value, json: bool) -> Result<String, Failure> 
     Ok(out)
 }
 
+/// The last line of a reply whose screen gives nothing to act on. The MCP server attaches the picture in its place.
+pub(crate) const EMPTY_SCREEN: &str = "hint: this screen gives no element list; `phonedriver screenshot` shows it, and `tap x,y` taps a point on the picture";
+
+/// Observed in the replay evaluation (`docs/bench/replay.md`): files-new-folder saved two launches that had not worked
+/// and two shell commands the agent used to look around, the reply said only "saved 8 steps", and all eight ran again
+/// in every replay.
+const SAVED_STEP_CHARS: usize = 60;
+
+/// `save`: the steps that went into the file, one line each, and how many of them a replay cannot be sure of.
+pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
+    if steps.is_empty() {
+        return format!(
+            "nothing to save: this session has done no action since its last save ({path} is as it was)"
+        );
+    }
+    let count = |field: &str| steps.iter().filter(|s| !s[field].is_null()).count() as u64;
+    let mut out = format!("saved {} to {path}", plural(steps.len() as u64, "step"));
+    for (i, step) in steps.iter().enumerate() {
+        let what = Replay::describe(step);
+        let cut: String = what.chars().take(SAVED_STEP_CHARS).collect();
+        let more = if cut.len() < what.len() { "…" } else { "" };
+        out.push_str(&format!("\n{}. {cut}{more}", i + 1));
+    }
+    if steps.len() > 1 {
+        out.push_str(
+            "\nthe file holds one step a line: delete the line of a step that was a detour",
+        );
+    }
+    let by_position = count("by_position");
+    if by_position > 0 {
+        out.push_str(&format!(
+            "\n{by_position} of them tap a position, because no text singles out the element: they hold only while the layout does"
+        ));
+    }
+    let manual = count("manual");
+    if manual > 0 {
+        out.push_str(&format!(
+            "\n{manual} of them need a person or a model (a secret): a replay stops there"
+        ));
+    }
+    if over {
+        out.push_str(&format!(
+            "\nonly the first {} steps were kept",
+            crate::daemon::journal::MAX
+        ));
+    }
+    out
+}
+
+/// A steps file being run again.
+pub(crate) struct Replay {
+    pub file: String,
+    pub steps: Vec<Value>,
+    pub from: usize,
+    pub screens: Option<PathBuf>,
+}
+
+/// The screen after a replayed step against the screenshot kept for it.
+enum Screen {
+    Kept,
+    Same,
+    /// Pixels changed in this many regions and no text did.
+    Silent(usize),
+}
+
+impl Replay {
+    /// What a step does, in words that do not depend on the refs of the run it was saved from.
+    fn describe(step: &Value) -> String {
+        if let Some(what) = step["manual"].as_str() {
+            return what.to_string();
+        }
+        let params = &step["params"];
+        let action = &params["action"];
+        let target =
+            |t: &Value| match (t["text"].as_str(), t["id"].as_str(), t["point"].as_object()) {
+                (Some(text), ..) => format!(" \"{text}\""),
+                (None, Some(id), _) => format!(" {id}"),
+                (None, None, Some(p)) => format!(" {},{}", p["x"], p["y"]),
+                _ => String::new(),
+            };
+        match step["method"].as_str().unwrap_or_default() {
+            "act" => {
+                let kind = action["kind"].as_str().unwrap_or("act");
+                let what = ["app", "url", "key", "direction"]
+                    .iter()
+                    .find_map(|f| action[*f].as_str())
+                    .map(|v| format!(" {v}"))
+                    .unwrap_or_default();
+                let typed = action["text"]
+                    .as_str()
+                    .map(|t| format!(" \"{t}\""))
+                    .unwrap_or_default();
+                let on = ["target", "into", "until", "from", "at"]
+                    .iter()
+                    .map(|f| target(&action[*f]))
+                    .find(|t| !t.is_empty())
+                    .unwrap_or_default();
+                let into = if typed.is_empty() || on.is_empty() {
+                    ""
+                } else {
+                    " into"
+                };
+                format!("{kind}{what}{typed}{into}{on}")
+            }
+            "wait" => {
+                let c = &params["condition"];
+                match (target(&c["appears"]), target(&c["gone"])) {
+                    (appears, _) if !appears.is_empty() => format!("wait{appears}"),
+                    (_, gone) if !gone.is_empty() => format!("wait gone:{}", gone.trim_start()),
+                    _ => "wait settled".into(),
+                }
+            }
+            "shell" => format!("shell {}", params["command"].as_str().unwrap_or_default()),
+            method => format!("{method} {params}"),
+        }
+    }
+
+    pub async fn play(
+        &self,
+        client: &mut Client,
+        act: &(dyn Fn(Value) -> Value + Sync),
+        with: &(dyn Fn(Value) -> Value + Sync),
+        json: bool,
+    ) -> Result<String, Failure> {
+        let total = self.steps.len();
+        if self.from == 0 || self.from > total {
+            return Err(Failure::Local(format!(
+                "{} has {}; there is no step {}",
+                self.file,
+                plural(total as u64, "step"),
+                self.from
+            )));
+        }
+        let started = std::time::Instant::now();
+        let mut done = Vec::new();
+        let (mut kept, mut same) = (0u64, 0u64);
+        for (i, step) in self.steps.iter().enumerate().skip(self.from - 1) {
+            let outcome = match (step["manual"].as_str(), step["method"].as_str()) {
+                (Some(what), _) => Err(refused(what)),
+                (None, Some("act")) => {
+                    client
+                        .call("act", act(step["params"]["action"].clone()))
+                        .await
+                }
+                (None, Some(method @ ("wait" | "shell" | "setting" | "app"))) => {
+                    client.call(method, with(step["params"].clone())).await
+                }
+                _ => Err(refused("this is not a step this version can run")),
+            };
+            let outcome = match outcome {
+                Ok(r) if step["changed"] == true && r["changed"] == false => Err(refused(
+                    "it changed nothing this time; when it was saved it changed the screen",
+                )),
+                other => other,
+            };
+            let mut line = match outcome {
+                Ok(r) => format!(
+                    "{}. {}",
+                    i + 1,
+                    r["summary"]
+                        .as_str()
+                        .map_or_else(|| Replay::describe(step), str::to_string)
+                ),
+                Err(failure) => {
+                    return Err(self
+                        .stopped(client, with, i + 1, &done, failure, None)
+                        .await);
+                }
+            };
+            if let Some(dir) = &self.screens {
+                match screen(client, with, dir, i + 1).await {
+                    Ok(Screen::Kept) => kept += 1,
+                    Ok(Screen::Same) => same += 1,
+                    Ok(Screen::Silent(n)) => {
+                        same += 1;
+                        line.push_str(&format!(
+                            " · screen: {} changed, no text",
+                            plural(n as u64, "region")
+                        ));
+                    }
+                    Err((failure, hint)) => {
+                        return Err(self
+                            .stopped(client, with, i + 1, &done, failure, hint)
+                            .await);
+                    }
+                }
+            }
+            done.push(line);
+        }
+        let ran = done.len() as u64;
+        let ms = started.elapsed().as_millis() as u64;
+        if json {
+            let mut out = json!({"ok": true, "steps": ran, "ms": ms});
+            if self.screens.is_some() {
+                out["screens"] = json!({"same": same, "kept": kept});
+            }
+            return Ok(out.to_string());
+        }
+        let mut out = format!(
+            "replayed {} in {:.1} s\n{}",
+            plural(ran, "step"),
+            ms as f64 / 1000.0,
+            done.join("\n")
+        );
+        if let Some(dir) = &self.screens {
+            let dir = dir.display();
+            out.push('\n');
+            out.push_str(&match (same, kept) {
+                (0, k) => format!(
+                    "kept {} in {dir}; a replay with --screens {dir} compares each step's screen with them",
+                    plural(k, "screen")
+                ),
+                (s, 0) => format!("{} matched those in {dir}", plural(s, "screen")),
+                (s, k) => format!(
+                    "{} matched those in {dir}, and {k} new kept there",
+                    plural(s, "screen")
+                ),
+            });
+        }
+        if let Some(screen) = screen_now(client, with).await {
+            out.push_str("\nscreen now:\n");
+            out.push_str(&screen);
+        }
+        Ok(out)
+    }
+
+    /// The failure of step `n`, with what ran before it, the screen, and how to go on from here.
+    async fn stopped(
+        &self,
+        client: &mut Client,
+        with: &(dyn Fn(Value) -> Value + Sync),
+        n: usize,
+        done: &[String],
+        failure: Failure,
+        hint: Option<String>,
+    ) -> Failure {
+        let total = self.steps.len();
+        let step = Replay::describe(&self.steps[n - 1]);
+        let mut error = match failure {
+            Failure::Rpc(e) => e,
+            Failure::Local(m) => match refused(&m) {
+                Failure::Rpc(e) => e,
+                Failure::Local(_) => return Failure::Local(m),
+            },
+        };
+        let mut text = format!("step {n} of {total} ({step}) failed: {}", error.message);
+        for line in done {
+            text.push('\n');
+            text.push_str(line);
+        }
+        if let Some(screen) = screen_now(client, with).await {
+            text.push_str("\nscreen now:\n");
+            text.push_str(&screen);
+        }
+        let hint = hint.unwrap_or_else(|| {
+            if n < total {
+                format!(
+                    "Do step {n} yourself, then replay the same file from step {} for the {} left.",
+                    n + 1,
+                    plural((total - n) as u64, "step")
+                )
+            } else {
+                format!("Do step {n} yourself; it is the last one.")
+            }
+        });
+        error.message = text;
+        if let Some(data) = error.data.as_object_mut() {
+            data.insert("hint".into(), json!(hint));
+            data.insert("step".into(), json!(n));
+        }
+        Failure::Rpc(error)
+    }
+}
+
+/// Observed on the API 37 emulator, about one replay in seven: a step's screenshot caught a switch's thumb halfway
+/// across (read as "q•") or the app's window still black after a restart, and the same screen matched a moment later.
+/// So a screen that differs is looked at again, every `LOOK_AGAIN`, until it has stayed the same for `STILL_FOR` or
+/// `LOOK_FOR` has passed, and one about to be kept must first look the same twice.
+const LOOK_AGAIN: std::time::Duration = std::time::Duration::from_millis(250);
+const STILL_FOR: std::time::Duration = std::time::Duration::from_millis(1500);
+const LOOK_FOR: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Compares the screen after step `n` with the screenshot `dir` keeps for it, or keeps it there when there is none.
+/// A failure comes with the hint for it.
+async fn screen(
+    client: &mut Client,
+    with: &(dyn Fn(Value) -> Value + Sync),
+    dir: &std::path::Path,
+    n: usize,
+) -> Result<Screen, (Failure, Option<String>)> {
+    let path = dir.join(format!("{n:02}.png"));
+    let local = |m: String| (refused(&m), None);
+    let (mut now, bar) = shoot(client, with).await?;
+    let still = |a: &[u8], b: &[u8]| {
+        crate::compare::still(a, b, bar)
+            .map_err(|e| local(format!("its screen cannot be compared with itself: {e}")))
+    };
+    let kept = match std::fs::read(&path) {
+        Ok(kept) => kept,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let started = std::time::Instant::now();
+            loop {
+                tokio::time::sleep(LOOK_AGAIN).await;
+                let (next, _) = shoot(client, with).await?;
+                let settled = still(&now, &next)?;
+                now = next;
+                if settled || started.elapsed() >= LOOK_FOR {
+                    break;
+                }
+            }
+            std::fs::create_dir_all(dir)
+                .and_then(|()| std::fs::write(&path, &now))
+                .map_err(|e| local(format!("cannot keep {}: {e}", path.display())))?;
+            return Ok(Screen::Kept);
+        }
+        Err(e) => return Err(local(format!("cannot read {}: {e}", path.display()))),
+    };
+    let started = std::time::Instant::now();
+    loop {
+        let report = crate::compare::compare(&kept, &now, bar).map_err(|e| {
+            local(format!(
+                "its screen cannot be compared with {}: {e}",
+                path.display()
+            ))
+        })?;
+        if report.regions.is_empty() {
+            return Ok(Screen::Same);
+        }
+        if report.text.is_empty() && report.unread.is_none() {
+            return Ok(Screen::Silent(report.regions.len()));
+        }
+        let still_since = std::time::Instant::now();
+        loop {
+            if still_since.elapsed() >= STILL_FOR || started.elapsed() >= LOOK_FOR {
+                return Err((
+                    refused(&format!(
+                        "its screen is not the one in {}\n{}",
+                        path.display(),
+                        crate::compare::render(&report)
+                    )),
+                    Some(format!(
+                        "If the new screen is right, delete {} and replay again to keep it.",
+                        path.display()
+                    )),
+                ));
+            }
+            tokio::time::sleep(LOOK_AGAIN).await;
+            let (next, _) = shoot(client, with).await?;
+            if !still(&now, &next)? {
+                now = next;
+                break;
+            }
+        }
+    }
+}
+
+/// A screenshot's PNG and the rows its status bar covers.
+async fn shoot(
+    client: &mut Client,
+    with: &(dyn Fn(Value) -> Value + Sync),
+) -> Result<(Vec<u8>, f32), (Failure, Option<String>)> {
+    let result = client
+        .call("screenshot", with(json!({"marks": false, "inline": true})))
+        .await
+        .map_err(|f| (f, None))?;
+    let shot: ScreenshotResult = decode(&result).map_err(|f| (f, None))?;
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(shot.data_b64.unwrap_or_default())
+        .map_err(|e| {
+            (
+                Failure::Local(format!("the daemon sent bad image data: {e}")),
+                None,
+            )
+        })?;
+    Ok((png, shot.status_bar.unwrap_or(0) as f32))
+}
+
+fn refused(detail: &str) -> Failure {
+    Failure::Rpc(
+        phonedriver_core::error::Error::Refused {
+            detail: detail.to_string(),
+        }
+        .into(),
+    )
+}
+
+async fn screen_now(client: &mut Client, with: &(dyn Fn(Value) -> Value + Sync)) -> Option<String> {
+    let reply = client.call("snapshot", with(json!({}))).await.ok()?;
+    reply["text"].as_str().map(str::to_string)
+}
+
+/// `record`: where a started recording goes, or the finished file with its length, size and steps file.
+pub(crate) fn show_record(result: &Value) -> String {
+    let path = result["path"].as_str().unwrap_or_default();
+    let Some(ms) = result["ms"].as_u64() else {
+        return format!("recording the screen to {path}; `phonedriver record stop` ends it");
+    };
+    let bytes = result["bytes"].as_u64().unwrap_or(0);
+    let size = if bytes >= 1_000_000 {
+        format!("{:.1} MB", bytes as f64 / 1e6)
+    } else {
+        format!("{} kB", bytes.div_ceil(1000))
+    };
+    let mut out = format!(
+        "{path}\n{:.1} s, {}x{}, {} frames, {size}",
+        ms as f64 / 1000.0,
+        result["width"],
+        result["height"],
+        result["frames"],
+    );
+    if let Some(steps) = result["steps_path"].as_str() {
+        out.push_str(&format!(
+            "\nsteps: {} with their times in {steps}",
+            result["steps"]
+        ));
+    }
+    if let Some(why) = result["early"].as_str() {
+        out.push_str(&format!("\nended early: {why}"));
+    }
+    out
+}
+
+/// `logs`: the crash first, then how many earlier lines were left out, then the lines.
+pub(crate) fn show_logs(result: &Value, seconds: u64) -> String {
+    let app = result["app"].as_str().unwrap_or_default();
+    let output = result["output"].as_str().unwrap_or_default();
+    let mut out = Vec::new();
+    if let Some(crash) = result["crash"].as_str() {
+        out.push(format!("crashed: {crash}"));
+    }
+    match result["omitted"].as_u64() {
+        Some(n) if n > 0 => out.push(format!(
+            "… {n} earlier lines (narrow them with grep, or set head to 0 for all)"
+        )),
+        _ => {}
+    }
+    if !output.is_empty() {
+        out.push(output.to_string());
+    }
+    if out.is_empty() {
+        return format!("no log lines from {app} in the last {seconds} s");
+    }
+    out.join("\n")
+}
+
+/// `page`: the title and address, then the page's lines, then what was left out and how to get it.
+pub(crate) fn show_page(result: &Value, grep: Option<&str>) -> String {
+    let text = result["text"].as_str().unwrap_or_default();
+    let mut out = format!(
+        "page \"{}\" {}",
+        result["title"].as_str().unwrap_or_default(),
+        result["url"].as_str().unwrap_or_default()
+    );
+    match (text.is_empty(), grep) {
+        (true, Some(words)) => out.push_str(&format!("\nno line of the page has \"{words}\"")),
+        (true, None) => out.push_str("\nthe page has no text"),
+        (false, _) => {
+            out.push('\n');
+            out.push_str(text);
+        }
+    }
+    let left = result["omitted_lines"].as_u64().unwrap_or(0);
+    let chars = result["omitted_chars"].as_u64().unwrap_or(0);
+    if chars > 0 {
+        let what = match left {
+            0 => format!("{chars} more characters of this line"),
+            1 => format!("1 more line ({chars} characters)"),
+            n => format!("{n} more lines ({chars} characters)"),
+        };
+        out.push_str(&format!(
+            "\n… {what}\nhint: `--grep words` keeps only the lines with them, `--all` prints everything"
+        ));
+    }
+    out
+}
+
+/// `setting`: the matching lines of a search, `key = value` for a read, `ok key = value` and the screen change for
+/// a write, or the action line of an opened screen.
+pub(crate) fn show_setting(result: &Value, asked: &str, json: bool) -> Result<String, Failure> {
+    if json {
+        return Ok(result.to_string());
+    }
+    if let Some(lines) = result["lines"].as_array() {
+        let mut out: Vec<String> = lines
+            .iter()
+            .filter_map(|l| l.as_str().map(String::from))
+            .collect();
+        if out.is_empty() {
+            return Ok(format!(
+                "no setting matches {asked:?}; try one other word, or `shell`"
+            ));
+        }
+        match result["more"].as_u64() {
+            Some(n) if n > 0 => out.push(format!("… {n} more; add a word to narrow")),
+            _ => {}
+        }
+        return Ok(out.join("\n"));
+    }
+    let mut out = if let Some(values) = result["values"].as_object() {
+        values
+            .iter()
+            .map(|(k, v)| format!("ok {k} = {}", v.as_str().unwrap_or_default()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else if let Some(key) = result["key"].as_str() {
+        let value = result["value"].as_str().unwrap_or_default();
+        if result.get("action").is_none() {
+            return Ok(match result["hint"].as_str() {
+                Some(hint) => format!("{key} = {value}\nnote: {hint}"),
+                None => format!("{key} = {value}"),
+            });
+        }
+        format!("ok {key} = {value}")
+    } else {
+        return show_action(result, false);
+    };
+    let Some(action) = result.get("action") else {
+        return Ok(out);
+    };
+    if action["changed"] == true {
+        let seen = show_action(action, false)?;
+        let seen = seen.strip_prefix("ok set").unwrap_or(&seen);
+        out.push_str("\nscreen: ");
+        out.push_str(seen.trim_start_matches(" · "));
+    }
+    Ok(out)
+}
+
 fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
     if json {
         return Ok(result.to_string());
@@ -1439,13 +2349,10 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
             }
         } else if !r.changed {
             head.push_str(&format!(" · no change after {}ms", r.settle_ms));
-        } else {
-            head.push_str(&format!(" · settled in {}ms", r.settle_ms));
-            if r.observation.kind == Kind::Full {
-                head.push_str(" · new screen");
-            } else if r.observation.text.is_empty() {
-                head.push_str(" · no element changed");
-            }
+        } else if r.observation.kind == Kind::Full {
+            head.push_str(" · new screen");
+        } else if r.observation.text.is_empty() && r.verified.is_none() {
+            head.push_str(" · no element changed");
         }
     }
     if r.woke {
@@ -1459,7 +2366,29 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
         out.push('\n');
         out.push_str(&r.observation.text);
     }
-    if r.settled && !r.changed {
+    if let Some(crash) = &r.crashed {
+        out.push_str(&format!(
+            "\ncrashed: {} stopped during this action: {}\nhint: `phonedriver logs {}` prints its last log lines",
+            crash.app, crash.what, crash.app
+        ));
+    }
+    if r.observation.empty {
+        if let Some(u) = &r.unverified {
+            out.push_str("\nhint: ");
+            out.push_str(&u.hint);
+        }
+        out.push('\n');
+        out.push_str(EMPTY_SCREEN);
+        return Ok(out);
+    }
+    if let Some(n) = r.unchanged_repeats {
+        out.push_str(&format!("\nhint: this action has changed nothing {n} times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"));
+    } else if r.settled
+        && !r.changed
+        && matches!(r.summary.as_str(), "pressed landscape" | "pressed portrait")
+    {
+        out.push_str("\nhint: the screen did not turn: it was already that way, or the app in front supports one orientation only (an iPhone's home screen, most launchers)");
+    } else if r.settled && !r.changed {
         out.push_str("\nhint: nothing changed; the tap may have missed, or changed only what the element list does not show (a web checkbox): `phonedriver screenshot` shows the picture");
     }
     if let Some(u) = &r.unverified {
@@ -1575,6 +2504,25 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_wait_step_is_described_as_the_command_that_waits() {
+        let wait =
+            |c: Value| Replay::describe(&json!({"method": "wait", "params": {"condition": c}}));
+        assert_eq!(
+            wait(json!({"appears": {"text": "Name", "role": null}})),
+            "wait \"Name\""
+        );
+        assert_eq!(
+            wait(json!({"gone": {"text": "Loading", "role": null}})),
+            "wait gone:\"Loading\""
+        );
+        assert_eq!(
+            wait(json!({"appears": {"id": "com.example:id/ok"}})),
+            "wait com.example:id/ok"
+        );
+        assert_eq!(wait(json!({"settled": true})), "wait settled");
+    }
+
     fn tap(autonomous: bool) -> Verb {
         Verb::Tap {
             target: "Pay".into(),
@@ -1597,6 +2545,29 @@ mod tests {
         );
         let help = command().render_help().to_string();
         assert!(!help.contains("\n  back"), "{help}");
+    }
+
+    #[test]
+    fn a_screenshot_takes_its_file_as_a_plain_argument_or_after_the_flag() {
+        for words in [
+            ["phonedriver", "screenshot", "shot.png"].as_slice(),
+            ["phonedriver", "screenshot", "-o", "shot.png"].as_slice(),
+        ] {
+            let Some(Verb::Screenshot { output, file, .. }) =
+                Cli::try_parse_from(words).unwrap().command
+            else {
+                panic!("{words:?} is a screenshot");
+            };
+            assert_eq!(
+                output.or(file),
+                Some(PathBuf::from("shot.png")),
+                "{words:?}"
+            );
+        }
+        assert!(
+            Cli::try_parse_from(["phonedriver", "screenshot", "a.png", "-o", "b.png"]).is_err(),
+            "two files for one picture"
+        );
     }
 
     #[test]
@@ -1666,12 +2637,16 @@ mod tests {
     #[test]
     fn a_tap_that_redraws_without_changing_any_element_says_so() {
         let shown = show_action(&action(true, "diff", ""), false).unwrap();
-        assert_eq!(
-            shown,
-            "ok tapped @e1 · settled in 400ms · no element changed"
-        );
+        assert_eq!(shown, "ok tapped @e1 · no element changed");
         let shown = show_action(&action(true, "diff", "~ @e1 x → y"), false).unwrap();
         assert!(!shown.contains("no element changed"), "{shown}");
+        let mut typed = action(true, "diff", "");
+        typed["summary"] = json!("typed into @e4");
+        typed["verified"] = json!(true);
+        assert_eq!(
+            show_action(&typed, false).unwrap(),
+            "ok typed into @e4 · verified"
+        );
     }
 
     #[test]
@@ -1726,6 +2701,20 @@ mod tests {
     }
 
     #[test]
+    fn a_turn_that_changed_nothing_says_the_app_may_not_turn_and_says_nothing_about_taps() {
+        for key in ["landscape", "portrait"] {
+            let mut v = action(false, "diff", "");
+            v["summary"] = json!(format!("pressed {key}"));
+            let shown = show_action(&v, false).unwrap();
+            let hint = shown.lines().find(|l| l.starts_with("hint: ")).unwrap();
+            assert_eq!(
+                hint,
+                "hint: the screen did not turn: it was already that way, or the app in front supports one orientation only (an iPhone's home screen, most launchers)"
+            );
+        }
+    }
+
+    #[test]
     fn a_no_change_hint_does_not_send_the_reader_to_wait_for_a_screen_that_has_settled() {
         let mut v = action(false, "diff", "");
         v["settle_ms"] = json!(502);
@@ -1737,9 +2726,102 @@ mod tests {
     }
 
     #[test]
+    fn the_third_action_that_changed_nothing_is_told_to_stop_repeating_it() {
+        let mut v = action(false, "diff", "");
+        v["settle_ms"] = json!(502);
+        v["unchanged_repeats"] = json!(3);
+        let shown = show_action(&v, false).unwrap();
+        let hints: Vec<&str> = shown.lines().filter(|l| l.starts_with("hint: ")).collect();
+        assert_eq!(
+            hints,
+            [
+                "hint: this action has changed nothing 3 times in a row, so repeating it will not help: `phonedriver screenshot` shows what is on screen, or act on another target"
+            ],
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn an_action_that_crashed_the_app_prints_the_crash_and_how_to_read_the_log() {
+        let mut v = action(true, "full", "@e1 button \"Apps\"");
+        v["crashed"] = json!({"app": "com.example", "what": "java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)"});
+        let shown = show_action(&v, false).unwrap();
+        assert!(
+            shown.contains("\ncrashed: com.example stopped during this action: java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)\nhint: `phonedriver logs com.example` prints its last log lines"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn record_prints_where_it_writes_then_the_finished_file() {
+        assert_eq!(
+            show_record(&json!({"path": "/t/a.mp4"})),
+            "recording the screen to /t/a.mp4; `phonedriver record stop` ends it"
+        );
+        assert_eq!(
+            show_record(&json!({
+                "path": "/t/a.mp4", "ms": 12340, "frames": 345, "width": 1080, "height": 2424,
+                "bytes": 2_140_000, "steps": 4, "steps_path": "/t/a.mp4.steps.jsonl",
+                "early": "the screen changed size or turned"
+            })),
+            "/t/a.mp4\n12.3 s, 1080x2424, 345 frames, 2.1 MB\nsteps: 4 with their times in /t/a.mp4.steps.jsonl\nended early: the screen changed size or turned"
+        );
+        assert_eq!(
+            show_record(&json!({
+                "path": "/t/a.mp4", "ms": 900, "frames": 3, "width": 360, "height": 800,
+                "bytes": 41_200, "steps": 0
+            })),
+            "/t/a.mp4\n0.9 s, 360x800, 3 frames, 42 kB"
+        );
+    }
+
+    #[test]
+    fn logs_with_nothing_to_show_says_so() {
+        let shown = show_logs(
+            &json!({"app": "com.example", "output": "", "omitted": 0, "crash": null}),
+            60,
+        );
+        assert_eq!(shown, "no log lines from com.example in the last 60 s");
+        let shown = show_logs(
+            &json!({"app": "com.example", "output": "a\nb", "omitted": 3, "crash": null}),
+            60,
+        );
+        assert_eq!(
+            shown,
+            "… 3 earlier lines (narrow them with grep, or set head to 0 for all)\na\nb"
+        );
+    }
+
+    #[test]
     fn devices_with_nothing_connected_says_so_and_what_to_do() {
         let shown = device_table(&json!([]));
         assert!(shown.starts_with("no devices"), "{shown}");
+        let off = json!({"off": [
+            {"id": "sim:C", "model": "iPhone 16", "os": "iOS 26.5"},
+            {"id": "sim:A", "model": "iPad", "os": "iOS 18.6"}]});
+        assert_eq!(
+            no_devices(&off),
+            "no devices\ncan be started: iPhone 16 (iOS 26.5), iPad (iOS 18.6)\nhint: Start one with `phonedriver boot <name>`."
+        );
+        assert_eq!(no_devices(&json!({"off": []})), shown);
+        assert_eq!(
+            show_boot(&off),
+            "ID     MODEL      OS\nsim:C  iPhone 16  iOS 26.5\nsim:A  iPad       iOS 18.6"
+        );
+        assert_eq!(
+            show_boot(&json!({"off": []})),
+            "nothing to start\nhint: `boot` starts iOS simulators and Android virtual devices that are off. Create one in Xcode or Android Studio."
+        );
+        assert_eq!(
+            show_boot(&json!({"id": "sim:C", "model": "iPhone 16", "os": "iOS 26.5"})),
+            "booted sim:C · iPhone 16 · iOS 26.5"
+        );
+        assert_eq!(
+            show_boot(
+                &json!({"id": "sim:C", "model": "iPhone 16", "os": "iOS 26.5", "already": true})
+            ),
+            "already on: sim:C · iPhone 16 · iOS 26.5"
+        );
         assert!(shown.contains("hint: Connect a device"), "{shown}");
         assert!(shown.contains("phonedriver doctor"), "{shown}");
     }

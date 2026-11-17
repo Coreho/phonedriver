@@ -8,6 +8,7 @@ pub mod map;
 pub mod offer;
 pub mod runner;
 pub mod setup;
+pub mod simio;
 pub mod simulator;
 pub mod team;
 #[cfg(feature = "testing")]

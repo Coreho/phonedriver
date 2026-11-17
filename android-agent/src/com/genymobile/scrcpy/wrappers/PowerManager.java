@@ -12,6 +12,7 @@ import java.lang.reflect.Method;
 public final class PowerManager {
 
     private static final int USER_ACTIVITY_EVENT_OTHER = 0;
+    private static final int USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS = 1;
 
     private final IInterface manager;
     private Method isScreenOnMethod;
@@ -64,15 +65,16 @@ public final class PowerManager {
         return userActivityMethod;
     }
 
+    /** Resets the screen-off timer of {@code displayId} without brightening it, so a screen that has dimmed stays dim. */
     public void userActivity(int displayId) {
         try {
             Method method = getUserActivityMethod();
             long time = SystemClock.uptimeMillis();
             if (Build.VERSION.SDK_INT >= AndroidVersions.API_31_ANDROID_12) {
-                method.invoke(manager, displayId, time, USER_ACTIVITY_EVENT_OTHER, 0);
+                method.invoke(manager, displayId, time, USER_ACTIVITY_EVENT_OTHER, USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS);
                 return;
             }
-            method.invoke(manager, time, USER_ACTIVITY_EVENT_OTHER, 0);
+            method.invoke(manager, time, USER_ACTIVITY_EVENT_OTHER, USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS);
         } catch (ReflectiveOperationException e) {
             Ln.e("Could not invoke method", e);
         }

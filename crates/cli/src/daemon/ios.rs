@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use phonedriver_core::device::Device;
-use phonedriver_core::error::Error;
+use phonedriver_core::error::{DeviceSummary, Error};
 use phonedriver_ios::coredevice::CoreDevice;
 use phonedriver_ios::device::IosDevice;
 use phonedriver_ios::lan::Lan;
@@ -16,11 +16,39 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 
 use super::progress::after_a_second;
-use super::{DeviceSource, Listed};
+use super::{Booted, DeviceSource, Listed, named};
 
 /// `simctl list` takes about 70 ms on the Mac mini and the daemon lists devices on every request, which added that
 /// much to every iOS call; a listing this recent is reused.
 const LIST_TTL: Duration = Duration::from_secs(2);
+/// A request that names a Simulator the last listing (younger than this) holds is answered from it while a new one is
+/// taken in the background: with the 2 s reuse alone, every other call of a benchmark run waited 110 ms for `simctl`.
+/// A Simulator the listing does not hold, and every request that names none, still waits for a new listing.
+const LIST_STALE: Duration = Duration::from_secs(30);
+
+#[derive(Debug, PartialEq)]
+enum Use {
+    Kept,
+    KeptAndRefresh,
+    Taken,
+}
+
+fn use_listing(age: Option<Duration>, holds_requested: bool, refreshing: bool) -> Use {
+    match age {
+        Some(a) if a < LIST_TTL => Use::Kept,
+        Some(a) if a < LIST_STALE && holds_requested && refreshing => Use::Kept,
+        Some(a) if a < LIST_STALE && holds_requested => Use::KeptAndRefresh,
+        _ => Use::Taken,
+    }
+}
+
+/// The last `simctl` listing; `generation` moves when a boot drops it, so a refresh begun before cannot put it back.
+#[derive(Default)]
+struct SimListing {
+    generation: u64,
+    taken: Option<(Instant, Vec<Simulator>)>,
+    refreshing: bool,
+}
 
 /// The usbmuxd listing of attached devices is reused for this long, failures included: on Windows a missing usbmuxd
 /// cost 2 s per request. usbmuxd attach and detach events are not exposed by the `idevice` client we use, so a
@@ -36,7 +64,7 @@ fn starting_runner(name: &str, home: &std::path::Path) -> String {
 
 pub struct SimSource {
     home: PathBuf,
-    listed: Mutex<Option<(Instant, Vec<Simulator>)>>,
+    listed: Arc<Mutex<SimListing>>,
 }
 
 impl SimSource {
@@ -44,30 +72,51 @@ impl SimSource {
     pub fn new(home: PathBuf) -> SimSource {
         SimSource {
             home,
-            listed: Mutex::new(None),
+            listed: Arc::default(),
         }
     }
 
-    async fn simulators(&self) -> Result<Vec<Simulator>, Error> {
+    /// The Simulators `simctl` lists; `requested`, a `sim:` id, may be answered from a listing up to `LIST_STALE` old.
+    async fn simulators(&self, requested: Option<&str>) -> Result<Vec<Simulator>, Error> {
         let mut listed = self.listed.lock().await;
-        if let Some((at, sims)) = listed.as_ref()
-            && at.elapsed() < LIST_TTL
-        {
-            return Ok(sims.clone());
+        let age = listed.taken.as_ref().map(|(at, _)| at.elapsed());
+        let holds = |sims: &[Simulator]| {
+            requested.is_some_and(|r| {
+                sims.iter()
+                    .any(|s| r.strip_prefix("sim:") == Some(s.udid.as_str()))
+            })
+        };
+        let holds_requested = listed.taken.as_ref().is_some_and(|(_, sims)| holds(sims));
+        match (
+            use_listing(age, holds_requested, listed.refreshing),
+            &listed.taken,
+        ) {
+            (Use::Kept, Some((_, sims))) => return Ok(sims.clone()),
+            (Use::KeptAndRefresh, Some((_, sims))) => {
+                let sims = sims.clone();
+                listed.refreshing = true;
+                let (shared, generation) = (self.listed.clone(), listed.generation);
+                tokio::spawn(async move {
+                    let fresh = Simulator::list().await;
+                    let mut listed = shared.lock().await;
+                    listed.refreshing = false;
+                    if let Ok(fresh) = fresh
+                        && listed.generation == generation
+                    {
+                        listed.taken = Some((Instant::now(), fresh));
+                    }
+                });
+                return Ok(sims);
+            }
+            _ => {}
         }
         let sims = Simulator::list().await?;
-        *listed = Some((Instant::now(), sims.clone()));
+        listed.taken = Some((Instant::now(), sims.clone()));
         Ok(sims)
     }
-}
 
-#[async_trait]
-impl DeviceSource for SimSource {
-    async fn list(&self) -> Result<Vec<Listed>, Error> {
-        Ok(self
-            .simulators()
-            .await?
-            .into_iter()
+    fn listed(sims: Vec<Simulator>) -> Vec<Listed> {
+        sims.into_iter()
             .map(|s| Listed {
                 id: format!("sim:{}", s.udid),
                 model: s.name,
@@ -75,7 +124,46 @@ impl DeviceSource for SimSource {
                 tier: "simulator".into(),
                 capabilities: IosDevice::CAPABILITIES,
             })
-            .collect())
+            .collect()
+    }
+}
+
+#[async_trait]
+impl DeviceSource for SimSource {
+    async fn list(&self) -> Result<Vec<Listed>, Error> {
+        Ok(SimSource::listed(self.simulators(None).await?))
+    }
+
+    async fn list_for(&self, requested: Option<&str>) -> Result<Vec<Listed>, Error> {
+        Ok(SimSource::listed(self.simulators(requested).await?))
+    }
+
+    async fn off(&self) -> Vec<DeviceSummary> {
+        Simulator::off()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| DeviceSummary {
+                id: format!("sim:{}", s.udid),
+                model: s.name,
+                os: s.os,
+            })
+            .collect()
+    }
+
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
+        let off = self.off().await;
+        let Some(device) = off.into_iter().find(|d| named(name, &d.id, &d.model)) else {
+            return Ok(None);
+        };
+        Simulator::boot(device.id.trim_start_matches("sim:")).await?;
+        let mut listed = self.listed.lock().await;
+        listed.generation += 1;
+        listed.taken = None;
+        Ok(Some(Booted {
+            device,
+            already: false,
+        }))
     }
 
     async fn connect(&self, id: &str) -> Result<Arc<dyn Device>, Error> {
@@ -280,5 +368,17 @@ mod tests {
         assert!(!keeps_browse(browsing, &remembered, &ids(&["A"]), &[]));
         assert!(!keeps_browse(browsing, &ids(&["A", "B"]), &[], &[]));
         assert!(!keeps_browse(None, &remembered, &[], &[]));
+    }
+
+    #[test]
+    fn a_listing_is_kept_two_seconds_and_answers_for_a_simulator_it_holds_while_a_new_one_is_taken_until_thirty()
+     {
+        let s = Duration::from_secs;
+        assert_eq!(use_listing(None, true, false), Use::Taken);
+        assert_eq!(use_listing(Some(s(1)), false, false), Use::Kept);
+        assert_eq!(use_listing(Some(s(5)), true, false), Use::KeptAndRefresh);
+        assert_eq!(use_listing(Some(s(5)), true, true), Use::Kept);
+        assert_eq!(use_listing(Some(s(5)), false, false), Use::Taken);
+        assert_eq!(use_listing(Some(s(40)), true, true), Use::Taken);
     }
 }

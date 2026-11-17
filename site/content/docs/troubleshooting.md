@@ -47,6 +47,8 @@ It checks the toolchain, devices and the socket. Each line says `ok`, `warn` or 
 
 **Empty or sparse screen text.** WebViews and custom views can have an empty accessibility tree. phonedriver falls back to OCR (`text "Web form" (ocr)`) and a screenshot read. A web checkbox in a WebView has no checked state in the tree, so its state comes from the screenshot.
 
+**`text recognition on Linux uses Tesseract, which is not installed`.** Reading text from a screenshot (a screen with no element list, `snapshot --pixels`, `compare`) uses Tesseract on Linux, which the system does not ship: `apt install tesseract-ocr`. macOS and Windows use the text recognition the system ships.
+
 **An iOS tap is slow.** That is XCTest, about 240 ms of confirmation, not a hang. See [the iOS Simulator page](/docs/ios-simulator/).
 
 **`--display hidden` fails as unsupported.** The hidden screen needs Android 13 (API 33) or later, and `press lock` and `press notifications` are not available in that mode. Use the default screen, or leave `PHONEDRIVER_DISPLAY` unset. See [the Android phone page](/docs/android-phone/#a-hidden-screen-for-the-agent).

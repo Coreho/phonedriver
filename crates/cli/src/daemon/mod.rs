@@ -9,9 +9,11 @@ pub mod android;
 pub mod checkbox;
 pub mod guard;
 pub mod ios;
+pub mod journal;
 pub mod progress;
 pub mod rpc;
 pub mod secret_field;
+mod secrets;
 pub mod session;
 pub mod shell;
 pub mod socket;
@@ -26,8 +28,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use phonedriver_core::device::{Capabilities, Device, DisplayMode};
-use phonedriver_core::error::{DeviceSummary, Error, Op};
+use phonedriver_core::device::{Capabilities, Device, DisplayMode, lane_of};
+use phonedriver_core::error::{DeviceSummary, Error, Op, can_be_started};
 use serde_json::{Value, json};
 use tokio::io::split;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -41,7 +43,9 @@ tokio::task_local! {
     static PHASES: std::cell::RefCell<Phases>;
 }
 use self::trace::{TraceOptions, Traces};
-use crate::wire::{ActParams, Action, BatchParams, Common, DeviceEntry, Step, VERSION};
+use crate::wire::{
+    ActParams, Action, BatchParams, Common, DeviceEntry, RecordParams, SettingParams, Step, VERSION,
+};
 
 const IDLE_EXIT: Duration = Duration::from_secs(15 * 60);
 const SHUTDOWN_GRACE: Duration = Duration::from_millis(500);
@@ -86,11 +90,36 @@ pub trait DeviceSource: Send + Sync {
         self.list().await
     }
 
+    /// The devices that are off and that this source can start (simulators that are shut down), the ones to
+    /// prefer first. A source that cannot say has none.
+    async fn off(&self) -> Vec<DeviceSummary> {
+        Vec::new()
+    }
+
+    /// Starts the device called `name` (see [`named`]) and returns it once it is listed, under the id it is listed
+    /// with. `None` when this source has no device by that name that it can start.
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
+        let _ = name;
+        Ok(None)
+    }
+
     /// Why this device cannot be driven yet, when that is known without connecting (an iPhone with no signing
     /// team). With several devices and none named, only devices without a blocker are candidates for the default.
     fn blocker(&self, _id: &str) -> Option<&'static str> {
         None
     }
+}
+
+/// What `boot` started, or found on.
+pub struct Booted {
+    pub device: DeviceSummary,
+    /// It was on before the call.
+    pub already: bool,
+}
+
+/// Whether `name` is this device's id (with or without its prefix) or its model in any case.
+pub fn named(name: &str, id: &str, model: &str) -> bool {
+    names(id, name) || model.eq_ignore_ascii_case(name)
 }
 
 pub(crate) fn names(id: &str, requested: &str) -> bool {
@@ -103,6 +132,7 @@ pub struct Daemon {
     actors: Mutex<HashMap<String, mpsc::Sender<Job>>>,
     traces: Traces,
     told: Mutex<HashMap<String, String>>,
+    secrets: Arc<secrets::Secrets>,
     agents: Mutex<std::collections::HashSet<String>>,
     connections: AtomicUsize,
     last_activity: Mutex<Instant>,
@@ -127,6 +157,7 @@ impl Daemon {
             home: config.home,
             actors: Mutex::default(),
             told: Mutex::default(),
+            secrets: Arc::default(),
             agents: Mutex::default(),
             connections: AtomicUsize::new(0),
             last_activity: Mutex::new(Instant::now()),
@@ -151,12 +182,14 @@ impl Daemon {
     ) -> Result<Value, RpcError> {
         self.touch();
         let started = Instant::now();
-        let (result, phases) = PHASES
+        let secrets = self.secrets.with(secrets::carried(method, &params));
+        let (mut result, phases) = PHASES
             .scope(Default::default(), async {
                 let result = self.route(session, method, &params).await;
                 (result, PHASES.with(|p| p.take()))
             })
             .await;
+        secrets::hide(&mut result, &secrets);
         self.traces.record(
             session,
             method,
@@ -194,6 +227,7 @@ impl Daemon {
                 Ok(json!({"pid": std::process::id()}))
             }
             "devices" => Ok(self.devices().await?),
+            "boot" => Ok(self.boot(params["name"].as_str()).await?),
             "told" => {
                 let line = params["line"].as_str().unwrap_or_default().to_string();
                 let last = self
@@ -204,7 +238,8 @@ impl Daemon {
                 Ok(json!({"same": last.as_deref() == Some(line.as_str())}))
             }
             "release" | "snapshot" | "screenshot" | "act" | "wait" | "batch" | "find" | "apps"
-            | "app" | "clipboard" | "health" | "shell" => {
+            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "page" | "record"
+            | "journal" => {
                 let common: Common = rpc::params(params)?;
                 if method == "release" && common.device.is_none() {
                     self.release_everywhere(session).await;
@@ -218,8 +253,35 @@ impl Daemon {
                     "apps" => Call::Apps,
                     "app" => Call::App(rpc::params(params)?),
                     "health" => Call::Health,
+                    "journal" => Call::Journal,
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
                     "shell" => Call::Shell(rpc::params(params)?),
+                    "logs" => Call::Logs(rpc::params(params)?),
+                    "page" => Call::Page(rpc::params(params)?),
+                    "record" => {
+                        let p: RecordParams = rpc::params(params)?;
+                        if p.path.as_ref().is_some_and(|path| !path.is_absolute()) {
+                            return Err(RpcError::invalid_params(
+                                "record needs an absolute `path`",
+                            ));
+                        }
+                        Call::Record(p)
+                    }
+                    "setting" => {
+                        let p: SettingParams = rpc::params(params)?;
+                        let asked = [
+                            p.find.is_some(),
+                            p.key.is_some(),
+                            p.values.as_ref().is_some_and(|v| !v.is_empty()),
+                            p.open.is_some(),
+                        ];
+                        if asked.iter().filter(|a| **a).count() != 1 {
+                            return Err(RpcError::invalid_params(
+                                "setting needs one of `find` (words), `key` (with `value` to write), `values` ({key: value}) or `open` (a screen's key)",
+                            ));
+                        }
+                        Call::Setting(p)
+                    }
                     "act" => {
                         let act: ActParams = serde_json::from_value(params.clone())
                             .map_err(|e| act_error(&e, params))?;
@@ -274,7 +336,18 @@ impl Daemon {
         }
     }
 
+    /// A request for a lane (`emulator-5554+a`, or `+a` for the only device) resolves its device and keeps the lane.
     async fn resolve(&self, requested: Option<&str>) -> Result<String, Error> {
+        let Some((device, Some(lane))) = requested.map(lane_of) else {
+            return self.resolve_device(requested).await;
+        };
+        let device = self
+            .resolve_device((!device.is_empty()).then_some(device))
+            .await?;
+        Ok(format!("{device}+{lane}"))
+    }
+
+    async fn resolve_device(&self, requested: Option<&str>) -> Result<String, Error> {
         let list = self.source.list_for(requested).await?;
         let summaries = || {
             list.iter()
@@ -300,6 +373,8 @@ impl Daemon {
                                 os: l.os.clone().unwrap_or_default(),
                             })
                             .collect(),
+                        unasked: vec![],
+                        off: vec![],
                     })
                 }
             },
@@ -307,6 +382,8 @@ impl Daemon {
                 [] => Err(Error::NoDevice {
                     requested: None,
                     connected: vec![],
+                    unasked: vec![],
+                    off: self.source.off().await,
                 }),
                 [one] => Ok(one.id.clone()),
                 _ => {
@@ -330,7 +407,14 @@ impl Daemon {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .entry(id.to_string())
-            .or_insert_with(|| actor::spawn(id.to_string(), self.source.clone(), self.home.clone()))
+            .or_insert_with(|| {
+                actor::spawn(
+                    id.to_string(),
+                    self.source.clone(),
+                    self.home.clone(),
+                    self.secrets.clone(),
+                )
+            })
             .clone()
     }
 
@@ -344,6 +428,10 @@ impl Daemon {
     ) -> Result<Value, Error> {
         let (reply, rx) = oneshot::channel();
         let gone = || Error::DeviceGone { id: id.to_string() };
+        let display = match lane_of(id) {
+            (_, Some(_)) => DisplayMode::Hidden,
+            _ => display,
+        };
         let terminal = !self
             .agents
             .lock()
@@ -365,33 +453,83 @@ impl Daemon {
         result
     }
 
+    /// Without a name, the devices that are off. With one (a model, any case, or an id), that device started,
+    /// or `already` when a connected device has the name.
+    async fn boot(&self, name: Option<&str>) -> Result<Value, Error> {
+        let off = self.source.off().await;
+        let Some(name) = name else {
+            return Ok(json!({"off": off}));
+        };
+        let connected = self.source.list().await?;
+        let booted = match connected.iter().find(|l| named(name, &l.id, &l.model)) {
+            Some(on) => Some(Booted {
+                device: DeviceSummary {
+                    id: on.id.clone(),
+                    model: on.model.clone(),
+                    os: on.os.clone().unwrap_or_default(),
+                },
+                already: true,
+            }),
+            None => self.source.boot(name).await?,
+        };
+        let Some(Booted { device, already }) = booted else {
+            let startable = match off.as_slice() {
+                [] => "nothing can be started".into(),
+                off => format!("can be started: {}", can_be_started(off)),
+            };
+            return Err(Error::Refused {
+                detail: format!("no device named \"{name}\" is off; {startable}"),
+            });
+        };
+        let mut reply = json!(device);
+        if already {
+            reply["already"] = json!(true);
+        }
+        Ok(reply)
+    }
+
     async fn devices(&self) -> Result<Value, Error> {
         let mut out = Vec::new();
         for l in self.source.list().await? {
-            let existing = self
+            let mut ids: Vec<String> = self
                 .actors
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .contains_key(&l.id);
-            let lease = if existing {
-                self.send(&l.id, "", false, DisplayMode::Main, Call::Leased)
-                    .await?
-            } else {
-                Value::Null
-            };
-            let leased_by = lease["session"].as_str().map(str::to_string);
-            let hidden_display = lease["hidden_display"].as_u64().map(|d| d as u32);
-            let lease_idle_s = lease["idle_s"].as_u64();
-            out.push(DeviceEntry {
-                id: l.id,
-                model: l.model,
-                os: l.os.unwrap_or_default(),
-                tier: l.tier,
-                capabilities: l.capabilities,
-                leased_by,
-                lease_idle_s,
-                hidden_display,
-            });
+                .keys()
+                .filter(|id| lane_of(id).0 == l.id)
+                .cloned()
+                .collect();
+            ids.sort();
+            if ids.first() != Some(&l.id) {
+                ids.insert(0, l.id.clone());
+            }
+            for id in ids {
+                let existing = self
+                    .actors
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .contains_key(&id);
+                let lease = if existing {
+                    self.send(&id, "", false, DisplayMode::Main, Call::Leased)
+                        .await?
+                } else {
+                    Value::Null
+                };
+                let hidden_display = lease["hidden_display"].as_u64().map(|d| d as u32);
+                if id != l.id && lease["session"].is_null() && hidden_display.is_none() {
+                    continue;
+                }
+                out.push(DeviceEntry {
+                    id,
+                    model: l.model.clone(),
+                    os: l.os.clone().unwrap_or_default(),
+                    tier: l.tier.clone(),
+                    capabilities: l.capabilities,
+                    leased_by: lease["session"].as_str().map(str::to_string),
+                    lease_idle_s: lease["idle_s"].as_u64(),
+                    hidden_display,
+                });
+            }
         }
         Ok(serde_json::to_value(out).unwrap_or(Value::Null))
     }

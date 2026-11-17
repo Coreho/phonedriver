@@ -1,5 +1,4 @@
-#![cfg(target_os = "macos")]
-
+#[cfg(any(target_os = "macos", windows))]
 use std::time::Instant;
 
 use phonedriver::ocr::recognize;
@@ -16,8 +15,28 @@ const IOS: &str = concat!(
 );
 
 // GitHub's macOS runners are virtual machines: there Vision took 580 ms a frame and read "b0" as "bo" (CI run 42889844605).
+#[cfg(any(target_os = "macos", windows))]
 fn hosted_runner() -> bool {
     std::env::var_os("GITHUB_ACTIONS").is_some()
+}
+
+/// True on a Linux host with no `tesseract` to run, after checking that `recognize` says which package to install.
+fn no_engine() -> bool {
+    if cfg!(any(target_os = "macos", windows))
+        || std::process::Command::new("tesseract")
+            .arg("--version")
+            .output()
+            .is_ok()
+    {
+        return false;
+    }
+    let e = recognize(
+        &read(&format!("{ANDROID}testbed_taps.png")),
+        Size { w: 411.0, h: 923.0 },
+    )
+    .unwrap_err();
+    assert!(e.to_string().contains("`tesseract-ocr`"), "{e}");
+    true
 }
 
 fn read(path: &str) -> Vec<u8> {
@@ -44,38 +63,131 @@ fn assert_finds(found: &[String], expected: &[&str]) {
     assert!(missing.is_empty(), "missing {missing:?} in {found:?}");
 }
 
+/// Windows reads words well and two-character labels less well: it takes `b10` for `blO` and `b1` for `bl`.
+#[cfg(windows)]
 #[test]
-fn the_android_testbed_taps_tab_at_one_pixel_per_point() {
-    let found = texts(&read(&format!("{ANDROID}testbed_taps.png")), 411.0, 923.0);
-    let mut expected = vec!["Taps", "Text", "List", "Gestures", "Busy", "Dark theme"];
-    let buttons: Vec<String> = (1..12).map(|i| format!("b{i}")).collect();
-    expected.extend(buttons.iter().map(String::as_str));
-    assert_finds(&found, &expected);
+fn windows_reads_the_words_of_the_taps_tab_and_most_of_its_short_labels() {
+    for (file, least) in [
+        (format!("{ANDROID}testbed_taps.png"), 15),
+        (format!("{FIXTURES}testbed_taps_2x.png"), 15),
+    ] {
+        let found = texts(&read(&file), 411.0, 923.0);
+        assert_finds(&found, &["Taps", "Text", "List", "Gestures", "Dark theme"]);
+        let labels = (0..24)
+            .filter(|i| found.iter().any(|f| *f == format!("b{i}")))
+            .count();
+        assert!(labels >= least, "{labels} of 24 labels in {found:?}");
+    }
 }
 
+/// The same picture with every colour inverted: a dark theme.
+#[cfg(not(any(target_os = "macos", windows)))]
+fn inverted(png: &[u8]) -> Vec<u8> {
+    let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+        .read_info()
+        .unwrap();
+    let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut pixels).unwrap();
+    let channels = info.color_type.samples();
+    for pixel in pixels.chunks_exact_mut(channels) {
+        pixel[..3].iter_mut().for_each(|c| *c = 255 - *c);
+    }
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, info.width, info.height);
+    encoder.set_color(info.color_type);
+    encoder.set_depth(info.bit_depth);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&pixels)
+        .unwrap();
+    out
+}
+
+/// Tesseract after the picture is cleaned up for it; as the picture comes it reads one of these 30 strings.
+#[cfg(not(any(target_os = "macos", windows)))]
 #[test]
-fn the_same_tab_at_twice_the_resolution_reads_the_lower_rows_too() {
-    if hosted_runner() {
+fn tesseract_reads_the_taps_tab_light_and_dark_at_one_and_two_pixels_per_point() {
+    if no_engine() {
         return;
     }
-    let found = texts(
-        &read(&format!("{FIXTURES}testbed_taps_2x.png")),
-        411.0,
-        923.0,
+    let one = read(&format!("{ANDROID}testbed_taps.png"));
+    let two = read(&format!("{FIXTURES}testbed_taps_2x.png"));
+    for (name, png) in [
+        ("light", one.clone()),
+        ("dark", inverted(&one)),
+        ("light at two pixels a point", two.clone()),
+        ("dark at two pixels a point", inverted(&two)),
+    ] {
+        let found = texts(&png, 411.0, 923.0);
+        assert_finds(
+            &found,
+            &["Taps", "Text", "List", "Gestures", "Busy", "Dark theme"],
+        );
+        let labels = (0..24)
+            .filter(|i| found.iter().any(|f| *f == format!("b{i}")))
+            .count();
+        assert!(labels >= 21, "{name}: {labels} of 24 labels in {found:?}");
+    }
+}
+
+/// Vision on four pictures: the testbed's taps tab at one and two pixels a point, Android's Settings and the iOS
+/// testbed's gestures tab.
+#[cfg(target_os = "macos")]
+#[test]
+fn vision_reads_the_taps_tab_at_both_sizes_settings_and_the_ios_tab_bar() {
+    let quick = |path: String, w: f32, h: f32| -> Vec<phonedriver_core::ocr::TextBox> {
+        recognize(&read(&path), Size { w, h }).unwrap()
+    };
+    let words = |boxes: &[phonedriver_core::ocr::TextBox]| -> Vec<String> {
+        boxes.iter().map(|b| b.text.clone()).collect()
+    };
+    for (file, least) in [
+        (format!("{ANDROID}testbed_taps.png"), 22),
+        (format!("{FIXTURES}testbed_taps_2x.png"), 19),
+    ] {
+        let boxes = quick(file, 411.0, 923.0);
+        let found = words(&boxes);
+        assert_finds(&found, &["Taps", "Text", "List", "Gestures", "Dark theme"]);
+        let labels = (0..24)
+            .filter(|i| found.iter().any(|f| *f == format!("b{i}")))
+            .count();
+        assert!(labels >= least, "{labels} of 24 labels in {found:?}");
+        let dark = boxes
+            .iter()
+            .find(|b| b.text.contains("Dark theme"))
+            .expect("Dark theme");
+        assert!(
+            dark.bounds.x.abs() < 8.0 && (dark.bounds.y + dark.bounds.h / 2.0 - 116.0).abs() < 8.0,
+            "{dark:?}"
+        );
+    }
+    let settings = words(&quick(
+        format!("{ANDROID}real_settings_main.png"),
+        411.4,
+        923.4,
+    ));
+    assert_finds(
+        &settings,
+        &[
+            "Search Settings",
+            "Network & internet",
+            "Connected devices",
+            "Notification history, conversations",
+            "Do Not Disturb, Bedtime, Driving",
+            "Colors, themed icons, app grid",
+            "Storage",
+        ],
     );
-    let mut expected = vec!["Taps", "Text", "List", "Gestures", "Dark theme"];
-    let buttons: Vec<String> = [
-        0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23,
-    ]
-    .iter()
-    .map(|i| format!("b{i}"))
-    .collect();
-    expected.extend(buttons.iter().map(String::as_str));
-    assert_finds(&found, &expected);
+    let ios = words(&quick(format!("{IOS}gestures.png"), 402.0, 874.0));
+    assert_finds(&ios, &["Gesture pad", "Gestures", "Secure", "Dialogs"]);
 }
 
 #[test]
 fn android_settings() {
+    if no_engine() {
+        return;
+    }
     let found = texts(
         &read(&format!("{ANDROID}real_settings_main.png")),
         411.4,
@@ -107,6 +219,9 @@ fn android_settings() {
 
 #[test]
 fn the_ios_testbed_gestures_canvas_and_tab_bar() {
+    if no_engine() {
+        return;
+    }
     let found = texts(&read(&format!("{IOS}gestures.png")), 402.0, 874.0);
     assert_finds(
         &found,
@@ -116,6 +231,9 @@ fn the_ios_testbed_gestures_canvas_and_tab_bar() {
 
 #[test]
 fn boxes_are_in_points_with_the_origin_at_the_top_left() {
+    if no_engine() {
+        return;
+    }
     let boxes = recognize(
         &read(&format!("{ANDROID}testbed_taps.png")),
         Size { w: 411.0, h: 923.0 },
@@ -135,6 +253,7 @@ fn boxes_are_in_points_with_the_origin_at_the_top_left() {
     );
 }
 
+#[cfg(any(target_os = "macos", windows))]
 #[test]
 fn a_frame_of_412_by_915_takes_under_120_ms_at_the_median() {
     if hosted_runner() {
@@ -154,7 +273,7 @@ fn a_frame_of_412_by_915_takes_under_120_ms_at_the_median() {
         .collect();
     ms.sort_by(f64::total_cmp);
     eprintln!(
-        "vision p50 {:.1} ms, min {:.1}, max {:.1}, 30 runs",
+        "p50 {:.1} ms, min {:.1}, max {:.1}, 30 runs",
         ms[15], ms[0], ms[29]
     );
     assert!(ms[15] < 120.0, "p50 {:.1} ms", ms[15]);

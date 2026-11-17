@@ -1,7 +1,7 @@
 ---
 title: phonedriver vs Appium and Appium MCP
 seo: phonedriver vs Appium MCP: an Appium alternative for AI agents
-updated: 2026-11-14
+updated: 2026-11-17
 meta: Appium runs scripted tests over WebDriver and has an MCP server. phonedriver is built for an agent that decides each step. What each does, and one measured row.
 description: Appium is the WebDriver framework for scripted mobile tests, and Appium MCP puts it in front of an agent. phonedriver is built for an agent that decides each step from the screen. What each installs, returns and is better at, with the one comparison I measured.
 date: 2026-11-14
@@ -24,6 +24,7 @@ I have measured one thing against Appium's stack. On an iPhone 17 simulator, pho
 | What the model reads | A pruned text list with `@eN` refs, then only the lines that changed | Elements found by locator, and the page source as XML (Appium MCP README) |
 | Waits after an action | Yes: settle, then the diff | Not measured. Appium has explicit and implicit waits for elements |
 | Approval before spending money | Yes, through MCP elicitation | Not documented in the Appium MCP README |
+| Replaying a run | `save` keeps the steps an agent took and `replay` runs them with no model, also in GitHub Actions | Tests are code. Appium MCP can generate Java/TestNG code (its README) |
 | Remote devices and farms | A daemon socket forwarded over `ssh`. No cloud devices | Yes: a remote Appium server, CI grids and cloud labs (Appium MCP README) |
 | Telemetry | None | Appium MCP has OpenTelemetry tracing, off by default (its README) |
 | Requirements | Node 18 or later for `npx`, adb for Android, a Mac with Xcode for iOS | Node 22 or later, a JDK, the Android SDK, Xcode for iOS (Appium MCP README) |
@@ -55,7 +56,7 @@ I also have no token comparison. Appium MCP was not one of the tools in the [nin
 - Client libraries in many languages and the W3C WebDriver protocol, so tests are code your team can review and rerun.
 - Device farms and cloud labs. phonedriver drives devices you can reach yourself.
 - A WebView context: Appium can switch into a web page inside an app and use web locators. phonedriver reads a WebView through the accessibility tree and falls back to OCR when that is empty.
-- Test generation, locator strategies, screen recording and geolocation in Appium MCP (its README).
+- Test generation in Java, locator strategies and geolocation in Appium MCP (its README).
 - Years of use and a large community.
 
 ## What phonedriver does differently
@@ -64,6 +65,7 @@ I also have no token comparison. Appium MCP was not one of the tools in the [nin
 - **Nothing installed on Android.** The agent is a jar pushed over adb and run as the shell user. No APK and no instrumentation.
 - **The approval guard.** A tap on Pay, Place order or Delete account is held until you answer. See [the guard](/docs/approval-guard/) and what it does not catch.
 - **No telemetry**, checked by a test that runs the tool under a sandbox that kills any non-local connection.
+- **A run an agent found, replayed with no model.** `phonedriver save` keeps what an agent did as a steps file and `replay` runs it again; [a GitHub Action](/docs/replay-in-ci/) replays the files on every commit. The steps are found by their text, not written as code.
 
 ## Use which
 

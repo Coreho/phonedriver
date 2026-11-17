@@ -9,6 +9,8 @@ use crate::geometry::{Rect, Scale};
 pub struct RawTree {
     pub windows: Vec<RawWindow>,
     pub nodes: Vec<RawNode>,
+    /// How far down the system's status bar reaches, in points, when the agent or runner saw one.
+    pub status_bar: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,6 +142,8 @@ struct WireTree {
     #[serde(default)]
     windows: Vec<WireWindow>,
     nodes: Vec<WireNode>,
+    #[serde(default)]
+    bar: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -308,7 +312,11 @@ impl RawTree {
                 nodes[i].role = Role::Cell;
             }
         }
-        Ok(RawTree { windows, nodes })
+        Ok(RawTree {
+            windows,
+            nodes,
+            status_bar: wire.bar.map(|b| b / scale.density),
+        })
     }
 
     pub fn children(&self, index: usize) -> impl Iterator<Item = usize> + '_ {
@@ -467,6 +475,18 @@ mod tests {
 
     fn settings() -> RawTree {
         RawTree::from_android_json(FIXTURE, Scale { density: 3.0 }).unwrap()
+    }
+
+    #[test]
+    fn the_status_bar_the_agent_left_out_is_kept_as_its_bottom_edge_in_points() {
+        let tree = |bar: &str| {
+            let json = format!(r#"{{"windows":[]{bar},"nodes":[]}}"#);
+            RawTree::from_android_json(&json, Scale { density: 2.5 })
+                .unwrap()
+                .status_bar
+        };
+        assert_eq!(tree(r#","bar":130"#), Some(52.0));
+        assert_eq!(tree(""), None);
     }
 
     #[test]

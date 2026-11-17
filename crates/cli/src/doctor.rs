@@ -101,7 +101,7 @@ pub fn run(home: &Path, only: Option<&str>) -> bool {
     !checks.iter().any(|c| c.status == Status::Fail)
 }
 
-/// The Simulator tier: Xcode, xcodegen, booted simulators, the runner build, and each simulator's runner answering
+/// The Simulator tier: Xcode, booted simulators, the runner build, and each simulator's runner answering
 /// through the daemon. A runner serves one connection and a new one cancels the old, so probing its port directly
 /// would cut off a daemon that holds it; the daemon connects (which says `hello`) and takes one snapshot instead.
 pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
@@ -129,16 +129,6 @@ pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
             false
         }
     };
-    let xcodegen = phonedriver_ios::runner::find_tool("xcodegen");
-    match &xcodegen {
-        Some(path) => checks.push(Check::ok("xcodegen", path.display().to_string())),
-        None => checks.push(Check::bad(
-            Status::Fail,
-            "xcodegen",
-            "not found in PATH, /opt/homebrew/bin or /usr/local/bin",
-            "The runner's Xcode project is generated from its sources: `brew install xcodegen`.",
-        )),
-    }
     if !xcode_ok {
         return checks;
     }
@@ -148,7 +138,7 @@ pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
                 Status::Warn,
                 "simulators",
                 "none booted",
-                "Boot one in Simulator.app or with `xcrun simctl boot <udid>`; `xcrun simctl list devices available` lists them.",
+                "`phonedriver boot` lists the ones that can be started; `phonedriver boot <name>` starts one.",
             ));
             Vec::new()
         }
@@ -176,7 +166,7 @@ pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
             Vec::new()
         }
     };
-    if xcodegen.is_none() || sims.is_empty() {
+    if sims.is_empty() {
         return checks;
     }
     let started = Instant::now();
@@ -237,7 +227,7 @@ pub async fn android(adb: &Adb, only: Option<&str>) -> Vec<Check> {
             Status::Warn,
             "android devices",
             "none connected",
-            "Connect a phone with USB debugging on, pair an Android 11+ phone over Wi-Fi with `phonedriver pair`, or start an emulator; `adb devices` lists what adb sees.",
+            "Connect a phone with USB debugging on, pair an Android 11+ phone over Wi-Fi with `phonedriver pair`, or start an emulator (`phonedriver boot` lists the ones on this machine); `adb devices` lists what adb sees.",
         ));
     }
     if let Some(only) = only
@@ -411,13 +401,20 @@ async fn agent_checks(id: &str) -> Vec<Check> {
             Status::Fail,
             format!("agent {id}"),
             e.message(),
-            e.hint()
-                .filter(|h| !h.contains("phonedriver doctor"))
-                .unwrap_or_else(|| {
-                    "The daemon log is `daemon.log` in the phonedriver home.".into()
-                }),
+            fix_for(
+                &e,
+                "The daemon log is `daemon.log` in the phonedriver home.",
+            ),
         )],
     }
+}
+
+/// What to do about a failed probe: the error's own hint, unless that hint is to run `doctor`. Seen on a loaded
+/// Mac: a simulator's probe timed out and doctor printed ``fix: Run `phonedriver doctor` to check the connection``.
+fn fix_for(e: &Failure, otherwise: &str) -> String {
+    e.hint()
+        .filter(|h| !h.contains("phonedriver doctor"))
+        .unwrap_or_else(|| otherwise.into())
 }
 
 fn cannot_reach_daemon(name: String, e: &Failure) -> Check {
@@ -502,9 +499,10 @@ async fn runner_answers(id: &str) -> Check {
             Status::Fail,
             name,
             e.message(),
-            e.hint().unwrap_or_else(|| {
-                "The runner log is in the phonedriver home under runner/<udid>.log.".into()
-            }),
+            fix_for(
+                &e,
+                "The runner log is in the phonedriver home under runner/<udid>.log.",
+            ),
         ),
     }
 }
@@ -603,44 +601,36 @@ pub async fn physical(home: &Path, only: Option<&str>) -> Vec<Check> {
     checks
 }
 
-/// The expiry of the provisioning profile inside the newest device build of the runner under `home`.
+/// The expiry of the signing profile inside this version's device build of the runner under `home`.
 fn runner_expiry(name: &str, home: &Path) -> Check {
+    use phonedriver_ios::runner::{DEVICE_PROFILE, build_hash, expired, profile_expiry};
     let label = format!("{name} runner");
-    let root = home.join("runner");
-    let profile = std::fs::read_dir(&root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| {
-            e.path()
-                .join("dd/Build/Products/Debug-iphoneos/PhonedriverRunner-Runner.app/embedded.mobileprovision")
-        })
-        .find(|p| p.is_file());
-    let Some(profile) = profile else {
+    let profile = home
+        .join("runner")
+        .join(format!("{}-device", build_hash()))
+        .join("dd/Build/Products")
+        .join(DEVICE_PROFILE);
+    if !profile.is_file() {
         return Check::bad(
             Status::Warn,
             label,
             "not built for devices yet",
             "Run any phonedriver command on the device; the first one builds and signs the runner. `phonedriver ios setup` checks the signing team, pairing and Developer Mode first.",
         );
-    };
-    let decoded = std::process::Command::new("security")
-        .args(["cms", "-D", "-i"])
-        .arg(&profile)
-        .output();
-    let expiry = decoded.ok().and_then(|o| {
-        let text = String::from_utf8_lossy(&o.stdout).into_owned();
-        let after = text.split("<key>ExpirationDate</key>").nth(1)?;
-        let date = after.split("<date>").nth(1)?.split("</date>").next()?;
-        Some(date.to_string())
-    });
-    match expiry {
+    }
+    match profile_expiry(&profile) {
+        Some(date) if expired(&date, std::time::SystemTime::now()) => Check::bad(
+            Status::Warn,
+            label,
+            format!("the signing profile ran out on {date}"),
+            "Nothing to do: the next phonedriver command on the device signs the runner again and installs it, which takes about a minute. A free Apple ID's profile lasts seven days.",
+        ),
         Some(date) => Check::ok(label, format!("signed, profile expires {date}")),
         None => Check::bad(
             Status::Warn,
             label,
             "the profile's expiry cannot be read",
-            "Run `security cms -D -i <runner>.app/embedded.mobileprovision` and read ExpirationDate.",
+            format!("Read ExpirationDate in {}.", profile.display()),
         ),
     }
 }
@@ -766,6 +756,56 @@ pub fn ios_setup(home: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_runner_whose_profile_has_run_out_says_the_next_command_signs_it_again() {
+        let home = tempfile::tempdir().unwrap();
+        let profile = home
+            .path()
+            .join("runner")
+            .join(format!("{}-device", phonedriver_ios::runner::build_hash()))
+            .join("dd/Build/Products")
+            .join(phonedriver_ios::runner::DEVICE_PROFILE);
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        let write = |date: &str| {
+            let text = format!("<key>ExpirationDate</key><date>{date}</date>");
+            std::fs::write(&profile, text).unwrap();
+        };
+        write("2026-11-09T10:00:00Z");
+        let check = runner_expiry("iPhone", home.path());
+        assert_eq!(check.status, Status::Warn, "{check:?}");
+        assert_eq!(
+            check.detail,
+            "the signing profile ran out on 2026-11-09T10:00:00Z"
+        );
+        assert!(check.fix.unwrap().contains("signs the runner again"));
+        write("2999-01-01T00:00:00Z");
+        let check = runner_expiry("iPhone", home.path());
+        assert_eq!(check.status, Status::Ok, "{check:?}");
+        assert_eq!(check.detail, "signed, profile expires 2999-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn a_fix_never_sends_the_reader_back_to_doctor() {
+        let failed = |hint: &str| {
+            Failure::Rpc(crate::daemon::rpc::RpcError {
+                code: -32000,
+                message: "connection error".into(),
+                data: json!({"hint": hint}),
+            })
+        };
+        assert_eq!(
+            fix_for(
+                &failed("Run `phonedriver doctor` to check the connection."),
+                "The runner log is there."
+            ),
+            "The runner log is there."
+        );
+        assert_eq!(
+            fix_for(&failed("Unlock the phone."), "The runner log is there."),
+            "Unlock the phone."
+        );
+    }
 
     #[test]
     fn each_check_is_one_aligned_line_and_a_fix_follows_a_problem() {

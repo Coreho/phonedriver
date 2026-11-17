@@ -1,0 +1,224 @@
+name: phonedriver replay
+description: Start an Android emulator or an iOS Simulator, install your app, and replay saved phonedriver runs with no model. Each run's reply, screen and video are kept.
+branding:
+  icon: smartphone
+  color: gray-dark
+
+inputs:
+  runs:
+    description: Steps files written by `phonedriver save`, one path or glob a line. Each is replayed in order.
+    required: true
+  platform:
+    description: "`android` (a Linux runner) or `ios` (a macOS runner)."
+    default: android
+  app:
+    description: An `.apk` or a Simulator `.app` to install before the runs.
+    default: ""
+  api-level:
+    description: The Android system image's API level.
+    default: "35"
+  device:
+    description: The Simulator to boot, such as `iPhone 16`. The default is the first iPhone the runner has.
+    default: ""
+  record:
+    description: "`true` records a video of every run."
+    default: "false"
+  screens:
+    description: A folder of screenshots kept by `phonedriver replay --screens`, with a subfolder for each run named as its steps file. Each step's screen is compared with its screenshot, and a run stops at the first whose text changed. A run with no subfolder keeps its screens in the artifact, under `screens/`, to commit.
+    default: ""
+  version:
+    description: The phonedriver release to install, such as `0.1.5`, or `latest`.
+    default: latest
+  binary:
+    description: A phonedriver binary already on the runner, used instead of a release.
+    default: ""
+  artifact:
+    description: The name of the artifact that keeps each run's reply, screen and video.
+    default: phonedriver-${{ github.job }}
+
+outputs:
+  passed:
+    description: How many runs replayed to the end.
+    value: ${{ steps.replay.outputs.passed }}
+  failed:
+    description: How many runs stopped at a step.
+    value: ${{ steps.replay.outputs.failed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install phonedriver
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        BINARY: ${{ inputs.binary }}
+      run: |
+        set -euo pipefail
+        bin="$RUNNER_TEMP/phonedriver-bin"
+        mkdir -p "$bin"
+        if [ -n "$BINARY" ]; then
+          install -m 755 "$BINARY" "$bin/phonedriver"
+        else
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) target=x86_64-unknown-linux-gnu ;;
+            Linux-ARM64) target=aarch64-unknown-linux-gnu ;;
+            macOS-ARM64) target=aarch64-apple-darwin ;;
+            macOS-X64) target=x86_64-apple-darwin ;;
+            *) echo "::error::phonedriver's action runs on Linux and macOS runners, not $RUNNER_OS $RUNNER_ARCH"; exit 1 ;;
+          esac
+          if [ "$VERSION" = latest ]; then
+            base=https://github.com/hridaya423/phonedriver/releases/latest/download
+          else
+            base=https://github.com/hridaya423/phonedriver/releases/download/v${VERSION#v}
+          fi
+          file=phonedriver-$target.tar.gz
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$file"
+          curl -fsSLO "$base/$file.sha256"
+          shasum -a 256 -c "$file.sha256"
+          tar -xzf "$file"
+          install -m 755 "phonedriver-$target/phonedriver" "$bin/phonedriver"
+        fi
+        echo "$bin" >> "$GITHUB_PATH"
+        "$bin/phonedriver" --version
+
+    - name: Start an Android emulator
+      if: inputs.platform == 'android'
+      shell: bash
+      env:
+        API: ${{ inputs.api-level }}
+      run: |
+        set -euo pipefail
+        if [ "$RUNNER_OS" != Linux ]; then
+          echo "::error::the Android emulator needs a Linux runner, such as ubuntu-latest"
+          exit 1
+        fi
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+        tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+        image="system-images;android-$API;google_apis;x86_64"
+        export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
+        echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+        mkdir -p "$ANDROID_AVD_HOME"
+        yes 2> /dev/null | "$tools/sdkmanager" --licenses > /dev/null || true
+        "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
+        echo no | "$tools/avdmanager" create avd -n phonedriver -k "$image" -d pixel_6 --force > /dev/null
+        if [ ! -f "$ANDROID_AVD_HOME/phonedriver.ini" ]; then
+          echo "::error::avdmanager made no virtual device from $image"
+          exit 1
+        fi
+        log="$RUNNER_TEMP/emulator.log"
+        nohup "$ANDROID_HOME/emulator/emulator" -avd phonedriver -port 5554 -no-window -no-audio -no-boot-anim \
+          -no-snapshot -gpu swiftshader_indirect > "$log" 2>&1 &
+        emulator=$!
+        adb="$ANDROID_HOME/platform-tools/adb"
+        for _ in $(seq 300); do
+          if ! kill -0 "$emulator" 2> /dev/null; then
+            echo "::error::the emulator stopped before it booted; its log:"
+            tail -40 "$log"
+            exit 1
+          fi
+          [ "$("$adb" -s emulator-5554 shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ] && break
+          sleep 2
+        done
+        if [ "$("$adb" -s emulator-5554 shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" != 1 ]; then
+          echo "::error::the emulator did not boot in 10 minutes; its log:"
+          tail -40 "$log"
+          exit 1
+        fi
+        echo "PHONEDRIVER_DEVICE=android:emulator-5554" >> "$GITHUB_ENV"
+
+    - name: Boot an iOS Simulator
+      if: inputs.platform == 'ios'
+      shell: bash
+      env:
+        DEVICE: ${{ inputs.device }}
+      run: |
+        set -euo pipefail
+        name="$DEVICE"
+        if [ -z "$name" ]; then
+          name=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone[^(]*' | sed 's/ *$//')
+        fi
+        phonedriver boot "$name"
+        udid=$(xcrun simctl list devices booted | grep -m1 -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}')
+        echo "PHONEDRIVER_DEVICE=sim:$udid" >> "$GITHUB_ENV"
+
+    - name: Install the app
+      if: inputs.app != ''
+      shell: bash
+      env:
+        APP: ${{ inputs.app }}
+      run: phonedriver apps install "$APP"
+
+    - name: Replay the runs
+      id: replay
+      shell: bash
+      env:
+        RUNS: ${{ inputs.runs }}
+        RECORD: ${{ inputs.record }}
+        SCREENS: ${{ inputs.screens }}
+      run: |
+        set +e -uo pipefail
+        shopt -s nullglob
+        shopt -s globstar 2> /dev/null
+        out="$RUNNER_TEMP/phonedriver-runs"
+        mkdir -p "$out"
+        if [ -n "$SCREENS" ] && [ "$RUNNER_OS" = Linux ] && ! command -v tesseract > /dev/null; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr > /dev/null
+        fi
+        echo "dir=$out" >> "$GITHUB_OUTPUT"
+        passed=0 failed=0 files=()
+        while IFS= read -r pattern; do
+          [ -n "$pattern" ] && files+=($pattern)
+        done <<< "$RUNS"
+        if [ ${#files[@]} -eq 0 ]; then
+          echo "::error::no steps file matches: $RUNS"
+          exit 1
+        fi
+        {
+          echo "### phonedriver replay"
+          echo
+          echo "| Run | Result |"
+          echo "|---|---|"
+        } >> "$GITHUB_STEP_SUMMARY"
+        for f in "${files[@]}"; do
+          name=$(basename "$f" .steps)
+          args=()
+          if [ -n "$SCREENS" ]; then
+            kept="$SCREENS/$name"
+            [ -d "$kept" ] || kept="$out/screens/$name"
+            args=(--screens "$kept")
+          fi
+          [ "$RECORD" = true ] && phonedriver record start -o "$out/$name.mp4" > /dev/null
+          if phonedriver replay "$f" ${args[@]+"${args[@]}"} > "$out/$name.txt" 2>&1; then
+            passed=$((passed + 1))
+            result=$(head -1 "$out/$name.txt")
+          else
+            failed=$((failed + 1))
+            result="stopped: $(grep -m1 '^error:' "$out/$name.txt" | sed 's/^error: //')"
+            phonedriver screenshot "$out/$name.png" > /dev/null 2>&1
+            phonedriver logs --head 0 > "$out/$name.logs.txt" 2>&1
+            cp "${PHONEDRIVER_HOME:-$HOME/.phonedriver}"/runner/*.log "${PHONEDRIVER_HOME:-$HOME/.phonedriver}"/daemon.log "$out/" 2> /dev/null
+            echo "::error file=$f::$result"
+          fi
+          [ "$RECORD" = true ] && phonedriver record stop > /dev/null
+          echo "| \`$f\` | ${result//|/\\|} |" >> "$GITHUB_STEP_SUMMARY"
+          cat "$out/$name.txt"
+        done
+        echo "passed=$passed" >> "$GITHUB_OUTPUT"
+        echo "failed=$failed" >> "$GITHUB_OUTPUT"
+
+    - name: Keep what the runs saw
+      if: always() && steps.replay.outputs.dir != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      with:
+        name: ${{ inputs.artifact }}
+        path: ${{ steps.replay.outputs.dir }}
+
+    - name: Fail when a run stopped
+      if: steps.replay.outputs.failed != '' && steps.replay.outputs.failed != '0'
+      shell: bash
+      run: |
+        echo "${{ steps.replay.outputs.failed }} of the runs stopped at a step; their reply, screen and logs are in the artifact"
+        exit 1

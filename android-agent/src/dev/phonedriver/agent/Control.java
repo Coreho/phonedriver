@@ -2,6 +2,7 @@ package dev.phonedriver.agent;
 
 import android.os.Build;
 import android.os.Looper;
+import android.os.SystemClock;
 import com.genymobile.scrcpy.display.DisplayInfo;
 import com.genymobile.scrcpy.wrappers.ServiceManager;
 import java.io.DataInputStream;
@@ -22,6 +23,8 @@ final class Control {
     private final ExecutorService requests = Executors.newSingleThreadExecutor(Control::looperThread);
     private final ExecutorService gestures = Executors.newSingleThreadExecutor(Control::looperThread);
     private final ExecutorService shells = Executors.newCachedThreadPool();
+    /** When the host last asked for something, in ms of uptime. */
+    volatile long usedAt = SystemClock.uptimeMillis();
 
     Control(DataInputStream in, DataOutputStream out) {
         this.in = in;
@@ -90,7 +93,11 @@ final class Control {
                 event(reply);
                 return;
             }
-            Main.control = this;
+            Lane lane = Lane.here();
+            lane.control = this;
+            if (lane.hidden != null) {
+                Monitor.start();
+            }
             event(helloReply(reply));
             while (true) {
                 int n = in.readInt();
@@ -99,14 +106,16 @@ final class Control {
                 }
                 byte[] frame = new byte[n];
                 in.readFully(frame);
+                usedAt = SystemClock.uptimeMillis();
                 JSONObject q = Json.parse(frame);
                 String op = q.optString("op");
                 ExecutorService target = "gesture".equals(op) ? gestures : "shell".equals(op) ? shells : requests;
                 target.execute(() -> event(answer(q)));
             }
         } finally {
-            if (Main.control == this) {
-                Main.control = null;
+            Lane lane = Lane.here();
+            if (lane.control == this) {
+                lane.control = null;
             }
             requests.shutdownNow();
             gestures.shutdownNow();

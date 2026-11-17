@@ -92,7 +92,7 @@ fn each_request_is_one_line_with_method_params_the_reply_summary_and_ms() {
         assert_eq!(l[1]["method"], "act");
         assert_eq!(l[1]["params"]["action"]["text"], json!({"secret_len": 7}));
         assert_eq!(l[1]["params"]["action"]["into"], json!({"ref": "e1"}));
-        assert_eq!(l[1]["reply"], "typed 7 chars into @e1");
+        assert_eq!(l[1]["reply"], "typed into @e1");
         assert_eq!(l[1]["ok"], true);
         assert_eq!(l[2]["ok"], false);
         assert_eq!(l[2]["reply"], e.message);

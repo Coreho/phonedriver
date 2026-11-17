@@ -1,6 +1,7 @@
 #import "Gesture.h"
 
 #import "Json.h"
+#import "Snapshot.h"
 #import "XCTestPrivate.h"
 
 static const NSUInteger PUMaxFingers = 5;
@@ -17,16 +18,28 @@ static BOOL PUSpinUntil(BOOL (^done)(void), NSTimeInterval timeout)
 
 // Events are synthesized in the portrait frame whatever the orientation (observed on an iPad Pro 13-inch simulator
 // in landscape: a tap at (519, 438) landed at (438, 513) in a 1376 x 1032 app, and the interfaceOrientation of the
-// record made no difference). Points arrive in the screen as the app sees it, so they are rotated back.
-static CGPoint PUPortraitPoint(CGPoint p)
+// record made no difference). Points arrive in the screen as the app sees it, so they are rotated by the app's
+// orientation, not the device's: an app that stays upright on a device turned on its side needs none (observed on
+// the iPhone 17 Simulator: after `press landscape` the testbed stayed upright and taps by ref missed). An interface
+// orientation has the value of the device orientation that gives it, so one switch serves both. The screen's
+// portrait size is read from SpringBoard once, and the orientation once for each gesture, not for each point.
+static CGSize PUPortraitSize(void)
 {
-    CGRect screen = [[XCUIApplication alloc] initWithBundleIdentifier:@"com.apple.springboard"].frame;
-    CGFloat portraitWidth = MIN(screen.size.width, screen.size.height);
-    CGFloat portraitHeight = MAX(screen.size.width, screen.size.height);
-    switch (XCUIDevice.sharedDevice.orientation) {
-        case UIDeviceOrientationLandscapeLeft: return CGPointMake(portraitWidth - p.y, p.x);
-        case UIDeviceOrientationLandscapeRight: return CGPointMake(p.y, portraitHeight - p.x);
-        case UIDeviceOrientationPortraitUpsideDown: return CGPointMake(portraitWidth - p.x, portraitHeight - p.y);
+    static CGSize size;
+    if (size.width == 0) {
+        CGRect screen = [[XCUIApplication alloc] initWithBundleIdentifier:@"com.apple.springboard"].frame;
+        size = CGSizeMake(MIN(screen.size.width, screen.size.height), MAX(screen.size.width, screen.size.height));
+    }
+    return size;
+}
+
+static CGPoint PUPortraitPoint(CGPoint p, long long orientation)
+{
+    switch (orientation) {
+        case UIDeviceOrientationLandscapeLeft: return CGPointMake(PUPortraitSize().width - p.y, p.x);
+        case UIDeviceOrientationLandscapeRight: return CGPointMake(p.y, PUPortraitSize().height - p.x);
+        case UIDeviceOrientationPortraitUpsideDown:
+            return CGPointMake(PUPortraitSize().width - p.x, PUPortraitSize().height - p.y);
         default: return p;
     }
 }
@@ -52,6 +65,11 @@ static BOOL PUBannerCovers(CGPoint p)
     return shown && CGRectContainsPoint(shown.frame, p);
 }
 
+BOOL PUBannerAt(CGPoint point)
+{
+    return PUBannerCovers(point);
+}
+
 static BOOL PUClearOfBanner(NSArray *pointers, NSError **error)
 {
     for (id pointer in pointers) {
@@ -68,7 +86,7 @@ static BOOL PUClearOfBanner(NSArray *pointers, NSError **error)
     return YES;
 }
 
-static XCPointerEventPath *PUPath(id pointer, double *end, NSError **error)
+static XCPointerEventPath *PUPath(id pointer, long long orientation, double *end, NSError **error)
 {
     NSArray *points = [pointer isKindOfClass:NSDictionary.class] ? pointer[@"path"] : nil;
     if (![points isKindOfClass:NSArray.class] || points.count == 0) {
@@ -84,7 +102,7 @@ static XCPointerEventPath *PUPath(id pointer, double *end, NSError **error)
             if (error) *error = PUError(PURunnerErrorBadRequest, @"path points need numeric x, y and non-decreasing t_ms");
             return nil;
         }
-        CGPoint point = PUPortraitPoint(CGPointMake(x.doubleValue, y.doubleValue));
+        CGPoint point = PUPortraitPoint(CGPointMake(x.doubleValue, y.doubleValue), orientation);
         double offset = t.doubleValue / 1000.0;
         if (!path) {
             path = [[XCPointerEventPath alloc] initForTouchAtPoint:point offset:offset];
@@ -108,8 +126,10 @@ BOOL PUGesture(NSArray *pointers, NSError **error)
     XCSynthesizedEventRecord *record = [[XCSynthesizedEventRecord alloc] initWithName:@"phonedriver gesture"
                                                                  interfaceOrientation:UIInterfaceOrientationPortrait];
     double end = 0;
+    XCUIApplication *app = PULastApplication();
+    long long orientation = app ? app.interfaceOrientation : XCUIDevice.sharedDevice.orientation;
     for (id pointer in pointers) {
-        XCPointerEventPath *path = PUPath(pointer, &end, error);
+        XCPointerEventPath *path = PUPath(pointer, orientation, &end, error);
         if (!path) return NO;
         [record addPointerEventPath:path];
     }

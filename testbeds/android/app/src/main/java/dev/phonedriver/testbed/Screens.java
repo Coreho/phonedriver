@@ -6,6 +6,9 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.hardware.biometrics.BiometricPrompt;
+import android.os.Build;
+import android.os.CancellationSignal;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -444,6 +447,59 @@ final class Screens {
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
         t.setGravity(android.view.Gravity.CENTER);
         return t;
+    }
+
+    /** A button that asks for a fingerprint with the system's own prompt, as an app does before a payment. */
+    static View biometric(Activity a) {
+        LinearLayout root = column(a);
+        TextView result = new TextView(a);
+        result.setId(id(a, "biometric_result"));
+        result.setText("Not asked");
+        result.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        Button ask = new Button(a);
+        ask.setId(id(a, "biometric_ask"));
+        ask.setText("Confirm with fingerprint");
+        ask.setAllCaps(false);
+        ask.setOnClickListener(v -> {
+            if (Build.VERSION.SDK_INT < 28) {
+                result.setText("No prompt before Android 9");
+                return;
+            }
+            BiometricPrompt prompt = new BiometricPrompt.Builder(a)
+                    .setTitle("Confirm payment")
+                    .setSubtitle("Pad thai, $12.00")
+                    .setNegativeButton("Use password", a.getMainExecutor(), (d, which) -> {
+                        result.setText("Password asked");
+                        Events.emit(Events.put(Events.event("biometric"), "result", "negative"));
+                    })
+                    .build();
+            prompt.authenticate(
+                    new CancellationSignal(),
+                    a.getMainExecutor(),
+                    new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult r) {
+                            result.setText("Payment confirmed");
+                            Events.emit(Events.put(Events.event("biometric"), "result", "succeeded"));
+                        }
+
+                        @Override
+                        public void onAuthenticationFailed() {
+                            result.setText("Finger not recognized");
+                            Events.emit(Events.put(Events.event("biometric"), "result", "failed"));
+                        }
+
+                        @Override
+                        public void onAuthenticationError(int code, CharSequence message) {
+                            result.setText("Error: " + message);
+                            Events.emit(Events.put(
+                                    Events.put(Events.event("biometric"), "result", "error"), "code", code));
+                        }
+                    });
+        });
+        root.addView(ask);
+        root.addView(result);
+        return root;
     }
 
     static View checkout(Activity a) {

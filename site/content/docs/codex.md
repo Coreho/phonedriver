@@ -61,7 +61,7 @@ Start an [Android emulator](/docs/android-emulator/), plug in an [Android phone]
 Codex gets the screen as a short numbered list and taps by number. Each action waits for the screen to settle and returns only the lines that changed:
 
 ```screen
-ok tapped @e10 "Dark theme" · settled in 410ms
+ok tapped @e10 "Dark theme"
 ~ @e10 switch "Dark theme" off → on
 ```
 

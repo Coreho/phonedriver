@@ -187,6 +187,10 @@ pub enum Op {
     App,
     Shell,
     Display,
+    Setting,
+    Logs,
+    Record,
+    Page,
 }
 
 impl Op {
@@ -207,6 +211,10 @@ impl Op {
             Op::App => "app",
             Op::Shell => "shell",
             Op::Display => "display",
+            Op::Setting => "setting",
+            Op::Logs => "logs",
+            Op::Record => "record",
+            Op::Page => "page",
         }
     }
 }
@@ -222,7 +230,6 @@ pub enum UserAction {
     TrustComputer,
     EnableDeveloperMode,
     MountDeveloperImage,
-    ResignRunner,
     SetSigningTeam,
     ChooseSigningTeam { teams: Vec<String> },
     RegisterDevice,
@@ -247,9 +254,6 @@ impl UserAction {
             UserAction::EnableDeveloperMode => "Developer Mode is off on the device.".into(),
             UserAction::MountDeveloperImage => {
                 "The Developer Disk Image is not mounted on the device.".into()
-            }
-            UserAction::ResignRunner => {
-                "The PhonedriverRunner on the device has an expired or missing signature.".into()
             }
             UserAction::SetSigningTeam => {
                 "Running on an iPhone or iPad needs an Apple developer team to sign the runner. This Mac has no valid Apple Development certificate, and PHONEDRIVER_TEAM is not set."
@@ -286,9 +290,6 @@ impl UserAction {
                 "Turn on Settings > Privacy & Security > Developer Mode, then restart the device."
             }
             UserAction::MountDeveloperImage => "Run `phonedriver ios setup` to mount the image.",
-            UserAction::ResignRunner => {
-                "Run `phonedriver doctor` to re-sign and reinstall the runner."
-            }
             UserAction::SetSigningTeam => {
                 "Open Xcode > Settings > Accounts, sign in with your Apple Account, then choose Manage Certificates and add an Apple Development certificate. phonedriver reads the team from it. To name a team yourself, set PHONEDRIVER_TEAM to its ID (ten letters and digits, under Membership details on developer.apple.com/account), export it in the shell that starts the daemon and run `phonedriver daemon stop` if one is already running. `phonedriver ios setup` checks all of this."
             }
@@ -310,11 +311,17 @@ impl UserAction {
 #[derive(Debug, Clone, PartialEq, thiserror::Error, Serialize)]
 #[serde(tag = "code_name", rename_all = "snake_case")]
 pub enum Error {
-    #[error("{}", no_device(requested.as_deref(), connected))]
+    #[error("{}", no_device(requested.as_deref(), connected, unasked, off))]
     NoDevice {
         /// The id passed with `--device` or `PHONEDRIVER_DEVICE` that matches no connected device.
         requested: Option<String>,
         connected: Vec<DeviceSummary>,
+        /// Why a place the device could be (adb, the simulators) gave no list, so the device may be there.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        unasked: Vec<String>,
+        /// With nothing connected, the devices that are off and that `boot` can start.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        off: Vec<DeviceSummary>,
     },
     #[error("{} devices are connected; pick one", connected.len())]
     AmbiguousDevice { connected: Vec<DeviceSummary> },
@@ -430,21 +437,53 @@ pub enum Error {
     AutomationConflict { holder: String },
     #[error("connection error: {detail}")]
     Transport { detail: String },
+    /// The device answered and did not do what was asked; `detail` is the whole message.
+    #[error("{detail}")]
+    Refused { detail: String },
 }
 
-fn no_device(requested: Option<&str>, connected: &[DeviceSummary]) -> String {
+fn no_device(
+    requested: Option<&str>,
+    connected: &[DeviceSummary],
+    unasked: &[String],
+    off: &[DeviceSummary],
+) -> String {
     let Some(requested) = requested else {
-        return "no device is connected".into();
+        return match off {
+            [] => "no device is connected".into(),
+            off => format!(
+                "no device is connected; can be started: {}",
+                can_be_started(off)
+            ),
+        };
     };
+    let unasked: String = unasked
+        .iter()
+        .map(|why| format!("; could not ask: {why}"))
+        .collect();
     if connected.is_empty() {
-        return format!("no device \"{requested}\"; none is connected");
+        return format!("no device \"{requested}\"; none is connected{unasked}");
     }
     let list = connected
         .iter()
         .map(|d| format!("{} ({})", d.id, d.model))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("no device \"{requested}\"; connected: {list}")
+    format!("no device \"{requested}\"; connected: {list}{unasked}")
+}
+
+/// The first six devices that are off, as `iPhone 17 (iOS 26.5)`, and how many more there are.
+pub fn can_be_started(off: &[DeviceSummary]) -> String {
+    let shown = off
+        .iter()
+        .take(6)
+        .map(|d| format!("{} ({})", d.model, d.os))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match off.len().saturating_sub(6) {
+        0 => shown,
+        more => format!("{shown} and {more} more"),
+    }
 }
 
 /// The refusal's message: what the tap is, and the screen text that says what it commits.
@@ -504,15 +543,23 @@ impl Error {
             Error::SecretField { .. } => -32020,
             Error::NotFocused { .. } => -32023,
             Error::PointOffScreen { .. } => -32024,
+            Error::Refused { .. } => -32025,
         }
     }
 
     /// The next thing to do, starting with a verb.
     pub fn hint(&self) -> String {
         match self {
+            Error::NoDevice { off, .. } if !off.is_empty() => {
+                "Start one with `phonedriver boot <name>`.".into()
+            }
+            Error::NoDevice { unasked, .. } if !unasked.is_empty() => {
+                "Run `phonedriver doctor`: the device may be where the list could not be read (adb not running, a dropped tunnel).".into()
+            }
             Error::NoDevice {
                 requested: Some(_),
                 connected,
+                ..
             } if !connected.is_empty() => format!(
                 "Pass `--device <id>` (or set PHONEDRIVER_DEVICE) to one of: {}.",
                 ids(connected)
@@ -575,7 +622,7 @@ impl Error {
             Error::UnknownKey { valid, .. } => {
                 format!("Use one of these keys: {}.", valid.join("; "))
             }
-            Error::SecretField { .. } => "Use `--secret` on its own call (the text on stdin or in PHONEDRIVER_SECRET; MCP: `type` with `secret`); a batch cannot carry secret text.".into(),
+            Error::SecretField { .. } => "Use `--secret` (the text on stdin or in PHONEDRIVER_SECRET). A batch on the command line cannot carry secret text: run that `type` on its own.".into(),
             Error::NeedsApproval { .. } => "Ask the user in chat whether to tap it; tap again with `--autonomous` only when they say yes or have granted full autonomy.".into(),
             Error::NoApp { similar, .. } if !similar.is_empty() => {
                 format!("Use one of these installed apps: {}.", similar.join("; "))
@@ -662,6 +709,7 @@ impl Error {
                 format!("Stop {holder}, then retry the command.")
             }
             Error::Transport { .. } => "Run `phonedriver doctor` to check the connection.".into(),
+            Error::Refused { .. } => "Check what the message names and run the command again; nothing was changed.".into(),
         }
     }
 
@@ -737,7 +785,6 @@ mod tests {
             UserAction::TrustComputer,
             UserAction::EnableDeveloperMode,
             UserAction::MountDeveloperImage,
-            UserAction::ResignRunner,
             UserAction::SetSigningTeam,
             UserAction::ChooseSigningTeam {
                 teams: vec!["TEAMONE".into(), "TEAMTWO".into()],
@@ -754,10 +801,14 @@ mod tests {
             Error::NoDevice {
                 requested: None,
                 connected: vec![],
+                unasked: vec![],
+                off: vec![],
             },
             Error::NoDevice {
                 requested: Some("sim:BAD".into()),
                 connected: vec![summary()],
+                unasked: vec![],
+                off: vec![],
             },
             Error::AmbiguousDevice {
                 connected: vec![
@@ -903,6 +954,10 @@ mod tests {
             Error::Transport {
                 detail: "adb server closed the stream".into(),
             },
+            Error::Refused {
+                detail: "battery_saver_screen/battery_saver was not set: Preference not enabled"
+                    .into(),
+            },
         ];
         v.extend(
             all_user_actions()
@@ -937,6 +992,7 @@ mod tests {
             Error::SecretField { .. } => (-32020, "secret_field"),
             Error::NotFocused { .. } => (-32023, "not_focused"),
             Error::PointOffScreen { .. } => (-32024, "point_off_screen"),
+            Error::Refused { .. } => (-32025, "refused"),
         }
     }
 
@@ -1092,6 +1148,8 @@ mod tests {
         let e = Error::NoDevice {
             requested: Some("sim:BAD".into()),
             connected: vec![summary()],
+            unasked: vec![],
+            off: vec![],
         };
         assert_eq!(
             e.to_string(),
@@ -1104,6 +1162,8 @@ mod tests {
         let none = Error::NoDevice {
             requested: Some("sim:BAD".into()),
             connected: vec![],
+            unasked: vec![],
+            off: vec![],
         };
         assert_eq!(none.to_string(), "no device \"sim:BAD\"; none is connected");
         assert!(none.hint().starts_with("Connect a device"));
@@ -1115,10 +1175,51 @@ mod tests {
         assert_eq!(
             Error::NoDevice {
                 requested: None,
-                connected: vec![]
+                connected: vec![],
+                unasked: vec![],
+                off: vec![],
             }
             .to_string(),
             "no device is connected"
+        );
+        let adb_down = Error::NoDevice {
+            requested: Some("emulator-5554".into()),
+            connected: vec![],
+            unasked: vec!["connection error: cannot reach the adb server".into()],
+            off: vec![],
+        };
+        assert_eq!(
+            adb_down.to_string(),
+            "no device \"emulator-5554\"; none is connected; could not ask: connection error: cannot reach the adb server"
+        );
+        assert!(adb_down.hint().starts_with("Run `phonedriver doctor`"));
+    }
+
+    #[test]
+    fn with_nothing_connected_the_devices_that_are_off_are_named_with_how_to_start_one() {
+        let off = |n: usize| -> Vec<DeviceSummary> {
+            (1..=n)
+                .map(|i| DeviceSummary {
+                    id: format!("sim:{i}"),
+                    model: format!("iPhone {i}"),
+                    os: "iOS 26.5".into(),
+                })
+                .collect()
+        };
+        let e = Error::NoDevice {
+            requested: None,
+            connected: vec![],
+            unasked: vec![],
+            off: off(2),
+        };
+        assert_eq!(
+            e.to_string(),
+            "no device is connected; can be started: iPhone 1 (iOS 26.5), iPhone 2 (iOS 26.5)"
+        );
+        assert_eq!(e.hint(), "Start one with `phonedriver boot <name>`.");
+        assert_eq!(
+            can_be_started(&off(8)),
+            "iPhone 1 (iOS 26.5), iPhone 2 (iOS 26.5), iPhone 3 (iOS 26.5), iPhone 4 (iOS 26.5), iPhone 5 (iOS 26.5), iPhone 6 (iOS 26.5) and 2 more"
         );
     }
 

@@ -4,7 +4,7 @@ nav: Real Android phone
 meta: Turn on USB or Wi-Fi debugging, connect an Android phone and let an agent operate it with phonedriver. What has and has not been tested.
 description: Turn on USB debugging or Wi-Fi debugging, connect an Android phone or tablet, and let an agent operate it with phonedriver. Notes on what has and has not been tested.
 seo: How to let an AI agent control a real Android phone over MCP
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 Plug in an Android phone or tablet with USB debugging on, and phonedriver can drive it. No app is installed on the phone, and no accessibility service has to be switched on. It is the same code path as the emulator, and it has been tested on one physical phone, a HONOR X8 ([what was tested](#what-has-been-tested)).
@@ -38,9 +38,13 @@ The first address and the six-digit code are on the pairing screen. The second a
 
 ## A hidden screen for the agent
 
-On Android 13 and later, the agent can work on a hidden second screen, so your own screen stays yours. Set `PHONEDRIVER_DISPLAY=hidden` in the MCP config, or pass `--display hidden` to the CLI. It has been tested on an emulator and on the HONOR X8. On the phone, launching Settings and Calculator, tapping, typing, pressing back and home, and taking screenshots all worked on the hidden screen while the phone's own screen kept showing another app.
+On Android 13 and later, the agent can work on a hidden second screen, so your own screen stays yours. Set `PHONEDRIVER_DISPLAY=hidden` in the MCP config, or pass `--display hidden` to the CLI. It has been tested on an emulator and on the HONOR X8. The phone has to be unlocked: while it is locked the hidden screen shows the lock screen too, so phonedriver says the phone is locked and leaves it asleep. While the agent works, phonedriver keeps the phone's own screen on, so it does not lock under the agent; `phonedriver release` lets it sleep again. On the phone, launching Settings and Calculator, tapping, typing, pressing back and home, and taking screenshots all worked on the hidden screen while the phone's own screen kept showing another app.
 
 Typing into an app's own fields leaves no trace on your screen. Typing into a web page shows the system's clipboard note, and your clipboard is put back after. `press lock` and `press notifications` are not available in this mode. The first launch took 8.4 s on the HONOR X8 while the screen and the video encoder started, and later launches settled in about 1.1 s. Switching modes restarts the agent, which takes a few seconds. Some makers' builds may refuse a hidden screen, and I have not tried Xiaomi, Samsung or Oppo phones.
+
+### Several agents on one phone
+
+Add `+` and a short name to the device id, such as `--device emulator-5554+a` and `+b`, and each agent works on a hidden screen of its own with its own lease. Two or more agents can then use one phone or emulator at the same time while its own screen stays free. `phonedriver devices` lists each lane with the session that holds it. An app runs in one place at a time, so give each agent a different app. It needs Android 13 or later and has been tested on the API 37 emulator.
 
 ## What has been tested
 
@@ -49,6 +53,8 @@ I have tested one physical Android phone, a HONOR X8 (MagicOS, Android 13), over
 ## What stays with you
 
 Unlocking the phone, a USB debugging prompt and a biometric prompt are yours. When one blocks the agent, the error says what to do on the device and the command line exits with code 3. The agent tells you and continues when you say it is done.
+
+phonedriver keeps the phone awake while it is in use: for 10 minutes after each command it resets the screen timeout every 10 seconds, on the phone's own screen and on the hidden one, and `phonedriver release` stops that. The screen still dims on its usual schedule; it only does not go off. This comes with 0.1.5.
 
 ## Safety on a real phone
 

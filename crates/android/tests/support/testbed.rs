@@ -10,8 +10,7 @@ fn project_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testbeds/android")
 }
 
-/// Builds the testbed with Gradle and installs it on `serial` through our adb client, so `ADB_SERVER_SOCKET` is honored (Gradle's own installer ignores it).
-pub async fn install(adb: &Adb, serial: &str) {
+fn build() -> Vec<u8> {
     let status = Command::new(project_dir().join("gradlew"))
         .arg("--console=plain")
         .arg("assembleDebug")
@@ -24,8 +23,18 @@ pub async fn install(adb: &Adb, serial: &str) {
         .status()
         .expect("run gradlew");
     assert!(status.success(), "gradlew assembleDebug failed");
-    let apk = std::fs::read(project_dir().join("app/build/outputs/apk/debug/app-debug.apk"))
-        .expect("read apk");
+    std::fs::read(project_dir().join("app/build/outputs/apk/debug/app-debug.apk"))
+        .expect("read apk")
+}
+
+/// Builds the testbed with Gradle, or takes the APK that `PHONEDRIVER_TESTBED_APK` names (the Mac mini has no JDK),
+/// and installs it on `serial` through our adb client, so `ADB_SERVER_SOCKET` is honored (Gradle's own installer
+/// ignores it).
+pub async fn install(adb: &Adb, serial: &str) {
+    let apk = match std::env::var("PHONEDRIVER_TESTBED_APK") {
+        Ok(path) => std::fs::read(&path).expect("read PHONEDRIVER_TESTBED_APK"),
+        Err(_) => build(),
+    };
     adb.push(
         serial,
         &apk,

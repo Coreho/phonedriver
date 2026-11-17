@@ -74,9 +74,13 @@ impl Traces {
             "ok": ok, "reply": reply, "ms": took.as_millis() as u64, "settle_ms": settle_ms,
         });
         if !phases.is_empty() {
-            line["phases"] = phases
-                .iter()
-                .map(|(k, v)| (k.to_string(), json!((f64::from(*v) / 100.0).round() / 10.0)))
+            let mut summed = std::collections::BTreeMap::<&str, u64>::new();
+            for (k, v) in phases {
+                *summed.entry(k).or_default() += u64::from(*v);
+            }
+            line["phases"] = summed
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), json!((v as f64 / 100.0).round() / 10.0)))
                 .collect();
         }
         if self.options.full

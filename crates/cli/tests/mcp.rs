@@ -120,6 +120,7 @@ async fn tools_list_is_the_tools_with_short_descriptions_and_the_cli_required_ar
         ("devices", vec![]),
         ("snapshot", vec![]),
         ("screenshot", vec![]),
+        ("replay", vec!["file"]),
         ("tap", vec!["target"]),
         ("type", vec!["text"]),
         ("swipe", vec![]),
@@ -130,6 +131,8 @@ async fn tools_list_is_the_tools_with_short_descriptions_and_the_cli_required_ar
         ("batch", vec!["steps"]),
         ("clipboard", vec![]),
         ("shell", vec!["command"]),
+        ("setting", vec![]),
+        ("logs", vec![]),
     ]
     .into_iter()
     .map(|(n, r)| (n.to_string(), r.into_iter().map(String::from).collect()))
@@ -204,6 +207,24 @@ async fn screenshot_is_one_png_image_block_and_one_text_block_with_size_and_scal
         PNG
     );
     assert_eq!(texts(&r), vec!["360x800 at scale 1".to_string()]);
+}
+
+#[tokio::test]
+async fn compare_needs_an_earlier_screenshot_and_then_answers_in_text_with_no_image() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("screenshot", json!({"compare": true})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    assert_eq!(
+        texts(&r),
+        vec![
+            "`compare` needs an earlier screenshot of this device: take one, act, then compare"
+                .to_string()
+        ]
+    );
+    let r = rig.call("screenshot", json!({"compare": true})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+    assert_eq!(texts(&r), vec!["same".to_string()]);
 }
 
 async fn remote(rig: &Rig) -> PathBuf {
@@ -467,7 +488,7 @@ async fn tap_says_its_reply_is_the_new_screen_and_that_tools_go_one_at_a_time() 
 }
 
 #[tokio::test]
-async fn every_tool_says_whether_it_only_reads_and_the_three_that_do_are_marked() {
+async fn every_tool_says_whether_it_only_reads_and_the_four_that_do_are_marked() {
     let rig = rig(vec![tree(&["One"])]).await;
     let tools = rig.client.list_all_tools().await.unwrap();
     let mut read_only = Vec::new();
@@ -484,7 +505,7 @@ async fn every_tool_says_whether_it_only_reads_and_the_three_that_do_are_marked(
         }
     }
     read_only.sort();
-    assert_eq!(read_only, ["screenshot", "snapshot", "wait"]);
+    assert_eq!(read_only, ["logs", "screenshot", "snapshot", "wait"]);
     let then = |name: &str| {
         let t = tools.iter().find(|t| t.name == name).unwrap();
         serde_json::to_string(&*t.input_schema)
@@ -603,6 +624,59 @@ async fn failures_and_hints_over_mcp_name_tools_and_arguments_not_cli_commands()
 }
 
 #[tokio::test]
+async fn devices_with_boot_starts_a_device_or_says_it_is_on_and_a_wrong_name_names_the_tool() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("devices", json!({"boot": "fake"})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    assert_eq!(texts(&r), vec!["already on: fake:1 · Fake · FakeOS 1"]);
+    let r = rig.call("devices", json!({"boot": "Watch"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    let text = texts(&r).join("\n");
+    assert!(
+        text.starts_with("no device named \"Watch\" is off; nothing can be started\nhint: "),
+        "{text}"
+    );
+    assert!(!text.contains("phonedriver"), "{text}");
+}
+
+#[tokio::test]
+async fn an_argument_no_tool_has_is_refused_with_the_ones_it_has() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    for (tool, args, has) in [
+        ("clipboard", json!({"action": "set", "text": "x"}), "`set`"),
+        ("screenshot", json!({"mark": true}), "`marks`"),
+        ("devices", json!({"start": "Fake"}), "`boot`"),
+        ("snapshot", json!({"search": "One"}), "`find`"),
+        ("apps", json!({"name": "Fake"}), "`app`"),
+    ] {
+        let reply = rig
+            .client
+            .call_tool(
+                CallToolRequestParams::new(tool).with_arguments(args.as_object().unwrap().clone()),
+            )
+            .await;
+        let said = match reply {
+            Ok(r) => {
+                assert_eq!(r.is_error, Some(true), "{tool}: {r:?}");
+                texts(&r).join("\n")
+            }
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            said.contains("unknown field") && said.contains(has),
+            "{tool}: {said}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_empty_clipboard_is_said_in_words() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("clipboard", json!({})).await;
+    assert_eq!(texts(&r), vec!["the clipboard is empty"]);
+}
+
+#[tokio::test]
 async fn a_batch_over_mcp_runs_the_steps_and_returns_one_numbered_reply() {
     let rig = rig(vec![field_tree("", false), field_tree("hi", false)]).await;
     rig.call("snapshot", json!({})).await;
@@ -620,7 +694,7 @@ async fn a_batch_over_mcp_runs_the_steps_and_returns_one_numbered_reply() {
     let text = texts(&r).join("\n");
     assert!(text.starts_with("ok 3 steps"), "{text}");
     assert!(text.contains("\n1. tapped @e1"), "{text}");
-    assert!(text.contains("\n2. typed 2 chars"), "{text}");
+    assert!(text.contains("\n2. typed into @e1"), "{text}");
     assert!(text.contains("\n3. pressed enter"), "{text}");
 }
 
@@ -685,26 +759,48 @@ async fn typing_with_then_types_and_taps_the_texts_after_it() {
     assert_ne!(r.is_error, Some(true), "{r:?}");
     let text = texts(&r).join("\n");
     assert!(text.starts_with("ok 2 steps"), "{text}");
-    assert!(text.contains("\n1. typed 2 chars"), "{text}");
+    assert!(text.contains("\n1. typed into @e1"), "{text}");
     assert!(text.contains("\n2. tapped @e1"), "{text}");
 }
 
 #[tokio::test]
-async fn then_is_refused_with_a_secret_before_anything_is_typed() {
-    let rig = rig(vec![field_tree("", false)]).await;
+async fn a_secret_typed_as_a_batch_step_or_before_a_then_reaches_no_reply_and_no_file() {
+    let rig = rig(vec![field_tree("", false), field_tree("hunter2", false)]).await;
     rig.call("snapshot", json!({})).await;
+    let r = rig
+        .call(
+            "batch",
+            json!({"steps": [
+                {"tool": "type", "text": "hunter2", "into": "@e1", "secret": true},
+                {"tool": "press", "key": "enter"}
+            ]}),
+        )
+        .await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    let all = serde_json::to_string(&r).unwrap();
+    assert!(!all.contains("hunter2"), "{all}");
+    assert!(all.contains("1. typed into @e1"), "{all}");
     let r = rig
         .call(
             "type",
             json!({"text": "hunter2", "into": "@e1", "secret": true, "then": ["@e1"]}),
         )
         .await;
-    assert_eq!(r.is_error, Some(true), "{r:?}");
-    let text = texts(&r).join("\n");
-    assert!(
-        text.contains("`then`") && !text.contains("hunter2"),
-        "{text}"
-    );
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    let all = serde_json::to_string(&r).unwrap();
+    assert!(!all.contains("hunter2"), "{all}");
+    assert!(all.contains("2. tapped @e1"), "{all}");
+    for f in files(rig.home.path()) {
+        if f.extension().is_some_and(|e| e == "sock") {
+            continue;
+        }
+        let text = std::fs::read(&f).unwrap();
+        assert!(
+            !String::from_utf8_lossy(&text).contains("hunter2"),
+            "{} holds the secret",
+            f.display()
+        );
+    }
 }
 
 #[tokio::test]
@@ -729,13 +825,9 @@ async fn a_failing_batch_step_is_an_error_naming_the_step_with_hints_in_tool_wor
 }
 
 #[tokio::test]
-async fn a_batch_refuses_secrets_unknown_tools_and_unknown_arguments_before_acting() {
+async fn a_batch_refuses_unknown_tools_and_unknown_arguments_before_acting() {
     let rig = rig(vec![field_tree("", false)]).await;
     for (step, why) in [
-        (
-            json!({"tool": "type", "text": "hunter2", "secret": true}),
-            "secret",
-        ),
         (json!({"tool": "snapshot"}), "cannot be a step"),
         (
             json!({"tool": "tap", "target": "@e1", "colour": "red"}),
@@ -752,7 +844,6 @@ async fn a_batch_refuses_secrets_unknown_tools_and_unknown_arguments_before_acti
         assert_eq!(r.is_error, Some(true), "{why}: {r:?}");
         let text = texts(&r).join("\n");
         assert!(text.starts_with("step 2:") && text.contains(why), "{text}");
-        assert!(!text.contains("hunter2"), "{text}");
     }
 }
 
@@ -847,6 +938,317 @@ async fn apps_with_an_action_stops_an_app_and_refuses_a_missing_path() {
         .await;
     assert_eq!(r.is_error, Some(true), "{r:?}");
     let r = rig.call("apps", json!({"action": "install"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+}
+
+#[tokio::test]
+async fn apps_grant_and_revoke_take_permissions_and_say_what_they_did() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.install(&[("com.example.app", "Example")]);
+    let rig = rig_with(fake.clone()).await;
+    let r = rig
+        .call(
+            "apps",
+            json!({"action": "grant", "app": "Example", "permissions": ["camera"]}),
+        )
+        .await;
+    assert_eq!(texts(&r), ["ok granted camera to Example"]);
+    let r = rig
+        .call(
+            "apps",
+            json!({"action": "revoke", "app": "Example", "permissions": ["camera"]}),
+        )
+        .await;
+    assert_eq!(texts(&r), ["ok revoked camera from Example"]);
+    let tools = rig.client.list_all_tools().await.unwrap();
+    let apps = tools.iter().find(|t| t.name == "apps").unwrap();
+    assert!(
+        serde_json::to_string(apps).unwrap().contains("revoke"),
+        "{apps:?}"
+    );
+}
+
+fn bare_screen() -> RawTree {
+    RawTree::from_android_json(
+        r#"{"windows":[{"id":1,"type":"application","package":"com.game","bounds":[0,0,360,800]}],"nodes":[
+        {"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"},
+        {"p":0,"w":1,"cls":"android.view.SurfaceView","b":[0,0,360,800],"f":"vVe"}]}"#,
+        phonedriver_core::geometry::Scale { density: 1.0 },
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_screen_with_nothing_to_act_on_comes_with_its_picture() {
+    let rig = rig(vec![bare_screen()]).await;
+    let r = rig.call("snapshot", json!({})).await;
+    let text = texts(&r).join("\n");
+    assert!(
+        r.content.iter().any(|c| c.as_image().is_some()),
+        "no image: {text}"
+    );
+    assert!(
+        text.contains(
+            "\nthis screen gives no element list: its picture is attached; tap a point on it as `x,y`"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("phonedriver screenshot"), "{text}");
+
+    let r = rig
+        .call("tap", json!({"target": "100,200", "autonomous": true}))
+        .await;
+    let text = texts(&r).join("\n");
+    assert!(
+        r.content.iter().any(|c| c.as_image().is_some()),
+        "no image after a tap: {text}"
+    );
+    assert_eq!(text.matches("its picture is attached").count(), 1, "{text}");
+}
+
+#[tokio::test]
+async fn a_screen_with_elements_comes_without_a_picture() {
+    let rig = rig(vec![tree(&["One"])]).await;
+    let r = rig.call("snapshot", json!({})).await;
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+    assert!(!texts(&r).join("\n").contains("picture"), "{r:?}");
+    let r = rig.call("tap", json!({"target": "One"})).await;
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+}
+
+#[tokio::test]
+async fn snapshot_with_page_reads_the_web_page_whole_and_find_keeps_its_matching_lines() {
+    use phonedriver_core::device::WebPage;
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    let body: String = (1..=300)
+        .map(|n| format!("Line {n} of a long page, forty characters wide.\n"))
+        .collect();
+    fake.show_page(WebPage {
+        title: "Example Domain".into(),
+        url: "https://example.com/".into(),
+        text: format!("Example Domain\n\nBorn\nDecember 9, 1906\n{body}"),
+    });
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("snapshot", json!({"page": true})).await;
+    let text = &texts(&r)[0];
+    assert!(
+        text.starts_with("page \"Example Domain\" https://example.com/\nExample Domain\nBorn\n"),
+        "{text}"
+    );
+    let end: Vec<&str> = text.lines().rev().take(2).collect();
+    assert!(
+        end[1].starts_with("… ") && end[1].contains(" more lines ("),
+        "{}",
+        end[1]
+    );
+    assert_eq!(end[0], "hint: `find` keeps only the lines with those words");
+    let r = rig
+        .call("snapshot", json!({"page": true, "find": "born"}))
+        .await;
+    assert_eq!(
+        texts(&r),
+        [
+            "page \"Example Domain\" https://example.com/\nBorn\nDecember 9, 1906\nLine 1 of a long page, forty characters wide."
+        ]
+    );
+}
+
+#[tokio::test]
+async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
+    use phonedriver_core::testing::Call;
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One", "Two",
+    ])]));
+    let rig = rig_with(fake.clone()).await;
+    let taps = || {
+        fake.calls()
+            .iter()
+            .filter(|c| matches!(c, Call::Gesture(_)))
+            .count()
+    };
+    let file = rig.home.path().join("run.steps");
+    let path = file.to_str().unwrap();
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert!(texts(&r)[0].starts_with("nothing to save"), "{r:?}");
+
+    rig.call("snapshot", json!({})).await;
+    rig.call("tap", json!({"target": "@e1"})).await;
+    rig.call("tap", json!({"target": "Two"})).await;
+    assert_eq!(taps(), 2);
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert_eq!(
+        texts(&r),
+        [format!(
+            "saved 2 steps to {path}\n1. tap \"One\"\n2. tap \"Two\"\nthe file holds one step a line: delete the line of a step that was a detour"
+        )]
+    );
+    let saved = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        saved
+            .lines()
+            .next()
+            .unwrap()
+            .contains(r#""target":{"role":"button","text":"One"}"#),
+        "{saved}"
+    );
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert!(texts(&r)[0].ends_with("is as it was)"), "{r:?}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), saved);
+
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_ne!(r.is_error, Some(true), "{text}");
+    assert!(text.starts_with("replayed 2 steps in "), "{text}");
+    assert!(text.contains("\n1. tapped @e1 \"One\""), "{text}");
+    assert!(text.contains("screen now:\n"), "{text}");
+    assert_eq!(taps(), 4);
+
+    let more = format!(
+        "{saved}{}\n{}\n{}\n",
+        json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "Gone"}}}}),
+        json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "One"}}}, "changed": true}),
+        json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "Two"}}}}),
+    );
+    std::fs::write(&file, more).unwrap();
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_eq!(r.is_error, Some(true), "{text}");
+    assert!(
+        text.starts_with("step 3 of 5 (tap \"Gone\") failed: no element matches \"Gone\""),
+        "{text}"
+    );
+    assert!(text.contains("\n2. tapped @e2 \"Two\""), "{text}");
+    assert!(
+        text.contains(
+            "Do step 3 yourself, then replay the same file from step 4 for the 2 steps left."
+        ),
+        "{text}"
+    );
+    assert_eq!(taps(), 6);
+
+    let r = rig.call("replay", json!({"file": path, "from": 4})).await;
+    let text = texts(&r).join("\n");
+    assert!(
+        text.starts_with("step 4 of 5 (tap \"One\") failed: it changed nothing this time; when it was saved it changed the screen"),
+        "{text}"
+    );
+    let r = rig.call("replay", json!({"file": path, "from": 5})).await;
+    assert!(texts(&r)[0].starts_with("replayed 1 step in "), "{r:?}");
+    let r = rig.call("replay", json!({"file": path, "from": 6})).await;
+    assert!(texts(&r)[0].contains("there is no step 6"), "{r:?}");
+}
+
+#[tokio::test]
+async fn screenshot_with_record_starts_and_stops_a_video_and_returns_text_only() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.with_recorder();
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("screenshot", json!({"record": "start"})).await;
+    assert!(r.content.iter().all(|c| c.as_image().is_none()), "{r:?}");
+    let started = texts(&r).join("\n");
+    assert!(
+        started.starts_with("recording the screen to ") && started.contains(".mp4"),
+        "{started}"
+    );
+    rig.call("tap", json!({"target": "One"})).await;
+    let r = rig.call("screenshot", json!({"record": "stop"})).await;
+    let stopped = texts(&r).join("\n");
+    assert!(stopped.contains("1.5 s, 360x800, 2 frames"), "{stopped}");
+    assert!(
+        stopped.contains("steps: 1 with their times in "),
+        "{stopped}"
+    );
+    let r = rig.call("screenshot", json!({"record": "pause"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+}
+
+#[tokio::test]
+async fn logs_prints_the_crash_then_the_last_lines_of_the_app_in_front() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.answer_logs(phonedriver_core::device::LogReply {
+        text: "I/Example( 222): started\nE/Example( 222): failed to load\n".into(),
+        crash: Some(
+            "java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)".into(),
+        ),
+    });
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("logs", json!({})).await;
+    assert_eq!(
+        texts(&r),
+        [
+            "crashed: java.lang.IllegalStateException: boom at com.example.Main.onClick(Main.kt:12)\nI/Example( 222): started\nE/Example( 222): failed to load"
+        ]
+    );
+    let r = rig.call("logs", json!({"grep": "failed"})).await;
+    assert!(
+        texts(&r)[0].ends_with("E/Example( 222): failed to load"),
+        "{r:?}"
+    );
+}
+
+#[tokio::test]
+async fn setting_finds_reads_and_writes_a_setting_by_key() {
+    use phonedriver_core::settings::{SettingItem, SettingScreen, SettingsIndex};
+    const KEY: &str = "dark_ui_mode/dark_ui_activated";
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.with_settings(
+        SettingsIndex {
+            screens: vec![SettingScreen {
+                key: "dark_ui_mode".into(),
+                about: "Dark theme.".into(),
+                link: None,
+            }],
+            items: vec![SettingItem {
+                key: KEY.into(),
+                purpose: "Whether the system dark theme is manually enabled".into(),
+                values: "true | false".into(),
+                writable: true,
+                confirm: false,
+                screen: 0,
+            }],
+        },
+        &[(KEY, "false")],
+    );
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("setting", json!({"find": "dark theme"})).await;
+    assert_eq!(
+        texts(&r),
+        [format!(
+            "{KEY}  [true | false]  Whether the system dark theme is manually enabled"
+        )]
+    );
+    let r = rig.call("setting", json!({"find": "teapot"})).await;
+    assert!(
+        texts(&r)[0].starts_with("no setting matches \"teapot\""),
+        "{r:?}"
+    );
+    let r = rig.call("setting", json!({"key": KEY})).await;
+    assert_eq!(texts(&r), [format!("{KEY} = false")]);
+    let r = rig
+        .call("setting", json!({"key": KEY, "value": "true"}))
+        .await;
+    assert_eq!(texts(&r), [format!("ok {KEY} = true")]);
+    let r = rig.call("setting", json!({"values": {KEY: "false"}})).await;
+    assert_eq!(texts(&r), [format!("ok {KEY} = false")]);
+    let r = rig.call("setting", json!({"value": "true"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    let r = rig.call("setting", json!({"find": "a", "open": "b"})).await;
     assert_eq!(r.is_error, Some(true), "{r:?}");
 }
 

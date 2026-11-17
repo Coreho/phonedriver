@@ -58,7 +58,7 @@ The known limit is written down next to the code. A video stream that delivers f
 The reply is the diff, not the screen. Each line has a ref that the daemon keeps pointing at the same element while it is on screen:
 
 ```screen
-ok tapped @e10 "Dark theme" · settled in 410ms
+ok tapped @e10 "Dark theme"
 ~ @e10 switch "Dark theme" off → on
 ```
 

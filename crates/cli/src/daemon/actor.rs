@@ -9,9 +9,10 @@ use std::time::Duration;
 use base64::Engine;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DisplayMode,
-    FrameRef, Gesture, Key, Quality, ScreenState, ShellRequest, TextInput, TimedPoint, Url,
+    FrameRef, Gesture, Key, LogRequest, Quality, ScreenState, ShellRequest, TextInput, TimedPoint,
+    Url,
 };
-use phonedriver_core::diff::{Change, DiffOrFull, Field, diff};
+use phonedriver_core::diff::{Change, DiffOrFull, Field, diff, drop_echo};
 use phonedriver_core::element::{Actions, Element, ElementState, Ref, Role, Source};
 use phonedriver_core::error::{Category, Direction, Error, Op, ScrollEnd, UserAction};
 use phonedriver_core::geometry::{Point, Rect, Size};
@@ -22,6 +23,7 @@ use phonedriver_core::raw::{NodeFlags, RawTree};
 use phonedriver_core::render::{
     AppLine, DeviceLine, Filters, Header, Orientation, Rendered, SettleLine, plural, quote,
 };
+use phonedriver_core::settings::{SettingOp, SettingReply};
 use phonedriver_core::settle::{Config, Detector, Input, State};
 use phonedriver_core::similar::{SUGGEST_WITHIN, normalized_distance};
 use serde_json::{Value, json};
@@ -30,15 +32,18 @@ use tokio::time::Instant;
 
 use super::DeviceSource;
 use super::checkbox;
+use super::journal::{self, Kept};
+use super::secrets::Secrets;
 use super::session::{Resolved, Session};
 use super::shell;
 use super::verify::{Expect, Verdict, Verify};
 use super::{guard, secret_field};
 use crate::wire::{
     ActParams, Action, ActionResult, AppParams, Approval, BatchParams, BatchResult,
-    ClipboardParams, FindParams, Kind, Observation, PinchDirection, ScreenshotParams,
-    ScreenshotResult, ShellParams, ShellResult, SnapshotParams, Step, StepFailure, StepResult,
-    Target, TypeMode, WaitCondition, WaitParams,
+    ClipboardParams, Crashed, FindParams, Kind, LogsParams, Observation, PageParams,
+    PinchDirection, RecordAction, RecordParams, ScreenshotParams, ScreenshotResult, SettingParams,
+    ShellParams, ShellResult, SnapshotParams, Step, StepFailure, StepResult, Target, TypeMode,
+    WaitCondition, WaitParams,
 };
 
 pub const LEASE_TTL: Duration = Duration::from_secs(600);
@@ -48,7 +53,17 @@ pub const LEASE_TTL: Duration = Duration::from_secs(600);
 /// The device stays connected, so the terminal's next command is not a cold start.
 pub const TERMINAL_HOLD: Duration = Duration::from_secs(30);
 const TICK: Duration = Duration::from_millis(5);
+const SETTING_LINES: usize = 12;
+const AUDIT_LINES: usize = 20;
+const LOGS_SINCE_S: u64 = 60;
+/// Added to an action's own time when its crash log is read, for the action's preparation before the clock started.
+const CRASH_MARGIN: Duration = Duration::from_secs(2);
+const SETTING_LINES_OF_MANY: usize = 4;
 const SCREEN_WAIT: Duration = Duration::from_secs(3);
+/// About 2,000 tokens: a mobile Wikipedia article with its sections closed is 6,086 characters.
+const PAGE_CHARS: usize = 8000;
+/// A page puts a label and its value on separate lines: Wikipedia's "Born" is followed by the birth name, then the date.
+const GREP_LINES_AFTER: usize = 2;
 const KEYGUARD_WAIT: Duration = Duration::from_millis(1000);
 const WAIT_DEBOUNCE: Duration = Duration::from_millis(100);
 /// Typed text is already in the field when the call returns (the paste waits for it), so unlike after a tap there is
@@ -103,13 +118,18 @@ const FOCUS_STEP: Duration = Duration::from_millis(30);
 const SEARCH_WAIT: Duration = Duration::from_millis(1500);
 const WEB_VIEW_WAIT: Duration = Duration::from_secs(10);
 const LEAVE_WAIT: Duration = Duration::from_millis(2500);
+/// Observed on the API 37 emulator, bench task files-new-folder: Files was launched twice, the launcher was still in
+/// front 2.8 s and 3.0 s later, and Files came to the front about 7 s after the second launch. Each reply said "it may
+/// have quit at start", and the agent spent four more calls on `am start` and `dumpsys` to find it.
+const LATE_START_WAIT: Duration = Duration::from_secs(6);
+const LATE_START_STEP: Duration = Duration::from_millis(250);
+const KEYBOARD_STAYED: &str = ", and enter left the keyboard up (`press hide-keyboard` closes it)";
 /// Observed on the API 37 tablet emulator: the first "Add alarm" tap after a cold Clock launch opened its time picker
 /// after more than 500 ms, so the reply said "no change" while the dialog was on its way, and the agent tapped again.
 const COLD_APP_WINDOW: Duration = Duration::from_secs(30);
 const COLD_CHANGE_WAIT: Duration = Duration::from_millis(2000);
 /// How long a tap whose frames changed but whose elements did not waits for a page that starts late.
 const LATE_PAGE_WAIT: Duration = Duration::from_millis(600);
-const MASK: &str = "•••";
 
 pub enum Call {
     Snapshot(SnapshotParams),
@@ -122,6 +142,12 @@ pub enum Call {
     App(AppParams),
     Clipboard(ClipboardParams),
     Shell(ShellParams),
+    Setting(SettingParams),
+    Logs(LogsParams),
+    Page(PageParams),
+    Record(RecordParams),
+    /// The session's steps so far, taken out of it.
+    Journal,
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
@@ -142,7 +168,12 @@ pub struct Job {
     pub reply: oneshot::Sender<(Result<Value, Error>, Phases)>,
 }
 
-pub fn spawn(id: String, source: Arc<dyn DeviceSource>, home: PathBuf) -> mpsc::Sender<Job> {
+pub fn spawn(
+    id: String,
+    source: Arc<dyn DeviceSource>,
+    home: PathBuf,
+    secrets: Arc<Secrets>,
+) -> mpsc::Sender<Job> {
     let (tx, rx) = mpsc::channel(32);
     let actor = Actor {
         id,
@@ -153,6 +184,7 @@ pub fn spawn(id: String, source: Arc<dyn DeviceSource>, home: PathBuf) -> mpsc::
         sessions: HashMap::new(),
         base: Instant::now(),
         recent: None,
+        during: Vec::new(),
         change_seen: false,
         unobserved: None,
         cold_until: None,
@@ -162,9 +194,44 @@ pub fn spawn(id: String, source: Arc<dyn DeviceSource>, home: PathBuf) -> mpsc::
         guard_view: None,
         reshaped: None,
         names: Arc::default(),
+        recording: None,
+        secrets,
     };
     tokio::spawn(actor.run(rx));
     tx
+}
+
+/// A recording in progress: its file, when it began, and how many actions are in its steps file.
+struct Taping {
+    path: PathBuf,
+    began: Instant,
+    steps: u32,
+}
+
+impl Taping {
+    fn steps_path(&self) -> PathBuf {
+        let mut name = self.path.clone().into_os_string();
+        name.push(".steps.jsonl");
+        PathBuf::from(name)
+    }
+
+    /// Adds an action that began at `at` to the steps file.
+    fn step(&mut self, at: Instant, summary: &str, landed: Option<Point>) {
+        use std::io::Write;
+        let mut line =
+            json!({"t_ms": at.duration_since(self.began).as_millis() as u64, "summary": summary});
+        if let Some(p) = landed {
+            line["at"] = json!(p);
+        }
+        let written = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.steps_path())
+            .and_then(|mut file| writeln!(file, "{line}"));
+        if written.is_ok() {
+            self.steps += 1;
+        }
+    }
 }
 
 struct Lease {
@@ -251,6 +318,9 @@ struct Actor {
     base: Instant,
     /// The latest input that would have delayed a settle, or the moment the device connected: quiet counts from there, so a snapshot of an already quiet screen does not wait.
     recent: Option<(Duration, Input)>,
+    /// What the screen did while the last action's input was being delivered (see `watching`), for the settle that
+    /// observes that action.
+    during: Vec<(Duration, Input)>,
     change_seen: bool,
     /// When an action was last delivered without waiting for its effects.
     unobserved: Option<Duration>,
@@ -267,6 +337,8 @@ struct Actor {
     /// The tree the agent was last shown, to tell whether an action changed anything before a frame says so.
     shown: Mutex<Option<RawTree>>,
     names: Arc<Mutex<HashMap<String, String>>>,
+    recording: Option<Taping>,
+    secrets: Arc<Secrets>,
 }
 
 async fn next_signal(live: &mut Option<Live>) -> Signal {
@@ -286,6 +358,14 @@ async fn next_signal(live: &mut Option<Live>) -> Signal {
             Err(broadcast::error::RecvError::Closed) => pending().await,
         },
     }
+}
+
+/// True when the screen the session now holds gives an agent nothing to act on: a hollow tree, and no text read
+/// from its pixels either (a game, a canvas, or a host with no text recognition).
+fn nothing_to_act_on(s: &Session) -> bool {
+    s.last.as_ref().is_some_and(|last| {
+        tree_is_hollow(last) && !last.elements.iter().any(|e| e.source == Source::Ocr)
+    })
 }
 
 fn zero() -> Rect {
@@ -358,7 +438,10 @@ impl Actor {
                 cfg.expect_change = window;
                 (cfg, t)
             }
-            _ => (cfg, now),
+            _ => {
+                self.during.clear();
+                (cfg, now)
+            }
         }
     }
 
@@ -549,11 +632,27 @@ impl Actor {
 
     async fn dispatch(&mut self, s: &mut Session, call: Call) -> Result<Value, Error> {
         let value = match call {
-            Call::Snapshot(p) => to_value(self.snapshot(s, p).await?),
+            Call::Snapshot(p) => {
+                let mut seen = self.snapshot(s, p).await?;
+                seen.empty = nothing_to_act_on(s);
+                to_value(seen)
+            }
             Call::Screenshot(p) => to_value(self.screenshot(s, p).await?),
-            Call::Act(p) => to_value(self.act(s, p).await?),
-            Call::Wait(p) => to_value(self.wait(s, p).await?),
-            Call::Batch(p) => to_value(self.batch(s, p).await?),
+            Call::Act(p) => {
+                let mut done = self.act(s, p).await?;
+                done.observation.empty = nothing_to_act_on(s);
+                to_value(done)
+            }
+            Call::Wait(p) => {
+                let mut done = self.wait(s, p).await?;
+                done.observation.empty = nothing_to_act_on(s);
+                to_value(done)
+            }
+            Call::Batch(p) => {
+                let mut done = self.batch(s, p).await?;
+                done.observation.empty = nothing_to_act_on(s);
+                to_value(done)
+            }
             Call::Find(p) => {
                 let now = self.fresh(s).await?;
                 to_value(s.find(&now, &p.text, p.role))
@@ -562,7 +661,15 @@ impl Actor {
                 self.need(Capabilities::APPS, Op::Apps, "this device cannot list apps")?;
                 to_value(self.device()?.apps().await?)
             }
-            Call::App(p) => self.app(s, p).await?,
+            Call::App(p) => {
+                let step = journal::call(
+                    "app",
+                    json!({"action": p.action, "app": p.app, "path": p.path, "permissions": p.permissions}),
+                );
+                let done = self.app(s, p).await?;
+                s.journal.push(step);
+                done
+            }
             Call::Clipboard(p) => {
                 self.need(
                     Capabilities::CLIPBOARD,
@@ -578,7 +685,43 @@ impl Actor {
                     None => json!({"text": device.clipboard(ClipboardOp::Get).await?}),
                 }
             }
-            Call::Shell(p) => to_value(self.shell(s, p).await?),
+            Call::Shell(p) => {
+                let step = if p.secret {
+                    journal::manual("a shell command was run here with `--secret`; run it again")
+                } else if p.force {
+                    journal::call("shell", json!({"command": p.command, "force": true}))
+                } else {
+                    journal::call("shell", json!({"command": p.command}))
+                };
+                let done = self.shell(s, p).await?;
+                s.journal.push(step);
+                to_value(done)
+            }
+            Call::Setting(p) => {
+                let mut params = json!({});
+                for (name, value) in [
+                    ("key", json!(p.key)),
+                    ("value", json!(p.value)),
+                    ("values", json!(p.values)),
+                ] {
+                    if !value.is_null() {
+                        params[name] = value;
+                    }
+                }
+                if p.force {
+                    params["force"] = json!(true);
+                }
+                let writes = p.value.is_some() || p.values.is_some();
+                let done = self.setting(s, p).await?;
+                if writes {
+                    s.journal.push(journal::call("setting", params));
+                }
+                done
+            }
+            Call::Journal => s.journal.take(),
+            Call::Logs(p) => self.logs(s, p).await?,
+            Call::Page(p) => self.page(p).await?,
+            Call::Record(p) => self.record(p).await?,
             Call::Health => self.health().await?,
             Call::Release | Call::Leased => json!({}),
         };
@@ -609,13 +752,14 @@ impl Actor {
             return Ok(json!({"ok": true, "summary": summary}));
         }
         let op = match p.action.as_str() {
-            "stop" => AppOp::Stop,
-            "clear" => AppOp::ClearData,
-            "uninstall" => AppOp::Uninstall,
+            "stop" => Some(AppOp::Stop),
+            "clear" => Some(AppOp::ClearData),
+            "uninstall" => Some(AppOp::Uninstall),
+            "grant" | "revoke" => None,
             _ => {
                 return Err(Error::Unsupported {
                     op: Op::App,
-                    reason: "the app action is install, stop, clear or uninstall",
+                    reason: "the app action is install, stop, clear, uninstall, grant or revoke",
                 });
             }
         };
@@ -625,6 +769,34 @@ impl Actor {
         })?;
         let installed = device.apps().await?;
         let found = find_app(&installed, &query)?.clone();
+        let Some(op) = op else {
+            if p.permissions.is_empty() {
+                return Err(Error::Unsupported {
+                    op: Op::App,
+                    reason: "grant and revoke need `permissions`, such as camera or location",
+                });
+            }
+            if self.physical() {
+                let mut mine = false;
+                self.ledger(|l| mine = l.contains(&found.id.0));
+                if !mine {
+                    return Err(Error::Unsupported {
+                        op: Op::App,
+                        reason: "phonedriver did not install this app on this physical device, so it will not change its permissions",
+                    });
+                }
+            }
+            let names = p.permissions.join(", ");
+            let summary = if p.action == "grant" {
+                device.grant(&found.id, &p.permissions).await?;
+                format!("granted {names} to {}", found.name)
+            } else {
+                device.revoke(&found.id, &p.permissions).await?;
+                format!("revoked {names} from {}", found.name)
+            };
+            s.set_last(None);
+            return Ok(json!({"ok": true, "summary": summary}));
+        };
         if op != AppOp::Stop && self.physical() {
             let mut mine = false;
             self.ledger(|l| mine = l.contains(&found.id.0));
@@ -696,11 +868,6 @@ impl Actor {
             p.grep.as_deref(),
             p.head.unwrap_or(shell::DEFAULT_HEAD),
         );
-        let output = if p.secret {
-            tidy.text.replace(p.command.as_str(), MASK)
-        } else {
-            tidy.text
-        };
         let action = if settle {
             let summary = if p.secret {
                 format!("ran a command ({} chars)", p.command.chars().count())
@@ -708,7 +875,7 @@ impl Actor {
                 "ran".to_string()
             };
             Some(
-                self.finish(s, true, cfg, started, summary, None, None, None)
+                self.finish(s, true, cfg, started, summary, None, None)
                     .await?,
             )
         } else {
@@ -719,12 +886,338 @@ impl Actor {
         };
         Ok(ShellResult {
             exit: reply.exit,
-            output,
+            output: tidy.text,
             omitted: tidy.omitted,
             timed_out: reply.timed_out,
             ms,
             action,
         })
+    }
+
+    /// Starts or stops a recording of the screen (decision D59). The device writes the file; the daemon keeps the
+    /// actions done meanwhile beside it.
+    async fn record(&mut self, p: RecordParams) -> Result<Value, Error> {
+        let device = self.device()?;
+        match p.action {
+            RecordAction::Start => {
+                let path = p.path.unwrap_or_else(|| self.tmp_file("mp4"));
+                if let Some(dir) = path.parent() {
+                    std::fs::create_dir_all(dir).map_err(|e| Error::Transport {
+                        detail: format!("cannot create {}: {e}", dir.display()),
+                    })?;
+                }
+                device
+                    .record_start(&path)
+                    .await
+                    .map_err(|e| match (e, &self.recording) {
+                        (Error::Refused { .. }, Some(running)) => Error::Refused {
+                            detail: format!(
+                                "a recording is already running to {}; `record stop` ends it",
+                                running.path.display()
+                            ),
+                        },
+                        (e, _) => e,
+                    })?;
+                let taping = Taping {
+                    path: path.clone(),
+                    began: Instant::now(),
+                    steps: 0,
+                };
+                match std::fs::remove_file(taping.steps_path()) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                        return Err(Error::Refused {
+                            detail: format!(
+                                "the steps file of an earlier recording to this path cannot be replaced: {e}"
+                            ),
+                        });
+                    }
+                    _ => {}
+                }
+                self.recording = Some(taping);
+                Ok(json!({"path": path}))
+            }
+            RecordAction::Stop => {
+                let Some(taping) = self.recording.take() else {
+                    return Err(Error::Refused {
+                        detail: "no recording is running; `record start` begins one".into(),
+                    });
+                };
+                let Some(done) = device.record_stop().await? else {
+                    return Err(Error::Refused {
+                        detail: format!(
+                            "the recording ended when the connection to the device did; {} holds the video up to then",
+                            taping.path.display()
+                        ),
+                    });
+                };
+                let bytes = std::fs::metadata(&done.path).map(|m| m.len()).unwrap_or(0);
+                let mut reply = json!({
+                    "path": done.path,
+                    "ms": done.ms,
+                    "frames": done.frames,
+                    "width": done.width,
+                    "height": done.height,
+                    "bytes": bytes,
+                    "steps": taping.steps,
+                });
+                if taping.steps > 0 {
+                    reply["steps_path"] = json!(taping.steps_path());
+                }
+                if let Some(why) = done.early {
+                    reply["early"] = json!(why);
+                }
+                Ok(reply)
+            }
+        }
+    }
+
+    /// A new file name under this device's folder in the daemon's `tmp`.
+    fn tmp_file(&self, extension: &str) -> PathBuf {
+        self.home
+            .join("tmp")
+            .join(self.id.replace([':', '/', '\\'], "_"))
+            .join(format!("{}.{extension}", ulid::Ulid::generate()))
+    }
+
+    /// The last lines an app logged, the app in front unless one is named, and its last crash (decision D58).
+    async fn logs(&mut self, s: &mut Session, p: LogsParams) -> Result<Value, Error> {
+        let device = self.device()?;
+        let app = match p.app {
+            Some(name) => find_app(&device.apps().await?, &name)?.id.clone(),
+            None => {
+                let now = self.fresh(s).await?;
+                let front = now.header.app.as_ref().map(|a| a.id.clone());
+                AppId(front.ok_or(Error::Unsupported {
+                    op: Op::Logs,
+                    reason: "no app is in front; name one with `app`",
+                })?)
+            }
+        };
+        let reply = device
+            .logs(&LogRequest {
+                app: app.clone(),
+                since: Duration::from_secs(p.since_s.unwrap_or(LOGS_SINCE_S)),
+                crashes: false,
+            })
+            .await?;
+        let all = shell::tidy(&reply.text, "", p.grep.as_deref(), 0);
+        let lines: Vec<&str> = all.text.lines().collect();
+        let keep = match p.head.unwrap_or(shell::DEFAULT_HEAD) {
+            0 => lines.len(),
+            n => n.min(lines.len()),
+        };
+        let omitted = lines.len() - keep;
+        Ok(json!({
+            "app": app.0,
+            "output": lines[omitted..].join("\n"),
+            "omitted": omitted,
+            "crash": reply.crash,
+        }))
+    }
+
+    /// The web page in front as text, whole (decision D71): no blank lines, and cut at a line end near `PAGE_CHARS`
+    /// unless `all`. With `grep`, only the lines with one of its words, each with the `GREP_LINES_AFTER` lines after it.
+    async fn page(&mut self, p: PageParams) -> Result<Value, Error> {
+        let page = self.device()?.page().await?;
+        let keep = p
+            .grep
+            .as_deref()
+            .filter(|g| !g.is_empty())
+            .map(shell::matcher);
+        let all: Vec<&str> = page
+            .text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        let lines: Vec<&str> = match &keep {
+            None => all,
+            Some(keep) => (0..all.len())
+                .filter(|&i| (i.saturating_sub(GREP_LINES_AFTER)..=i).any(|j| keep(all[j])))
+                .map(|i| all[i])
+                .collect(),
+        };
+        let mut text = String::new();
+        let mut shown = 0;
+        let mut used = 0;
+        let mut cut = 0;
+        for line in &lines {
+            let length = line.chars().count();
+            if !p.all && used + length > PAGE_CHARS {
+                if shown == 0 {
+                    text.extend(line.chars().take(PAGE_CHARS));
+                    text.push('…');
+                    cut = length - PAGE_CHARS;
+                    shown = 1;
+                }
+                break;
+            }
+            if shown > 0 {
+                text.push('\n');
+            }
+            text.push_str(line);
+            used += length;
+            shown += 1;
+        }
+        let left: usize = cut
+            + lines[shown..]
+                .iter()
+                .map(|l| l.chars().count())
+                .sum::<usize>();
+        Ok(json!({
+            "title": page.title, "url": page.url, "text": text,
+            "lines": lines.len(), "omitted_lines": lines.len() - shown, "omitted_chars": left,
+        }))
+    }
+
+    /// Finds, reads, writes or opens a system setting by key (decision D57). A write settles and reports the
+    /// screen change, as `shell` does.
+    async fn setting(&mut self, s: &mut Session, p: SettingParams) -> Result<Value, Error> {
+        let device = self.device()?;
+        let SettingReply::Index(index) = device.setting(SettingOp::Index).await? else {
+            return Err(Error::Transport {
+                detail: "the device answered a settings index request with a value".into(),
+            });
+        };
+        if let Some(query) = &p.find {
+            let searches: Vec<&str> = query.split('|').filter(|q| !q.trim().is_empty()).collect();
+            let (limit, screens) = if searches.len() > 1 {
+                (SETTING_LINES_OF_MANY, 1)
+            } else {
+                (SETTING_LINES, 3)
+            };
+            let mut lines: Vec<String> = Vec::new();
+            let mut more = 0;
+            for search in searches {
+                let found = index.find(search, limit, screens);
+                more += found.more;
+                for line in found.lines {
+                    if !lines.contains(&line) {
+                        lines.push(line);
+                    }
+                }
+            }
+            return Ok(json!({"lines": lines, "more": more}));
+        }
+        if let Some(screen) = p.open {
+            let link = match index.screen(&screen) {
+                None => Err(format!(
+                    "no settings screen has the key {screen:?}; `find` lists screens as `screen <key>`"
+                )),
+                Some(found) => found.link.clone().ok_or(format!(
+                    "the settings screen {screen} cannot be opened by key: it shows one item (an app, a SIM) the device must be told"
+                )),
+            }
+            .map_err(|detail| Error::Refused { detail })?;
+            let act = ActParams {
+                action: Action::Open {
+                    url: link,
+                    app: None,
+                },
+                approval: None,
+                ask: Vec::new(),
+                settle: p.settle,
+                timeout_ms: p.timeout_ms,
+                expect_change_ms: p.expect_change_ms,
+            };
+            let mut result = self.act(s, act).await?;
+            result.summary = format!("opened the settings screen {screen}");
+            return Ok(to_value(result));
+        }
+        let unknown = |key: &str| {
+            let found = index.find(&key.replace(['/', '_'], " "), 3, 0);
+            let close: Vec<&str> = found
+                .lines
+                .iter()
+                .filter_map(|l| l.split_whitespace().next())
+                .collect();
+            Error::Refused {
+                detail: if close.is_empty() {
+                    format!("no setting has the key {key:?}; `find` with a word lists keys")
+                } else {
+                    format!(
+                        "no setting has the key {key:?}; closest: {}",
+                        close.join(", ")
+                    )
+                },
+            }
+        };
+        let single = p.values.is_none();
+        let writes: Vec<(String, String)> = match (p.values, p.key, p.value) {
+            (Some(values), _, _) => values.into_iter().collect(),
+            (None, Some(key), Some(value)) => vec![(key, value)],
+            (None, key, _) => {
+                let key = key.unwrap_or_default();
+                if index.item(&key).is_none() {
+                    return Err(unknown(&key));
+                }
+                let SettingReply::Value { value, hint } =
+                    device.setting(SettingOp::Get(key.clone())).await?
+                else {
+                    return Err(Error::Transport {
+                        detail: "the device answered a settings read with an index".into(),
+                    });
+                };
+                return Ok(json!({"key": key, "value": value, "hint": hint}));
+            }
+        };
+        for (key, _) in &writes {
+            let item = index.item(key).ok_or_else(|| unknown(key))?;
+            if !item.writable {
+                return Err(Error::Refused {
+                    detail: format!("{key} is read-only"),
+                });
+            }
+            if item.confirm && self.physical() && !p.force {
+                return Err(Error::Unsupported {
+                    op: Op::Setting,
+                    reason: "the device marks this setting as one its user must confirm; pass `force` only when the user asked for exactly this change",
+                });
+            }
+        }
+        let mut cfg = Config::action();
+        cfg.expect_change = Some(Duration::from_millis(p.expect_change_ms.unwrap_or(250)));
+        if let Some(t) = p.timeout_ms {
+            cfg.timeout = Duration::from_millis(t);
+        }
+        if p.settle && s.last.is_none() {
+            let now = self.fresh(s).await?;
+            s.set_last(Some(now));
+        }
+        let started = self.begin_action();
+        let mut done: Vec<(String, String)> = Vec::new();
+        for (key, value) in writes {
+            let op = SettingOp::Set {
+                key: key.clone(),
+                value,
+            };
+            match device.setting(op).await {
+                Ok(SettingReply::Value { value, .. }) => done.push((key, value)),
+                Ok(SettingReply::Index(_)) => {
+                    return Err(Error::Transport {
+                        detail: "the device answered a settings write with an index".into(),
+                    });
+                }
+                Err(Error::Refused { detail }) if !done.is_empty() => {
+                    let before: Vec<String> =
+                        done.iter().map(|(k, v)| format!("{k} = {v}")).collect();
+                    return Err(Error::Refused {
+                        detail: format!("{detail}; already set: {}", before.join(", ")),
+                    });
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        let action = self
+            .finish(s, p.settle, cfg, started, "set".to_string(), None, None)
+            .await?;
+        if single {
+            let (key, value) = done.remove(0);
+            return Ok(json!({"key": key, "value": value, "action": action}));
+        }
+        let values: serde_json::Map<String, Value> =
+            done.into_iter().map(|(k, v)| (k, json!(v))).collect();
+        Ok(json!({"values": values, "action": action}))
     }
 
     /// Everything but an emulator or a Simulator belongs to a person.
@@ -838,16 +1331,23 @@ impl Actor {
             image.bytes = drawn.0;
             marked = Some(drawn.1 as u32);
         }
-        let dir = self
-            .home
-            .join("tmp")
-            .join(self.id.replace([':', '/', '\\'], "_"));
-        let path = dir.join(format!("{}.png", ulid::Ulid::generate()));
-        std::fs::create_dir_all(&dir)
+        let path = self.tmp_file("png");
+        path.parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|()| std::fs::write(&path, &image.bytes))
             .map_err(|e| Error::Transport {
                 detail: format!("cannot write {}: {e}", path.display()),
             })?;
+        let bar = self
+            .shown
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|t| t.status_bar);
+        let status_bar = bar
+            .zip(self.live.as_ref().map(|l| l.screen().h))
+            .filter(|&(_, h)| h > 0.0)
+            .map(|(bar, h)| (bar * image.height as f32 / h).ceil() as u32);
         Ok(ScreenshotResult {
             path: path.display().to_string(),
             width: image.width,
@@ -856,6 +1356,7 @@ impl Actor {
             data_b64: inline
                 .then(|| base64::engine::general_purpose::STANDARD.encode(&image.bytes)),
             marks: marked,
+            status_bar,
         })
     }
 
@@ -914,6 +1415,7 @@ impl Actor {
     }
 
     fn begin_action(&mut self) -> Duration {
+        self.during.clear();
         if let Some(l) = &mut self.live {
             l.frames.borrow_and_update();
             while let Ok(event) = l.events.try_recv() {
@@ -923,6 +1425,25 @@ impl Actor {
             }
         }
         self.now()
+    }
+
+    /// Awaits an input while following the screen, so a change it makes before it returns counts from when it showed.
+    /// XCTest confirms typed text about 220 ms after the app shows it (iPhone 17 Simulator, iOS 26.5), and the settle
+    /// that followed first saw the change then and waited out its quiet window again.
+    async fn watching<T>(&mut self, input: impl std::future::Future<Output = T>) -> T {
+        let mut input = std::pin::pin!(input);
+        loop {
+            tokio::select! {
+                biased;
+                out = &mut input => return out,
+                sig = next_signal(&mut self.live) => {
+                    let at = self.now();
+                    if let Some(seen) = self.absorb(sig, at) {
+                        self.during.push((at, seen));
+                    }
+                }
+            }
+        }
     }
 
     async fn settle(&mut self, cfg: Config, started: Duration) -> State {
@@ -943,6 +1464,9 @@ impl Actor {
             && (cfg.expect_change.is_none() || t >= started)
         {
             det.feed(input, t);
+        }
+        for (t, input) in std::mem::take(&mut self.during) {
+            det.feed(input, t.max(started));
         }
         if std::mem::take(&mut self.change_seen) {
             det.feed(Input::WindowChanged, started.max(self.now()));
@@ -1082,6 +1606,10 @@ impl Actor {
                 rendered.text(&filters).map_err(|r| stale(r, s))?,
             )
         };
+        let mut text = text;
+        if p.audit {
+            text.1.push_str(&audited(&rendered));
+        }
         let capture = if p.capture {
             device.capture_tree().await?
         } else {
@@ -1107,6 +1635,7 @@ impl Actor {
             loading: rendered.loading(),
             elements: p.elements.then(|| rendered.elements.clone()),
             capture,
+            empty: false,
         };
         s.set_last(Some(rendered));
         Ok(obs)
@@ -1313,7 +1842,13 @@ impl Actor {
             }
         }
         if state.locked {
-            if state.secure {
+            if matches!(action, Action::Press { key } if key == "fingerprint" || key == "wrong-fingerprint")
+            {
+                return Ok((woke, false));
+            }
+            // Seen on a HONOR X8 (Android 13, PIN), 2026-11-16: while the phone is locked a hidden display shows
+            // the keyguard's clock and starts no app, and a swipe on it unlocks nothing.
+            if state.secure || device.hidden_display().is_some() {
                 return Err(Error::NeedsUser {
                     action: UserAction::UnlockDevice,
                 });
@@ -1383,7 +1918,14 @@ impl Actor {
                                     .is_none_or(|l| w.package.as_deref() != Some(l.0.as_str())))
                     })
             });
-            if app_is_back && stable && !page_pending && device.screen_state().await?.focused {
+            // Observed on the iOS 26.5 Simulator: Maps asked for the location at start, and SpringBoard, the app
+            // in front before the launch, held the prompt in front of it, so nothing new came to the front.
+            let alert_up = !phonedriver_core::alert::find(&tree, self.screen_size()).is_empty();
+            if (app_is_back || alert_up)
+                && stable
+                && !page_pending
+                && device.screen_state().await?.focused
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1502,13 +2044,46 @@ impl Actor {
         ) {
             self.guard_view = None;
         }
+        let leaves = matches!(&p.action, Action::Launch { .. } | Action::Open { .. });
+        let front = s
+            .last
+            .as_ref()
+            .and_then(|last| last.header.app.as_ref())
+            .map(|app| app.id.clone());
+        let began = Instant::now();
+        let kept = Kept::of(&p.action, s);
         let acted = self.act_now(s, p).await;
         if acted.is_err() {
             self.awake = None;
+            s.unsure = true;
         }
         let mut result = acted?;
+        if let Some(taping) = &mut self.recording {
+            taping.step(began, &self.secrets.masked(&result.summary), result.at);
+        }
+        s.journal.push(kept.step(&result));
         result.woke = woke;
         result.unlocked = unlocked;
+        if let Some(app) = front.filter(|_| !leaves && result.observation.kind == Kind::Full) {
+            let t = Instant::now();
+            let asked = LogRequest {
+                app: AppId(app.clone()),
+                since: began.elapsed() + CRASH_MARGIN,
+                crashes: true,
+            };
+            if let Ok(reply) = self.device()?.logs(&asked).await
+                && let Some(what) = reply.crash
+            {
+                result.crashed = Some(Crashed { app, what });
+            }
+            self.lap("crash_log", t);
+        }
+        s.idle = match s.idle.take() {
+            _ if !result.settled || result.changed => None,
+            Some((summary, n)) if summary == result.summary => Some((summary, n + 1)),
+            _ => Some((result.summary.clone(), 1)),
+        };
+        result.unchanged_repeats = s.idle.as_ref().map(|(_, n)| *n).filter(|n| *n >= 3);
         Ok(result)
     }
 
@@ -1598,8 +2173,8 @@ impl Actor {
                     .await?;
                 let started = self.begin_action();
                 let t = Instant::now();
-                let sent = device
-                    .gesture(gesture::tap(at, count.unwrap_or(1), long))
+                let sent = self
+                    .watching(device.gesture(gesture::tap(at, count.unwrap_or(1), long)))
                     .await;
                 self.lap("input", t);
                 sent?;
@@ -1609,14 +2184,10 @@ impl Actor {
                     _ => "tapped".to_string(),
                 };
                 let summary = match &element {
-                    Some(line) => format!(
-                        "{verb} {} at {},{}",
-                        short(line),
-                        at.x.round(),
-                        at.y.round()
-                    ),
+                    Some(line) => format!("{verb} {}", short(line)),
                     None => format!("{verb} at {},{}", at.x.round(), at.y.round()),
                 };
+                let landed = |r: ActionResult| ActionResult { at: Some(at), ..r };
                 let summary = if hid {
                     format!("hid the keyboard, then {summary}")
                 } else {
@@ -1635,17 +2206,17 @@ impl Actor {
                         .await?;
                 }
                 let r = self
-                    .finish(s, p.settle, cfg, started, summary.clone(), None, None, None)
+                    .finish(s, p.settle, cfg, started, summary.clone(), None, None)
                     .await?;
                 let ripple_only = r.settled
                     && r.changed
                     && r.observation.kind == Kind::Diff
                     && r.observation.text.is_empty();
                 if !p.settle || !ripple_only {
-                    return Ok(r);
+                    return Ok(landed(r));
                 }
                 // MagicOS Settings draws the button's ripple, goes quiet for longer than the quiet window, and only
-                // then starts the next page (Honor X8: "settled in 331ms · no element changed", then the page).
+                // then starts the next page (Honor X8: the ripple and `no element changed`, then the page).
                 let again = self.now();
                 let late = Config {
                     expect_change: Some(LATE_PAGE_WAIT),
@@ -1665,9 +2236,11 @@ impl Actor {
                             still_changing,
                             elapsed: elapsed + Duration::from_millis(r.settle_ms.into()),
                         };
-                        self.report(s, st, probe, summary, None, None, None).await
+                        self.report(s, st, probe, summary, None, None)
+                            .await
+                            .map(landed)
                     }
-                    _ => Ok(r),
+                    _ => Ok(landed(r)),
                 }
             }
             Action::Swipe {
@@ -1695,12 +2268,12 @@ impl Actor {
                     None => gesture::swipe(screen, direction, distance, fast),
                 };
                 let started = self.begin_action();
-                device.gesture(g).await?;
+                self.watching(device.gesture(g)).await?;
                 let from_text = line
                     .map(|l| format!(" from {}", short(&l)))
                     .unwrap_or_default();
                 let summary = format!("swiped {}{from_text}", direction.name());
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Drag { from, to } => {
@@ -1712,7 +2285,8 @@ impl Actor {
                 let a = self.resolve_target(s, &from).await?;
                 let b = self.resolve_target(s, &to).await?;
                 let started = self.begin_action();
-                device.gesture(gesture::press_drag(a.at, b.at)).await?;
+                self.watching(device.gesture(gesture::press_drag(a.at, b.at)))
+                    .await?;
                 let label = |r: &Resolved| {
                     r.line.as_deref().map_or_else(
                         || format!("{},{}", r.at.x.round(), r.at.y.round()),
@@ -1720,7 +2294,7 @@ impl Actor {
                     )
                 };
                 let summary = format!("dragged {} to {}", label(&a), label(&b));
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Pinch {
@@ -1750,7 +2324,7 @@ impl Actor {
                     .map(|l| format!(" on {}", short(&l)))
                     .unwrap_or_default();
                 let summary = format!("pinched {}{on}", if out { "out" } else { "in" });
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Gesture { fingers } => {
@@ -1773,9 +2347,9 @@ impl Actor {
                         .collect(),
                 };
                 let started = self.begin_action();
-                device.gesture(g).await?;
+                self.watching(device.gesture(g)).await?;
                 let summary = format!("gestured with {} fingers", fingers.len());
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Launch {
@@ -1821,6 +2395,7 @@ impl Actor {
                     self.lap("stop", t);
                 }
                 let t = Instant::now();
+                let started_launch = t;
                 device.launch(&found.id).await?;
                 self.lap("launch", t);
                 let t = Instant::now();
@@ -1836,13 +2411,41 @@ impl Actor {
                 };
                 // Observed on the iOS 26.5 Simulator: Photos crashed at every launch, the home screen stayed, and the
                 // agent read "launched Photos" as a launch that worked and tapped the icon again and again.
-                if let Some(front) = device.foreground().await?.filter(|f| *f != found.id) {
+                // Observed on the API 37 emulator with two lanes opened at once: a hidden display has no application
+                // window for seconds after it is created, and a launch there read an empty screen and said `launched`.
+                let empty_counts = device.hidden_display().is_some();
+                let elsewhere = |front: &Option<AppId>| match front {
+                    Some(f) => *f != found.id,
+                    None => empty_counts,
+                };
+                let names_it = |tree: &RawTree| {
+                    phonedriver_core::alert::find(tree, self.screen_size())
+                        .iter()
+                        .any(|(_, a)| a.title.as_deref().is_some_and(|t| t.contains(&found.name)))
+                };
+                let mut front = device.foreground().await?;
+                let mut prompted = false;
+                let late = Instant::now();
+                while elsewhere(&front) && late.elapsed() < LATE_START_WAIT {
+                    if names_it(&device.tree().await?) {
+                        prompted = true;
+                        break;
+                    }
+                    tokio::time::sleep(LATE_START_STEP).await;
+                    front = device.foreground().await?;
+                    if front.as_ref() == Some(&found.id) {
+                        self.until_app_content(leaving.as_ref()).await?;
+                    }
+                }
+                if elsewhere(&front) && !prompted {
                     summary = format!(
-                        "{summary}, but {} is not in front ({} is): it may have quit at start",
-                        found.name, front.0
+                        "{summary}, but {} is not in front after {} s ({} is): it is still starting, or it quit at start; `snapshot` shows which",
+                        found.name,
+                        started_launch.elapsed().as_secs(),
+                        front.map_or("nothing".to_string(), |f| f.0)
                     );
                 }
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Open { url, app } => {
@@ -1875,7 +2478,7 @@ impl Actor {
                 self.lap("page", waited);
                 self.cold_until = Some(self.now() + COLD_APP_WINDOW);
                 let summary = format!("opened {url}");
-                self.finish(s, p.settle, cfg, started, summary, None, None, None)
+                self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
             }
             Action::Scroll {
@@ -1907,22 +2510,14 @@ impl Actor {
                         elapsed: Duration::ZERO,
                     };
                     return self
-                        .report(
-                            s,
-                            st,
-                            None,
-                            "keyboard already hidden".into(),
-                            None,
-                            None,
-                            None,
-                        )
+                        .report(s, st, None, "keyboard already hidden".into(), None, None)
                         .await;
                 }
                 let started = self.begin_action();
                 let via = device.hide_keyboard().await?;
                 let summary = format!("hid the keyboard via {}", via.unwrap_or("back"));
                 let result = self
-                    .finish(s, p.settle, cfg, started, summary, via, None, None)
+                    .finish(s, p.settle, cfg, started, summary, via, None)
                     .await?;
                 if p.settle && result.observation.header.keyboard.is_some() {
                     return Err(Error::Unsupported {
@@ -1934,12 +2529,12 @@ impl Actor {
             }
             Action::Press { key } => {
                 let started = self.begin_action();
-                let via = press(&*device, &key).await?;
+                let via = self.watching(press(&*device, &key)).await?;
                 let summary = match via {
                     Some(how) => format!("pressed {key} via {how}"),
                     None => format!("pressed {key}"),
                 };
-                self.finish(s, p.settle, cfg, started, summary, via, None, None)
+                self.finish(s, p.settle, cfg, started, summary, via, None)
                     .await
             }
             Action::Clear { target } => {
@@ -1976,7 +2571,6 @@ impl Actor {
                     format!("cleared{label}"),
                     Some("set"),
                     Some(verify),
-                    None,
                 )
                 .await
             }
@@ -2042,7 +2636,7 @@ impl Actor {
                                 })
                                 .cloned()
                         };
-                        let known = s.last.as_ref().and_then(focused);
+                        let known = s.last.as_ref().filter(|_| !s.unsure).and_then(focused);
                         if known.is_some() {
                             (known, None)
                         } else {
@@ -2173,7 +2767,7 @@ impl Actor {
                 };
                 if !(replace && text.is_empty()) {
                     let t = Instant::now();
-                    let typed = device.text(input).await;
+                    let typed = self.watching(device.text(input)).await;
                     self.lap("text", t);
                     typed.map_err(|e| withhold(e, secure))?;
                 }
@@ -2198,25 +2792,19 @@ impl Actor {
                         .await?;
                 }
                 if submit {
-                    device.key(Key::Enter).await?;
+                    self.watching(device.key(Key::Enter)).await?;
                 }
-                let n = text.chars().count();
-                let label = field
-                    .as_ref()
-                    .map(|f| format!(" into @{}", f.r#ref))
-                    .unwrap_or_default();
+                let what = match &field {
+                    Some(f) => format!("into @{}", f.r#ref),
+                    None => plural(text.chars().count() as u64, "char"),
+                };
                 let unzoomed = if unzoom {
                     ", then zoomed the page back out"
                 } else {
                     ""
                 };
-                let summary = approved_summary(
-                    format!(
-                        "{brought}typed {}{label}{unzoomed}",
-                        plural(n as u64, "char")
-                    ),
-                    approved,
-                );
+                let summary =
+                    approved_summary(format!("{brought}typed {what}{unzoomed}"), approved);
                 let expect = if replace {
                     Expect::Exactly(text.clone())
                 } else {
@@ -2243,7 +2831,6 @@ impl Actor {
                     && !text.is_empty()
                     && field_ref.is_some_and(|r| s.last.as_ref().is_some_and(|l| l.in_web_view(r)));
                 let keys = rekey.then(|| text.clone());
-                let mask = secret.then_some(text);
                 let cfg = if submit || p.expect_change_ms.is_some() {
                     cfg
                 } else {
@@ -2253,7 +2840,7 @@ impl Actor {
                         ..cfg
                     }
                 };
-                let first = self
+                let mut first = self
                     .finish(
                         s,
                         p.settle,
@@ -2262,9 +2849,17 @@ impl Actor {
                         summary.clone(),
                         Some(mode_name(mode)),
                         Some(verify.clone()),
-                        mask.clone(),
                     )
                     .await?;
+                // Observed in Clock's alarm name field (API 37, bench task alarm-gym): enter left the field and its
+                // keyboard as they were, the reply showed only the text, and the agent took a snapshot and a
+                // screenshot to learn that Save was under the keyboard.
+                if submit
+                    && first.observation.kind != Kind::Full
+                    && first.observation.header.keyboard.is_some()
+                {
+                    first.summary.push_str(KEYBOARD_STAYED);
+                }
                 let Some(keys) = keys.filter(|_| {
                     first.verified == Some(false) && field_empty(s.last.as_ref(), field_ref)
                 }) else {
@@ -2284,7 +2879,6 @@ impl Actor {
                     summary,
                     Some("keys"),
                     Some(verify),
-                    mask,
                 )
                 .await
             }
@@ -2350,11 +2944,14 @@ impl Actor {
         }
     }
 
-    fn screen_rect(&self) -> Rect {
-        let size = self
-            .live
+    fn screen_size(&self) -> Size {
+        self.live
             .as_ref()
-            .map_or(Size { w: 0.0, h: 0.0 }, Live::screen);
+            .map_or(Size { w: 0.0, h: 0.0 }, Live::screen)
+    }
+
+    fn screen_rect(&self) -> Rect {
+        let size = self.screen_size();
         Rect {
             x: 0.0,
             y: 0.0,
@@ -2448,7 +3045,7 @@ impl Actor {
             self.lap("gesture", t);
             let summary = format!("scrolled {}", direction.name());
             return self
-                .finish(s, settle, cfg, started, summary, None, None, None)
+                .finish(s, settle, cfg, started, summary, None, None)
                 .await;
         };
         let mut gestures = 0u32;
@@ -2491,7 +3088,7 @@ impl Actor {
                             elapsed: Duration::ZERO,
                         },
                     };
-                    return self.report(s, st, None, summary, None, None, None).await;
+                    return self.report(s, st, None, summary, None, None).await;
                 }
                 Ok(_) | Err(Error::NotFound { .. } | Error::StaleRef { .. }) => {}
                 Err(Error::Ambiguous { query, matches }) => {
@@ -2509,7 +3106,11 @@ impl Actor {
                 Err(e) => return Err(e),
             }
             let query = || match &until {
-                Target::Text { text, .. } => text.clone(),
+                Target::Text { text, .. }
+                | Target::Id {
+                    text: Some(text), ..
+                } => text.clone(),
+                Target::Id { id, .. } => id.clone(),
                 Target::Ref { r#ref } => format!("@{}", r#ref),
                 Target::Point { .. } => "the target".into(),
             };
@@ -2583,23 +3184,21 @@ impl Actor {
         summary: String,
         via: Option<&'static str>,
         verify: Option<Verify>,
-        mask: Option<String>,
     ) -> Result<ActionResult, Error> {
         if !settle {
             self.unobserved = Some(started);
             return Ok(delivered(s, summary, via));
         }
         self.unobserved = None;
-        let polled = !self
-            .device()?
-            .info()
-            .capabilities
-            .contains(Capabilities::FRAMES);
-        let started = if polled { self.now() } else { started };
+        let started = if self.device()?.frames_follow() {
+            started
+        } else {
+            self.now()
+        };
         let t = Instant::now();
         let (st, probe) = self.settle_probing(cfg, started, true).await;
         self.lap("settle", t);
-        self.report(s, st, probe, summary, via, verify, mask).await
+        self.report(s, st, probe, summary, via, verify).await
     }
 
     /// The accessibility tree can lag the pixels: a dialog or an expanding card appears a moment after the screen went
@@ -2645,7 +3244,6 @@ impl Actor {
         mut summary: String,
         via: Option<&'static str>,
         verify: Option<Verify>,
-        mask: Option<String>,
     ) -> Result<ActionResult, Error> {
         let t = Instant::now();
         let (mut tree, agreed, read_at) = match probe {
@@ -2764,8 +3362,21 @@ impl Actor {
             Some(Verdict::Failed(u)) => Some(u),
             _ => None,
         };
-        let (kind, mut text) = match s.diff_for_reply(&rendered) {
-            Some(DiffOrFull::Diff(changes)) => {
+        let typed_into = verify
+            .as_ref()
+            .filter(|_| verified == Some(true))
+            .and_then(|v| {
+                let replaced = matches!(v.expect, Expect::Exactly(_));
+                v.view(&rendered).target.map(|r| (r, replaced))
+            });
+        let mut echoed = false;
+        let (kind, text) = match s.diff_for_reply(&rendered) {
+            Some(DiffOrFull::Diff(mut changes)) => {
+                if let Some((field, replaced)) = typed_into {
+                    let before = changes.len();
+                    drop_echo(&mut changes, &rendered, field, replaced);
+                    echoed = changes.len() < before;
+                }
                 (Kind::Diff, DiffOrFull::Diff(changes).text(&rendered))
             }
             _ => (
@@ -2782,12 +3393,7 @@ impl Actor {
             }) => (settled, changed, elapsed.as_millis() as u32, still_changing),
             _ => (false, false, 0, None),
         };
-        let changed = changed_signal || kind == Kind::Full || !text.is_empty();
-        let mut elements = None;
-        if let Some(secret) = &mask {
-            text = text.replace(secret.as_str(), MASK);
-            elements = None::<Vec<Element>>;
-        }
+        let changed = changed_signal || kind == Kind::Full || !text.is_empty() || echoed;
         let observation = Observation {
             header: rendered.header.clone(),
             text,
@@ -2797,12 +3403,17 @@ impl Actor {
             settle_ms: ms,
             still_changing: still,
             loading: rendered.loading(),
-            elements,
+            elements: None,
             capture: None,
+            empty: false,
         };
         s.set_last(Some(rendered));
         self.lap("render", render);
         Ok(ActionResult {
+            at: None,
+            typed_into,
+            unchanged_repeats: None,
+            crashed: None,
             ok: true,
             summary,
             via: via.map(str::to_string),
@@ -2825,6 +3436,7 @@ impl Actor {
         let mut failed = None;
         let mut unseen_ref = false;
         let mut last: Option<ActionResult> = None;
+        let mut typed_into = Vec::new();
         for (i, raw) in p.steps.iter().enumerate() {
             let step = Step::parse(raw).map_err(|_| unreachable_state())?;
             let result = match step {
@@ -2861,6 +3473,7 @@ impl Actor {
                         verified: r.verified,
                         unverified: r.unverified.clone(),
                     });
+                    typed_into.extend(r.typed_into);
                     last = Some(r);
                 }
                 Err(e @ Error::DeviceGone { .. }) => return Err(e),
@@ -2890,9 +3503,14 @@ impl Actor {
                     loading: rendered.loading(),
                     elements: None,
                     capture: None,
+                    empty: false,
                 };
                 s.set_last(Some(rendered));
                 ActionResult {
+                    at: None,
+                    typed_into: None,
+                    unchanged_repeats: None,
+                    crashed: None,
                     ok: true,
                     summary: String::new(),
                     via: None,
@@ -2912,7 +3530,10 @@ impl Actor {
             result.observation.text = String::new();
         } else if let (Some(base), Some(now)) = (&baseline, &s.last) {
             match diff(base, now) {
-                DiffOrFull::Diff(changes) => {
+                DiffOrFull::Diff(mut changes) => {
+                    for (field, replaced) in typed_into {
+                        drop_echo(&mut changes, now, field, replaced);
+                    }
                     result.observation.kind = Kind::Diff;
                     result.observation.text = DiffOrFull::Diff(changes).text(now);
                 }
@@ -2940,17 +3561,16 @@ impl Actor {
     }
 
     async fn wait(&mut self, s: &mut Session, p: WaitParams) -> Result<ActionResult, Error> {
-        match p.condition {
+        let condition = p.condition.clone();
+        let mut step = journal::wait(&condition, s);
+        let result = match condition {
             WaitCondition::Settled(_) => self.wait_settled(s, p).await,
-            WaitCondition::Appears(ref t) => {
-                let t = t.clone();
-                self.wait_for(s, &t, true, p.timeout_ms).await
-            }
-            WaitCondition::Gone(ref t) => {
-                let t = t.clone();
-                self.wait_for(s, &t, false, p.timeout_ms).await
-            }
-        }
+            WaitCondition::Appears(ref t) => self.wait_for(s, t, true, p.timeout_ms).await,
+            WaitCondition::Gone(ref t) => self.wait_for(s, t, false, p.timeout_ms).await,
+        }?;
+        step["summary"] = json!(result.summary);
+        s.journal.push(step);
+        Ok(result)
     }
 
     /// Waits until the target is on screen (or gone). The tree is read once at the start and then once after each
@@ -2997,16 +3617,21 @@ impl Actor {
                     loading: rendered.loading(),
                     elements: None,
                     capture: None,
+                    empty: false,
                 };
                 s.set_last(Some(rendered));
                 return Ok(ActionResult {
+                    at: None,
+                    typed_into: None,
+                    unchanged_repeats: None,
+                    crashed: None,
                     ok: true,
                     summary,
                     via: None,
                     verified: None,
                     unverified: None,
                     settled: false,
-                    settle_ms: started.elapsed().as_millis() as u32,
+                    settle_ms: 0,
                     changed: true,
                     woke: false,
                     unlocked: false,
@@ -3095,9 +3720,14 @@ impl Actor {
             loading: rendered.loading(),
             elements: None,
             capture: None,
+            empty: false,
         };
         s.set_last(Some(rendered));
         Ok(ActionResult {
+            at: None,
+            typed_into: None,
+            unchanged_repeats: None,
+            crashed: None,
             ok: true,
             summary: "screen settled".into(),
             via: None,
@@ -3181,6 +3811,7 @@ fn moved_beyond(s: &Session, now: &Rendered, field: Option<Ref>) -> bool {
     changes.iter().any(|c| {
         let r = match c {
             Change::Uncovered => return true,
+            Change::Keyboard(_) => return false,
             Change::Added(r) | Change::Removed(r) => *r,
             Change::Changed {
                 field: Field::Covered,
@@ -3339,6 +3970,10 @@ fn scroll_container(now: &Rendered, direction: Direction) -> Option<&Element> {
 /// The reply to an input sent with `settle: false`: delivered, nothing observed.
 fn delivered(s: &Session, summary: String, via: Option<&'static str>) -> ActionResult {
     ActionResult {
+        at: None,
+        typed_into: None,
+        unchanged_repeats: None,
+        crashed: None,
         ok: true,
         summary,
         via: via.map(str::to_string),
@@ -3364,6 +3999,7 @@ fn delivered(s: &Session, summary: String, via: Option<&'static str>) -> ActionR
             loading: false,
             elements: None,
             capture: None,
+            empty: false,
         },
     }
 }
@@ -3402,6 +4038,23 @@ fn mode_name(m: TypeMode) -> &'static str {
         TypeMode::Set => "set",
         TypeMode::Keys => "keys",
     }
+}
+
+/// `snapshot --audit`'s lines: how many problems the screen has and the first `AUDIT_LINES` of them (decision D90).
+fn audited(r: &Rendered) -> String {
+    let found = phonedriver_core::audit::audit(r);
+    if found.is_empty() {
+        return "\naudit: no unnamed controls or small tap targets".into();
+    }
+    let mut out = format!("\naudit: {}", plural(found.len() as u64, "finding"));
+    for line in found.iter().take(AUDIT_LINES) {
+        out.push('\n');
+        out.push_str(line);
+    }
+    if found.len() > AUDIT_LINES {
+        out.push_str(&format!("\nand {} more", found.len() - AUDIT_LINES));
+    }
+    out
 }
 
 fn settle_line(st: State) -> SettleLine {
@@ -3513,7 +4166,11 @@ fn named_inside<'a>(installed: &'a [App], query: &str) -> Option<&'a App> {
 
 fn describe(target: &Target) -> String {
     match target {
-        Target::Text { text, .. } => format!("\"{text}\""),
+        Target::Text { text, .. }
+        | Target::Id {
+            text: Some(text), ..
+        } => format!("\"{text}\""),
+        Target::Id { id, .. } => id.clone(),
         Target::Ref { r#ref } => format!("@{}", r#ref),
         Target::Point { point } => format!("{},{}", point.x, point.y),
     }
@@ -3572,6 +4229,10 @@ async fn press(device: &dyn Device, key: &str) -> Result<Option<&'static str>, E
             "volume-down".into(),
             "enter".into(),
             "hide-keyboard".into(),
+            "fingerprint".into(),
+            "wrong-fingerprint".into(),
+            "landscape".into(),
+            "portrait".into(),
         ],
     })
 }

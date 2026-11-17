@@ -2,10 +2,12 @@
 
 pub mod client;
 pub mod commands;
+pub mod compare;
 pub mod daemon;
 #[cfg(windows)]
 mod detach;
 pub mod doctor;
+mod init;
 mod ios_wifi;
 mod lean;
 pub mod mcp;

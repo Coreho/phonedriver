@@ -72,7 +72,7 @@ fn ran(fake: &FakeDevice) -> Vec<String> {
     fake.calls()
         .into_iter()
         .filter_map(|c| match c {
-            Call::Shell(s) => Some(s),
+            Call::Shell(s) => Some(s.command),
             _ => None,
         })
         .collect()

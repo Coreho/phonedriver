@@ -56,6 +56,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface XCUIApplication (PhonedriverPrivate)
 @property (readonly) NSString *bundleID;
+@property (readonly) long long interfaceOrientation;
 @end
 
 @protocol XCElementSnapshot <XCUIElementAttributes>

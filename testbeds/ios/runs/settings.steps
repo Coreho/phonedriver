@@ -1,0 +1,5 @@
+{"changed":true,"method":"act","params":{"action":{"app":"Settings","grant":[],"kind":"launch","restart":true}},"summary":"restarted Settings"}
+{"changed":true,"method":"act","params":{"action":{"count":null,"kind":"tap","long":null,"target":{"role":null,"text":"General"}}},"summary":"tapped @e29 \"General\""}
+{"method":"wait","params":{"condition":{"appears":{"role":null,"text":"About"}}},"summary":"\"About\" appeared after 1 tree read"}
+{"changed":true,"method":"act","params":{"action":{"count":null,"kind":"tap","long":null,"target":{"role":null,"text":"About"}}},"summary":"tapped @e44 \"About\""}
+{"method":"wait","params":{"condition":{"appears":{"role":null,"text":"Name"}}},"summary":"\"Name\" appeared after 1 tree read"}

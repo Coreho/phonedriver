@@ -3,12 +3,13 @@
 use async_trait::async_trait;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    DisplayMode, FrameRef, Gesture, Image, ImageFormat, Key, Quality, Result, ScreenState,
-    ShellReply, ShellRequest, TextInput, Url,
+    DisplayMode, FrameRef, Gesture, Image, ImageFormat, Key, LogReply, LogRequest, Quality,
+    Recorded, Result, ScreenState, ShellReply, ShellRequest, TextInput, Url, WebPage,
 };
 use phonedriver_core::error::{Error, Op};
 use phonedriver_core::geometry::{Rect, Size};
 use phonedriver_core::raw::{NodeFlags, RawTree};
+use phonedriver_core::settings::{SettingOp, SettingReply, SettingsIndex};
 use phonedriver_video::frame_store::FrameStore;
 use phonedriver_video::image::{encode_png, scaled_size};
 use phonedriver_video::stream::VideoStream;
@@ -17,12 +18,20 @@ use tokio::sync::{broadcast, watch};
 
 use crate::adb::Adb;
 use crate::agent::{Agent, AgentLog, Launched};
+use crate::console;
 use crate::control::Control;
+use crate::devtools;
+use crate::logs;
 use crate::map;
+use crate::settings;
 
 const FIRST_FRAME_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 /// A screenshot proves the stream is current within this: one control round trip and the barrier's way back.
 const BARRIER_WAIT: std::time::Duration = std::time::Duration::from_millis(1500);
+/// The finger `press fingerprint` touches the sensor with, which is the one to enroll with, and one that is
+/// never enrolled.
+const ENROLLED_FINGER: u32 = 1;
+const OTHER_FINGER: u32 = 2;
 const EVENT_BACKLOG: usize = 64;
 
 pub struct AndroidDevice {
@@ -35,7 +44,8 @@ pub struct AndroidDevice {
     video: VideoStream,
     events: broadcast::Sender<DeviceEvent>,
     log: AgentLog,
-    _launched: Launched,
+    _launched: std::sync::Arc<Launched>,
+    settings: tokio::sync::OnceCell<std::sync::Arc<SettingsIndex>>,
 }
 
 impl AndroidDevice {
@@ -43,16 +53,26 @@ impl AndroidDevice {
     /// once the first frame has been decoded (or after 2 s), so settle and screenshots have a picture from the start.
     /// `info().screen` is the size at connect time; a later rotation arrives as `DeviceEvent::DisplayChanged`.
     /// Dropping the device closes the agent's shell stream, which ends the agent within about a second.
-    pub async fn connect(adb: &Adb, serial: &str, display: DisplayMode) -> Result<AndroidDevice> {
+    /// With a `lane`, the device works on a hidden display of its own beside the device's other lanes, and its id is
+    /// `android:<serial>+<lane>` (decision D73).
+    pub async fn connect(
+        adb: &Adb,
+        serial: &str,
+        display: DisplayMode,
+        lane: Option<&str>,
+    ) -> Result<AndroidDevice> {
         let Agent {
             control,
             video,
             hello,
             log,
             launched,
-        } = Agent::start(adb, serial, display).await?;
+        } = Agent::start(adb, serial, display, lane).await?;
         let density = hello.density;
-        let id = format!("android:{serial}");
+        let id = match lane {
+            Some(lane) => format!("android:{serial}+{lane}"),
+            None => format!("android:{serial}"),
+        };
         let (events, _) = broadcast::channel(EVENT_BACKLOG);
         let screen_long_pt = hello.display.w.max(hello.display.h) as f32 / density;
         let video = VideoStream::spawn(video, FrameStore::fitted(screen_long_pt));
@@ -79,6 +99,7 @@ impl AndroidDevice {
             events,
             log,
             _launched: launched,
+            settings: tokio::sync::OnceCell::new(),
         })
     }
 
@@ -112,8 +133,58 @@ impl AndroidDevice {
             .collect())
     }
 
+    /// A connection to the emulator's console and the token it may ask for, or why there is none. `op` is what
+    /// a refusal names.
+    async fn console(
+        &self,
+        op: Op,
+        phone: &'static str,
+    ) -> Result<(tokio::net::TcpStream, Option<String>)> {
+        let port = console::port(&self.serial).ok_or(Error::Unsupported { op, reason: phone })?;
+        let token = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .and_then(|home| {
+                let file = std::path::Path::new(&home).join(".emulator_console_auth_token");
+                std::fs::read_to_string(file).ok()
+            });
+        let stream = if self.adb.is_local() {
+            console::connect(&format!("127.0.0.1:{port}"))
+                .await
+                .map_err(|detail| Error::Transport { detail })?
+        } else {
+            // Behind `ADB_SERVER_SOCKET` the console's machine is not this one. The emulator's own network gives
+            // its host's loopback the address 10.0.2.2, so `nc` on the device reaches the console.
+            self.adb
+                .exec_stream(&self.serial, &format!("nc 10.0.2.2 {port}"))
+                .await?
+        };
+        Ok((stream, token))
+    }
+
+    /// Touches the emulator's fingerprint sensor through its console (decision D63).
+    async fn touch_sensor(&self, finger: u32) -> Result<()> {
+        let (stream, token) = self
+            .console(
+                Op::Button,
+                "a phone's fingerprint sensor takes its owner's finger; only an emulator's can be touched from here",
+            )
+            .await?;
+        console::touch_sensor_on(stream, token.as_deref(), finger)
+            .await
+            .map_err(|detail| Error::Transport { detail })
+    }
+
     async fn simple(&self, op: Op, req: Value) -> Result<Value> {
-        self.control.request(op, req).await
+        self.control
+            .request(op, req, std::time::Duration::ZERO)
+            .await
+    }
+
+    async fn video_caught_up(&self, op: Op) -> Result<()> {
+        caught_up(&self.video, &self.info.id, BARRIER_WAIT, |number| {
+            self.simple(op, barrier_request(number))
+        })
+        .await
     }
 
     async fn press(&self, op: Op, keycode: i32) -> Result<()> {
@@ -122,6 +193,70 @@ impl AndroidDevice {
             json!({"op": "key", "keycode": keycode, "action": "press"}),
         )
         .await?;
+        Ok(())
+    }
+
+    /// Runs one of the Settings app's functions and returns its JSON. Older Android has no `app_function`
+    /// service; a build whose Settings lacks the function answers "App function not found".
+    async fn settings_function(&self, function: &str, parameters: &Value) -> Result<String> {
+        let out = self
+            .adb
+            .shell(&self.serial, &settings::command(function, parameters))
+            .await?;
+        let text = out.stdout_text();
+        if text.trim_start().starts_with('{') {
+            return Ok(text);
+        }
+        let said = format!("{text}{}", String::from_utf8_lossy(&out.stderr));
+        if said.contains("Can't find service") || said.contains("App function not found") {
+            return Err(Error::Unsupported {
+                op: Op::Setting,
+                reason: "this device has no settings to read or write by key (Android 17 has them); use `shell`, or the Settings app",
+            });
+        }
+        let first = said.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        Err(Error::Refused {
+            detail: format!("the Settings app did not run {function}: {}", first.trim()),
+        })
+    }
+
+    async fn pm_permissions(&self, verb: &str, app: &AppId, permissions: &[String]) -> Result<()> {
+        package_name(app)?;
+        let mut full = Vec::new();
+        for name in permissions {
+            let permission = permission_name(name)?;
+            let out = self
+                .adb
+                .shell(&self.serial, &format!("pm {verb} {} {permission}", app.0))
+                .await?;
+            let text = format!(
+                "{}{}",
+                out.stdout_text(),
+                String::from_utf8_lossy(&out.stderr)
+            );
+            if out.exit_code != 0 || text.contains("Exception") || text.contains("Error") {
+                let first = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                return Err(Error::Transport {
+                    detail: format!("`pm {verb} {} {permission}` said: {}", app.0, first.trim()),
+                });
+            }
+            full.push(permission);
+        }
+        let dump = self
+            .adb
+            .shell(
+                &self.serial,
+                &format!("dumpsys package {} | grep granted=", app.0),
+            )
+            .await?
+            .stdout_text();
+        for permission in &full {
+            if let Some(why) = unapplied(&dump, verb, permission) {
+                return Err(Error::Refused {
+                    detail: format!("`pm {verb} {} {permission}` changed nothing: {why}", app.0),
+                });
+            }
+        }
         Ok(())
     }
 }
@@ -162,9 +297,7 @@ impl Device for AndroidDevice {
                 id: self.info.id.clone(),
             });
         }
-        let barrier = caught_up(&self.video, &self.info.id, BARRIER_WAIT, |id| {
-            self.simple(Op::Screenshot, json!({"op": "video_barrier", "id": id}))
-        });
+        let barrier = self.video_caught_up(Op::Screenshot);
         let (width, height, bytes) = newest_png(store, barrier).await?;
         Ok(Image {
             width,
@@ -179,7 +312,19 @@ impl Device for AndroidDevice {
     }
 
     async fn gesture(&self, g: Gesture) -> Result<()> {
-        self.simple(Op::Gesture, map::gesture_request(&g, self.density))
+        let length = g
+            .fingers
+            .iter()
+            .filter_map(|f| f.last())
+            .map(|p| p.t_ms)
+            .max()
+            .unwrap_or(0);
+        self.control
+            .request(
+                Op::Gesture,
+                map::gesture_request(&g, self.density),
+                std::time::Duration::from_millis(length.into()),
+            )
             .await?;
         Ok(())
     }
@@ -189,6 +334,24 @@ impl Device for AndroidDevice {
     }
 
     async fn button(&self, b: Button) -> Result<()> {
+        match b {
+            Button::Fingerprint => return self.touch_sensor(ENROLLED_FINGER).await,
+            Button::WrongFingerprint => return self.touch_sensor(OTHER_FINGER).await,
+            Button::Landscape | Button::Portrait => {
+                // With auto-rotate on, Android ignores `user_rotation`, so it is turned off first.
+                let quarter = u8::from(b == Button::Landscape);
+                self.adb
+                    .shell(
+                        &self.serial,
+                        &format!(
+                            "settings put system accelerometer_rotation 0; settings put system user_rotation {quarter}"
+                        ),
+                    )
+                    .await?;
+                return Ok(());
+            }
+            _ => {}
+        }
         match map::button_keycode(b) {
             Some(code) => self.press(Op::Button, code).await,
             None => {
@@ -255,35 +418,121 @@ impl Device for AndroidDevice {
     }
 
     async fn grant(&self, app: &AppId, permissions: &[String]) -> Result<()> {
-        let package_ok = !app.0.is_empty()
-            && app
-                .0
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_');
-        if !package_ok {
-            return Err(Error::Transport {
-                detail: format!("{:?} is not a package name", app.0),
+        self.pm_permissions("grant", app, permissions).await
+    }
+
+    async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
+        self.pm_permissions("revoke", app, permissions).await
+    }
+
+    /// Observed with a debug build on a loaded host: the reader was 1.0 s behind the stream, so a recording held
+    /// 1.0 s from before its start and its steps file ran that much ahead of the picture. Both ends wait for the
+    /// stream to catch up first.
+    async fn record_start(&self, path: &std::path::Path) -> Result<()> {
+        if self.video.recording() {
+            return Err(Error::Refused {
+                detail: "a recording is already running".into(),
             });
         }
-        for name in permissions {
-            let permission = permission_name(name)?;
-            let out = self
-                .adb
-                .shell(&self.serial, &format!("pm grant {} {permission}", app.0))
-                .await?;
-            let text = format!(
-                "{}{}",
-                out.stdout_text(),
-                String::from_utf8_lossy(&out.stderr)
-            );
-            if out.exit_code != 0 || text.contains("Exception") || text.contains("Error") {
-                let first = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-                return Err(Error::Transport {
-                    detail: format!("`pm grant {} {permission}` said: {}", app.0, first.trim()),
-                });
+        self.video_caught_up(Op::Record).await?;
+        self.video.record_start(path).map_err(|e| Error::Transport {
+            detail: format!("cannot record to {}: {e}", path.display()),
+        })
+    }
+
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        let behind = self.video.recording() && self.video_caught_up(Op::Record).await.is_err();
+        let stopped = self.video.record_stop().map_err(|e| Error::Transport {
+            detail: format!("cannot finish the recording: {e}"),
+        })?;
+        Ok(stopped.map(|s| Recorded {
+            path: s.recorded.path,
+            width: s.recorded.width,
+            height: s.recorded.height,
+            frames: s.recorded.frames,
+            ms: s.recorded.ms,
+            early: s.early.map(str::to_string).or_else(|| {
+                behind.then(|| "the device stopped answering before its last frames arrived".into())
+            }),
+        }))
+    }
+
+    async fn page(&self) -> Result<WebPage> {
+        let front = self.foreground().await?.ok_or(Error::Refused {
+            detail: "no app is in front".into(),
+        })?;
+        devtools::page(&self.adb, &self.serial, &front).await
+    }
+
+    async fn logs(&self, req: &LogRequest) -> Result<LogReply> {
+        package_name(&req.app)?;
+        let seconds = req.since.as_secs() + 1;
+        let run = |command: String| async move {
+            let request = ShellRequest {
+                command,
+                timeout: LOGS_LIMIT,
+            };
+            Ok::<_, Error>(self.shell(&request).await?.stdout)
+        };
+        let crash = logs::crash_of(&run(logs::crash_command(seconds)).await?, &req.app.0);
+        let text = if req.crashes {
+            String::new()
+        } else {
+            run(logs::app_command(&req.app.0, seconds)).await?
+        };
+        Ok(LogReply { text, crash })
+    }
+
+    async fn setting(&self, op: SettingOp) -> Result<SettingReply> {
+        match op {
+            SettingOp::Index => {
+                let index = self
+                    .settings
+                    .get_or_try_init(|| async {
+                        let reply = self
+                            .settings_function(settings::INDEX_FUNCTION, &json!({}))
+                            .await?;
+                        settings::index(&reply)
+                            .map(std::sync::Arc::new)
+                            .map_err(|detail| Error::Refused {
+                                detail: format!(
+                                    "the Settings app's index could not be read: {detail}"
+                                ),
+                            })
+                    })
+                    .await?;
+                Ok(SettingReply::Index(index.clone()))
+            }
+            SettingOp::Get(key) => {
+                for function in settings::STATE_FUNCTIONS {
+                    let reply = match self.settings_function(function, &json!({})).await {
+                        Ok(reply) => reply,
+                        Err(Error::Refused { .. } | Error::Unsupported { .. }) => continue,
+                        Err(e) => return Err(e),
+                    };
+                    if let Some((value, hint)) = settings::value(&reply, &key) {
+                        return Ok(SettingReply::Value { value, hint });
+                    }
+                }
+                Err(Error::Refused {
+                    detail: format!("the device reported no value for {key}"),
+                })
+            }
+            SettingOp::Set { key, value } => {
+                let reply = self
+                    .settings_function(
+                        settings::WRITE_FUNCTION,
+                        &settings::write_parameters(&key, &value),
+                    )
+                    .await?;
+                match settings::written(&reply) {
+                    Ok(value) => Ok(SettingReply::Value { value, hint: None }),
+                    Err(why) => Err(Error::Refused {
+                        detail: format!("{key} was not set: {why}"),
+                    }),
+                }
             }
         }
-        Ok(())
     }
 
     async fn foreground(&self) -> Result<Option<AppId>> {
@@ -343,10 +592,27 @@ impl Device for AndroidDevice {
     }
 
     async fn shell(&self, req: &ShellRequest) -> Result<ShellReply> {
+        if let Some(command) = req.command.trim_start().strip_prefix("emu ") {
+            let (stream, token) = self
+                .console(
+                    Op::Shell,
+                    "`emu` commands go to an Android emulator's console, and a phone has none",
+                )
+                .await?;
+            let said = console::command_on(stream, token.as_deref(), command.trim()).await;
+            return Ok(ShellReply {
+                exit: i32::from(said.is_err()),
+                stdout: said.clone().unwrap_or_default(),
+                stderr: said.err().unwrap_or_default(),
+                timed_out: false,
+            });
+        }
         let reply = self
-            .simple(
+            .control
+            .request(
                 Op::Shell,
                 json!({"op": "shell", "command": req.command, "timeout_ms": req.timeout.as_millis() as u64}),
+                req.timeout,
             )
             .await?;
         Ok(ShellReply {
@@ -394,6 +660,44 @@ impl Device for AndroidDevice {
     }
 }
 
+/// Why `pm grant` or `pm revoke` did not do what it was asked, read from the `granted=` lines of `dumpsys package`.
+/// On API 37 `pm grant` exits 0 and prints nothing for a permission the app's manifest does not request.
+fn unapplied(dump: &str, verb: &str, permission: &str) -> Option<&'static str> {
+    let state = dump
+        .lines()
+        .filter_map(|l| {
+            l.trim()
+                .strip_prefix(permission)?
+                .strip_prefix(": granted=")
+        })
+        .map(|rest| rest.starts_with("true"))
+        .reduce(|a, b| a || b);
+    match (verb, state) {
+        ("grant", None) => Some("the app's manifest does not request that permission"),
+        ("grant", Some(false)) => Some("the permission is still not granted"),
+        ("revoke", Some(true)) => Some("the permission is still granted"),
+        _ => None,
+    }
+}
+
+const LOGS_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// An app id goes into shell commands, so it must look like a package name.
+pub(crate) fn package_name(app: &AppId) -> Result<()> {
+    let ok = !app.0.is_empty()
+        && app
+            .0
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_');
+    if ok {
+        Ok(())
+    } else {
+        Err(Error::Transport {
+            detail: format!("{:?} is not a package name", app.0),
+        })
+    }
+}
+
 /// `notifications`, `camera`, `location`... become `android.permission.POST_NOTIFICATIONS` and so on; a name with a
 /// dot is taken as written.
 fn permission_name(name: &str) -> Result<String> {
@@ -413,6 +717,12 @@ fn permission_name(name: &str) -> Result<String> {
             detail: format!("{name:?} is not a permission name"),
         })
     }
+}
+
+/// The number goes under its own name: `Control::request` stamps every request with an `id`, which once overwrote
+/// it (decision D74).
+pub(crate) fn barrier_request(number: u64) -> Value {
+    json!({"op": "video_barrier", "barrier": number})
 }
 
 /// The newest frame as PNG once `barrier` has passed. The frame on hand is encoded while the barrier travels, and
@@ -457,7 +767,9 @@ async fn newest_png(
 /// serves is the newest the agent has produced. Observed on API 26 through an adb tunnel: after the agent was
 /// killed (which is what a second daemon does), neither socket reported it for 5 to 21 s, the stream looked open,
 /// a screenshot answered with the last frame and tree reads hung. A barrier that does not come back means the
-/// device is gone as far as this connection is concerned, so the caller reconnects.
+/// device is gone as far as this connection is concerned, so the caller reconnects. The agent holds the barrier
+/// until its encoder has given out what the screen showed when it was asked, and says in `wait_ms` how far behind
+/// the encoder is, which is added to `limit`.
 async fn caught_up<F>(
     video: &VideoStream,
     device: &str,
@@ -467,16 +779,18 @@ async fn caught_up<F>(
 where
     F: std::future::Future<Output = Result<Value>>,
 {
+    let gone = || Error::DeviceGone { id: device.into() };
     let id = video.next_barrier();
-    let reached = tokio::time::timeout(limit, async {
-        ask(id).await?;
-        Ok::<bool, Error>(video.wait_barrier(id, limit).await)
-    })
-    .await;
-    match reached {
-        Ok(Ok(true)) => Ok(()),
-        Ok(Err(e)) => Err(e),
-        Ok(Ok(false)) | Err(_) => Err(Error::DeviceGone { id: device.into() }),
+    let asked = std::time::Instant::now();
+    let reply = tokio::time::timeout(limit, ask(id))
+        .await
+        .map_err(|_| gone())??;
+    let behind = std::time::Duration::from_millis(reply["wait_ms"].as_u64().unwrap_or(0));
+    let left = limit.saturating_sub(asked.elapsed()) + behind;
+    if video.wait_barrier(id, left).await {
+        Ok(())
+    } else {
+        Err(gone())
     }
 }
 
@@ -540,6 +854,23 @@ mod barrier_tests {
                 id: "android:x".into()
             }
         );
+    }
+
+    #[tokio::test]
+    async fn a_barrier_the_agent_says_is_behind_is_waited_for_that_much_longer() {
+        let (mut agent, video) = open_stream();
+        agent.write_all(&header()).await.unwrap();
+        let late = tokio::spawn(async move {
+            tokio::time::sleep(LIMIT + Duration::from_millis(200)).await;
+            agent.write_all(&barrier_packet(1)).await.unwrap();
+            agent
+        });
+        caught_up(&video, "android:x", LIMIT, |_| async {
+            Ok(json!({"wait_ms": 400}))
+        })
+        .await
+        .unwrap();
+        late.await.unwrap();
     }
 
     #[tokio::test]
@@ -618,7 +949,34 @@ mod barrier_tests {
 
 #[cfg(test)]
 mod permission_tests {
-    use super::permission_name;
+    use super::{permission_name, unapplied};
+
+    const DUMP: &str = "      android.permission.INTERNET: granted=true
+        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_CONTACTS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]";
+
+    #[test]
+    fn a_grant_the_package_manager_accepted_but_did_not_apply_is_a_failure() {
+        assert_eq!(
+            unapplied(DUMP, "grant", "android.permission.POST_NOTIFICATIONS"),
+            None
+        );
+        let why = unapplied(DUMP, "grant", "android.permission.CAMERA").unwrap();
+        assert!(why.contains("does not request"), "{why}");
+        let why = unapplied(DUMP, "grant", "android.permission.READ_CONTACTS").unwrap();
+        assert!(why.contains("still not granted"), "{why}");
+    }
+
+    #[test]
+    fn a_revoke_is_applied_when_the_permission_is_no_longer_granted() {
+        assert_eq!(
+            unapplied(DUMP, "revoke", "android.permission.READ_CONTACTS"),
+            None
+        );
+        assert_eq!(unapplied(DUMP, "revoke", "android.permission.CAMERA"), None);
+        let why = unapplied(DUMP, "revoke", "android.permission.POST_NOTIFICATIONS").unwrap();
+        assert!(why.contains("still granted"), "{why}");
+    }
 
     #[test]
     fn short_names_expand_and_full_names_pass() {

@@ -1,0 +1,69 @@
+{
+ "androidAppfunctionsReturnValue": [
+  {
+   "deviceLocale": [
+    "en_US"
+   ],
+   "perScreenDeviceStates": [
+    {
+     "description": [
+      "Dark theme. Allows users to enable and customize the system-wide dark theme, including options for forcing dark theme on unsupported apps and setting an automatic schedule. This screen is identical on device with: api_dark_ui_mode. Passing get preconditions: Always enabled."
+     ],
+     "deviceStateItems": [
+      {
+       "hintText": [
+        "Passing set preconditions: Always enabled."
+       ],
+       "jsonValue": [
+        "true"
+       ],
+       "purpose": [
+        "Whether the system dark theme is manually enabled"
+       ],
+       "key": [
+        "dark_ui_mode/dark_ui_activated"
+       ],
+       "name": [
+        {
+         "english": [
+          "Use dark theme"
+         ],
+         "localized": [
+          "Use dark theme"
+         ]
+        }
+       ]
+      },
+      {
+       "hintText": [
+        ""
+       ],
+       "jsonValue": [
+        "<external_data>None</external_data>"
+       ],
+       "purpose": [
+        "The schedule for switching dark mode on and off."
+       ],
+       "key": [
+        "dark_ui_mode/dark_ui_auto_mode"
+       ],
+       "name": [
+        {
+         "english": [
+          "Schedule"
+         ],
+         "localized": [
+          "Schedule"
+         ]
+        }
+       ]
+      }
+     ],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=dark_ui_mode;end"
+     ]
+    }
+   ]
+  }
+ ]
+}

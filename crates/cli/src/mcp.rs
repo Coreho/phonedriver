@@ -1,6 +1,7 @@
 //! `phonedriver mcp`: the CLI verbs as MCP tools over stdio (architecture 10.2). A tool maps its arguments onto the
 //! verb of the same name and returns the text the verb prints; nothing else happens here.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -24,6 +25,11 @@ use crate::client::{Client, Failure};
 use crate::commands::{Globals, Verb, ask_env, execute_with, run_batch};
 use crate::wire::{Approval, ScreenshotResult};
 
+struct Shot {
+    device: Option<String>,
+    png: Vec<u8>,
+}
+
 #[derive(Clone)]
 pub struct Mcp {
     socket: Option<PathBuf>,
@@ -33,6 +39,8 @@ pub struct Mcp {
     ask: Vec<Category>,
     held: Arc<Mutex<Option<Held>>>,
     told: Told,
+    /// The last screenshot this server returned, for `compare`.
+    last_shot: Arc<Mutex<Option<Shot>>>,
 }
 
 /// The question a 2026-07-28 call returned: the call it belongs to, the batch step it holds and what it asked.
@@ -66,6 +74,7 @@ impl Told {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct BatchArgs {
     device: Option<String>,
     steps: Vec<serde_json::Value>,
@@ -73,25 +82,70 @@ struct BatchArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct AppsArgs {
     device: Option<String>,
     action: Option<String>,
     app: Option<String>,
+    permissions: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct LogsArgs {
+    device: Option<String>,
+    app: Option<String>,
+    grep: Option<String>,
+    /// The last lines to keep; default 40, 0 for all.
+    head: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SettingArgs {
+    device: Option<String>,
+    find: Option<String>,
+    key: Option<String>,
+    value: Option<String>,
+    values: Option<BTreeMap<String, String>>,
+    open: Option<String>,
+    /// Write a setting the user must confirm, on a physical device; only when the user asked for exactly that.
+    force: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct DevicesArgs {
     device: Option<String>,
     release: Option<bool>,
+    /// Start a simulator or emulator that is off, by name.
+    boot: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ScreenshotArgs {
     device: Option<String>,
     marks: Option<bool>,
+    /// Reply with what changed since your last screenshot, as text and no image.
+    compare: Option<bool>,
+    /// `start`, later `stop` (Android, iOS Simulator).
+    record: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ReplayArgs {
+    device: Option<String>,
+    file: String,
+    /// Write the file instead of running it.
+    save: Option<bool>,
+    /// Start at this step.
+    from: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ClipboardArgs {
     device: Option<String>,
     set: Option<String>,
@@ -115,6 +169,7 @@ struct ShellArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SnapshotArgs {
     device: Option<String>,
     /// Print only what changed since the last observation.
@@ -127,7 +182,11 @@ struct SnapshotArgs {
     max_lines: Option<u32>,
     /// Read the pixels with OCR and add text the tree lacks (automatic when the tree is empty).
     pixels: Option<bool>,
+    /// Add accessibility problems: unnamed controls, small tap targets.
+    audit: Option<bool>,
     find: Option<String>,
+    /// The web page in front as text, whole, no scrolling (Chrome; web views of debug builds). `find` keeps matching lines.
+    page: Option<bool>,
 }
 
 /// `autonomous` is not in the lean tool schema, so a model that reads the refusal text guesses its type: one sent
@@ -277,15 +336,10 @@ impl TapArgs {
 }
 
 impl TypeArgs {
-    fn chain(&mut self) -> Option<Result<Vec<serde_json::Value>, &'static str>> {
+    fn chain(&mut self) -> Option<Vec<serde_json::Value>> {
         let then = self.then.take().filter(|t| !t.is_empty())?;
-        if self.secret.unwrap_or(false) {
-            return Some(Err(
-                "`then` does not go with `secret`: type the secret in its own call",
-            ));
-        }
-        let first = json!({"tool": "type", "text": self.text, "into": self.into, "mode": self.mode, "submit": self.submit, "append": self.append});
-        Some(Ok(chained(first, then)))
+        let first = json!({"tool": "type", "text": self.text, "into": self.into, "mode": self.mode, "submit": self.submit, "append": self.append, "secret": self.secret});
+        Some(chained(first, then))
     }
 
     fn type_verb(&self) -> Verb {
@@ -364,8 +418,8 @@ impl LaunchArgs {
     }
 }
 
-/// A step of `batch`: `tool` and that tool's arguments, as the same verb the tool runs. Secret text is refused,
-/// because a batch's text goes through the daemon's trace like any other and a secret must be typed alone.
+/// A step of `batch`: `tool` and that tool's arguments, as the same verb the tool runs. A `type` step keeps its
+/// `secret`: the daemon masks a step's secret as it masks one typed alone (decision D70).
 fn step_verb(step: serde_json::Value) -> Result<Verb, String> {
     let serde_json::Value::Object(mut fields) = step else {
         return Err("a step is an object with a `tool`".into());
@@ -406,18 +460,13 @@ fn step_verb(step: serde_json::Value) -> Result<Verb, String> {
                     None => Err("to clear a field pass `into`: the field to empty".into()),
                 };
             }
-            if a.secret.unwrap_or(false) {
-                return Err(
-                    "secret text cannot go in a batch; call `type` with secret on its own".into(),
-                );
-            }
             Ok(Verb::Type {
                 text: Some(a.text),
                 into: a.into,
                 mode: a.mode,
                 submit: a.submit.unwrap_or(false),
                 append: a.append.unwrap_or(false),
-                secret: false,
+                secret: a.secret.unwrap_or(false),
                 autonomous: false,
             })
         }
@@ -438,6 +487,7 @@ impl Mcp {
             ask: Vec::new(),
             held: Arc::default(),
             told: Told::default(),
+            last_shot: Arc::default(),
         }
     }
 
@@ -544,7 +594,7 @@ impl Mcp {
             .await;
         let Some((label, app, category, details)) = first.as_ref().err().and_then(approval_needed)
         else {
-            return Outcome::Done(self.reply(first));
+            return Outcome::Done(self.reply(&globals, first).await);
         };
         let asked = commitment(&label, app.as_deref(), category, &details);
         let prompt = format!("Your agent wants to do this on your phone:\n{asked}\nAllow it?");
@@ -588,7 +638,7 @@ impl Mcp {
                         execute_with(client, verb(), secret, &globals).await
                     })
                     .await;
-                Outcome::Done(self.reply(second))
+                Outcome::Done(self.reply(&globals, second).await)
             }
         }
     }
@@ -631,7 +681,7 @@ impl Mcp {
             let Some((label, app, category, details)) =
                 result.as_ref().err().and_then(approval_needed)
             else {
-                return Outcome::Done(self.reply(result));
+                return Outcome::Done(self.reply(&globals, result).await);
             };
             let held = result
                 .as_ref()
@@ -755,8 +805,7 @@ impl Mcp {
             let secret = a.secret.unwrap_or(false);
             let (device, autonomous) = (a.device.clone(), a.autonomous.unwrap_or(false));
             match a.chain() {
-                Some(Ok(steps)) => self.chain(channel, device, steps).await,
-                Some(Err(why)) => Outcome::Done(bad(why)),
+                Some(steps) => self.chain(channel, device, steps).await,
                 None => {
                     let text = secret.then(|| a.text.clone());
                     self.guarded(channel, key, device, || a.type_verb(), text, autonomous)
@@ -770,11 +819,46 @@ impl Mcp {
         })
     }
 
-    fn reply(&self, result: Result<String, Failure>) -> CallToolResult {
-        match result {
-            Ok(text) => text_result(self.told.trim(success_text(text))),
-            Err(f) => failure(&f),
-        }
+    /// The tool result for a command's output. A reply that ends by saying its screen gives no element list
+    /// gets the screen's picture attached, so the agent does not spend a call and a turn asking for it.
+    async fn reply(&self, globals: &Globals, result: Result<String, Failure>) -> CallToolResult {
+        let text = match result {
+            Ok(text) => text,
+            Err(f) => return failure(&f),
+        };
+        let Some(above) = text.strip_suffix(crate::commands::EMPTY_SCREEN) else {
+            return text_result(self.told.trim(success_text(text)));
+        };
+        let note = match self.shot(globals, false).await {
+            Ok(ScreenshotResult {
+                data_b64: Some(data),
+                ..
+            }) => {
+                return CallToolResult::success(vec![
+                    ContentBlock::text(format!(
+                        "{}\nthis screen gives no element list: its picture is attached; tap a point on it as `x,y`",
+                        self.told.trim(success_text(above.trim_end().to_string()))
+                    )),
+                    ContentBlock::image(data, "image/png"),
+                ]);
+            }
+            _ => text,
+        };
+        text_result(self.told.trim(success_text(note)))
+    }
+
+    async fn shot(&self, globals: &Globals, marks: bool) -> Result<ScreenshotResult, Failure> {
+        self.with_client(async |client| {
+            let mut params = json!({"inline": true, "marks": marks});
+            if let Some(d) = &globals.device {
+                params["device"] = json!(d);
+            }
+            crate::commands::put_display(&mut params, globals.display);
+            let reply = client.call("screenshot", params).await?;
+            serde_json::from_value::<ScreenshotResult>(reply)
+                .map_err(|e| Failure::Local(format!("the daemon sent an unexpected reply: {e}")))
+        })
+        .await
     }
 
     async fn run_with(
@@ -786,10 +870,7 @@ impl Mcp {
         let result = self
             .with_client(async |client| execute_with(client, verb, secret, &globals).await)
             .await;
-        match result {
-            Ok(text) => text_result(self.told.trim(success_text(text))),
-            Err(f) => failure(&f),
-        }
+        self.reply(&globals, result).await
     }
 }
 
@@ -997,7 +1078,16 @@ fn for_mcp(hint: &str) -> String {
             "`--secret` (the text on stdin or in PHONEDRIVER_SECRET)",
             "`secret: true`",
         ),
+        (
+            " A batch on the command line cannot carry secret text: run that `type` on its own.",
+            " It works on a `type` call and on a `type` step of a batch.",
+        ),
+        (
+            "`--grep words` keeps only the lines with them, `--all` prints everything",
+            "`find` keeps only the lines with those words",
+        ),
         ("`--device <id>`", "`device`"),
+        ("`phonedriver boot <name>`", "`devices` with `boot: <name>`"),
         ("`--timeout`", "`timeout_ms`"),
         ("`--into`", "`into`"),
         ("`--max`", "`max`"),
@@ -1054,7 +1144,7 @@ fn bad(message: &str) -> CallToolResult {
 #[tool_router]
 impl Mcp {
     #[tool(
-        description = "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold.",
+        description = "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold. `boot` starts a simulator or emulator that is off.",
         annotations(
             title = "List devices",
             read_only_hint = false,
@@ -1067,11 +1157,14 @@ impl Mcp {
         if a.release.unwrap_or(false) {
             return self.run(a.device, Verb::Release, None).await;
         }
+        if let Some(name) = a.boot {
+            return self.run(None, Verb::Boot { name: Some(name) }, None).await;
+        }
         self.run(None, Verb::Devices, None).await
     }
 
     #[tool(
-        description = "Run a device shell command: exit code, output, screen change. Prefer it for settings: `cmd uimode night yes`, `settings put system screen_brightness 20`, `am start -a android.intent.action.VIEW -d <url>`. Simulator: `simctl ui appearance dark`. A physical iPhone has no shell.",
+        description = "Run a device shell command: exit code, output, screen change. For intents, keys and state, and for settings where `setting` is unsupported: `am start -a android.intent.action.VIEW -d <url>`, `input keyevent 3`, `cmd uimode night yes`. Simulator: `simctl ui appearance dark`. A physical iPhone has no shell.",
         annotations(
             title = "Run a shell command",
             read_only_hint = false,
@@ -1101,6 +1194,83 @@ impl Mcp {
     }
 
     #[tool(
+        description = "System settings by key, with no screens to tap (Android 17+; elsewhere it answers unsupported: use `shell`). `find` lists keys and accepted values (`dark theme|media volume` for several); `values` {key: value} writes; `key` reads one; `open` shows the `screen` with that key.",
+        annotations(
+            title = "Read or change a setting",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn setting(&self, Parameters(a): Parameters<SettingArgs>) -> CallToolResult {
+        let values = a.values.filter(|v| !v.is_empty());
+        let (action, args) = match (a.find, a.key, a.value, values, a.open) {
+            (Some(words), None, None, None, None) => ("find", vec![words]),
+            (None, Some(key), None, None, None) => ("get", vec![key]),
+            (None, Some(key), Some(value), None, None) => ("set", vec![key, value]),
+            (None, None, None, Some(values), None) => (
+                "set",
+                values.into_iter().flat_map(|(k, v)| [k, v]).collect(),
+            ),
+            (None, None, None, None, Some(screen)) => ("open", vec![screen]),
+            _ => {
+                return bad(
+                    "give one of `find` (words), `key` (with `value` to write), `values` ({key: value}) or `open` (a screen key)",
+                );
+            }
+        };
+        let verb = Verb::Setting {
+            action: action.to_string(),
+            args,
+            force: a.force.unwrap_or(false),
+        };
+        self.run(a.device, verb, None).await
+    }
+
+    #[tool(
+        description = "An app's last log lines and its last crash (Android). `app` defaults to the one in front; `grep` keeps lines with these words (`a|b`).",
+        annotations(
+            title = "Read an app's logs",
+            read_only_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn logs(&self, Parameters(a): Parameters<LogsArgs>) -> CallToolResult {
+        let verb = Verb::Logs {
+            app: a.app,
+            grep: a.grep,
+            head: a.head.map(|h| h as usize),
+            since: None,
+        };
+        self.run(a.device, verb, None).await
+    }
+
+    #[tool(
+        description = "Run a saved steps file again in one call; it stops at the first step that fails and shows the screen. `save: true` writes the file from this session's actions: do it when a task that worked will be asked again.",
+        annotations(
+            title = "Replay saved steps",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
+    )]
+    async fn replay(&self, Parameters(a): Parameters<ReplayArgs>) -> CallToolResult {
+        let file = std::path::PathBuf::from(a.file);
+        let verb = if a.save.unwrap_or(false) {
+            Verb::Save { file }
+        } else {
+            Verb::Replay {
+                file,
+                from: a.from.map_or(1, |n| n as usize),
+                screens: None,
+            }
+        };
+        self.run(a.device, verb, None).await
+    }
+
+    #[tool(
         description = "Read the clipboard, or `set` it.",
         annotations(
             title = "Clipboard",
@@ -1111,15 +1281,25 @@ impl Mcp {
         )
     )]
     async fn clipboard(&self, Parameters(a): Parameters<ClipboardArgs>) -> CallToolResult {
+        let reading = a.set.is_none();
         let verb = Verb::Clipboard {
             action: a.set.as_ref().map(|_| "set".to_string()),
             text: a.set,
         };
-        self.run(a.device, verb, None).await
+        let reply = self.run(a.device, verb, None).await;
+        let blank = reply
+            .content
+            .first()
+            .and_then(|c| c.as_text())
+            .is_some_and(|t| t.text.is_empty());
+        if reading && reply.is_error != Some(true) && blank {
+            return CallToolResult::success(vec![ContentBlock::text("the clipboard is empty")]);
+        }
+        reply
     }
 
     #[tool(
-        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data) or uninstall.",
+        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`).",
         annotations(
             title = "Apps",
             read_only_hint = false,
@@ -1132,12 +1312,13 @@ impl Mcp {
         let verb = Verb::Apps {
             action: a.action,
             target: a.app,
+            permissions: a.permissions.unwrap_or_default(),
         };
         self.run(a.device, verb, None).await
     }
 
     #[tool(
-        description = "The screen as lines like `@e4 button \"Save\"`; refs name elements for other tools. `find` lists matching lines (`A|B` for either). `under-keyboard` = hidden by the keyboard.",
+        description = "The screen as lines like `@e4 button \"Save\"`; refs name elements for other tools. `find` lists matching lines (`A|B` for either). `under-keyboard` = hidden by the keyboard. `audit` adds accessibility problems.",
         annotations(
             title = "Read the screen",
             read_only_hint = true,
@@ -1145,6 +1326,13 @@ impl Mcp {
         )
     )]
     async fn snapshot(&self, Parameters(a): Parameters<SnapshotArgs>) -> CallToolResult {
+        if a.page == Some(true) {
+            let verb = Verb::Page {
+                grep: a.find,
+                all: false,
+            };
+            return self.run(a.device, verb, None).await;
+        }
         if let Some(text) = a.find {
             return self
                 .run(a.device, Verb::Find { text, role: None }, None)
@@ -1156,6 +1344,7 @@ impl Mcp {
             within: a.within,
             max_lines: a.max_lines.map(|n| n as usize),
             pixels: a.pixels.unwrap_or(false),
+            audit: a.audit.unwrap_or(false),
             save_fixture: None,
             fixture_dir: None,
         };
@@ -1163,32 +1352,57 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Image of the screen, for what the snapshot lacks (canvas, map, photo). `marks` boxes tappable elements with their @ref.",
+        description = "Image of the screen, for what the snapshot lacks (canvas, map, photo). `marks` boxes tappable elements with their @ref. `compare` replies with what changed since your last screenshot, as text. `record` saves a video of the screen instead, with the actions done meanwhile.",
         annotations(title = "Screenshot", read_only_hint = true, open_world_hint = true)
     )]
     async fn screenshot(&self, Parameters(a): Parameters<ScreenshotArgs>) -> CallToolResult {
-        let marks = a.marks.unwrap_or(false);
-        let globals = self.globals(a.device);
-        let shot = self
-            .with_client(async |client| {
-                let mut params = json!({"inline": true, "marks": marks});
-                if let Some(d) = &globals.device {
-                    params["device"] = json!(d);
-                }
-                crate::commands::put_display(&mut params, globals.display);
-                let reply = client.call("screenshot", params).await?;
-                serde_json::from_value::<ScreenshotResult>(reply).map_err(|e| {
-                    Failure::Local(format!("the daemon sent an unexpected reply: {e}"))
-                })
-            })
-            .await;
-        let shot = match shot {
+        if let Some(action) = a.record {
+            if !matches!(action.as_str(), "start" | "stop") {
+                return bad("`record` is `start` or `stop`");
+            }
+            let verb = Verb::Record {
+                action,
+                output: None,
+            };
+            return self.run(a.device, verb, None).await;
+        }
+        let compare = a.compare.unwrap_or(false);
+        let marks = a.marks.unwrap_or(false) && !compare;
+        let globals = self.globals(a.device.clone());
+        let shot = match self.shot(&globals, marks).await {
             Ok(s) => s,
             Err(f) => return failure(&f),
         };
         let Some(data) = shot.data_b64 else {
             return bad("the daemon sent no image data");
         };
+        if !marks {
+            let Ok(now) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &data)
+            else {
+                return bad("the daemon sent bad image data");
+            };
+            let last = self.last_shot.lock().await.replace(Shot {
+                device: globals.device.clone(),
+                png: now.clone(),
+            });
+            if compare {
+                let Some(before) = last.filter(|s| s.device == globals.device).map(|s| s.png)
+                else {
+                    return bad(
+                        "`compare` needs an earlier screenshot of this device: take one, act, then compare",
+                    );
+                };
+                let report = tokio::task::spawn_blocking(move || {
+                    crate::commands::compared(&before, &now, None)
+                })
+                .await;
+                return match report {
+                    Ok(Ok(text)) => CallToolResult::success(vec![ContentBlock::text(text)]),
+                    Ok(Err(why)) => bad(&why),
+                    Err(e) => bad(&format!("the comparison failed: {e}")),
+                };
+            }
+        }
         CallToolResult::success(vec![
             ContentBlock::image(data, "image/png"),
             ContentBlock::text(match shot.marks {
@@ -1254,15 +1468,11 @@ impl Mcp {
         Parameters(mut a): Parameters<TypeArgs>,
     ) -> CallToolResult {
         let secret = a.secret.unwrap_or(false);
-        match a.chain() {
-            Some(Ok(steps)) => {
-                return self
-                    .chain(Channel::Peer(&peer), a.device, steps)
-                    .await
-                    .complete();
-            }
-            Some(Err(why)) => return bad(why),
-            None => {}
+        if let Some(steps) = a.chain() {
+            return self
+                .chain(Channel::Peer(&peer), a.device, steps)
+                .await
+                .complete();
         }
         if a.text.is_empty() && !secret {
             return match a.into {
@@ -1320,7 +1530,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Press home, back, recents, notifications, lock, volume-up, volume-down, enter or hide-keyboard.",
+        description = "Press home, back, recents, notifications, lock, volume-up, volume-down, enter or hide-keyboard. `landscape` and `portrait` turn the screen. On an emulator or Simulator, fingerprint or wrong-fingerprint answers a fingerprint or Face ID prompt.",
         annotations(
             title = "Press a key",
             read_only_hint = false,
@@ -1391,7 +1601,7 @@ impl Mcp {
 
 #[tool_handler(
     name = "phonedriver",
-    instructions = "Operate an Android or iOS device. System settings: `shell`. App UI: `launch` takes an app name (no `devices` or `apps` first), then `snapshot` once and act on its @refs; each action returns what changed. A path of taps you can predict goes in one `tap` with `then`. Send calls one at a time on the shared screen. If an error needs the user to act on the device, say so and go on when they are done. Passwords, payments, sending and deleting need the user's word for this task."
+    instructions = "Operate an Android or iOS device. System settings: `setting` first; `shell` where it is unsupported. App UI: `launch` takes an app name (no `devices` or `apps` first), then `snapshot` once and act on its @refs; each action returns what changed. A path of taps you can predict goes in one `tap` with `then`. Send calls one at a time on the shared screen. If an error needs the user to act on the device, say so and go on when they are done. Passwords, payments, sending and deleting need the user's word for this task."
 )]
 impl ServerHandler for Mcp {
     async fn call_tool(
@@ -1562,6 +1772,10 @@ mod tests {
             (
                 "then type it on its own with `--secret` (the text on stdin or in PHONEDRIVER_SECRET); a batch cannot carry secret text.",
                 "then type it on its own with `secret: true`; a batch cannot carry secret text.",
+            ),
+            (
+                "Use `--secret` (the text on stdin or in PHONEDRIVER_SECRET). A batch on the command line cannot carry secret text: run that `type` on its own.",
+                "Use `secret: true`. It works on a `type` call and on a `type` step of a batch.",
             ),
             (
                 "Pass `--device <id>` with one of: a, b.",

@@ -21,4 +21,4 @@ proptest = "1.12.0"
 tokio = { version = "1.54.1", features = ["sync", "macros", "rt"] }
 
 [features]
-testing = []
+testing = ["tokio/time"]

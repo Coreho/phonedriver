@@ -1,0 +1,290 @@
+#[path = "support/fakes.rs"]
+mod fakes;
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use fakes::tree;
+use phonedriver::daemon::rpc::RpcError;
+use phonedriver::daemon::{Config, Daemon, DeviceSource, Listed};
+use phonedriver_core::device::{Capabilities, Device, Url};
+use phonedriver_core::error::Error;
+use phonedriver_core::settings::{SettingItem, SettingOp, SettingScreen, SettingsIndex};
+use phonedriver_core::testing::{Call, FakeDevice};
+use serde_json::{Value, json};
+
+struct One {
+    id: &'static str,
+    fake: Arc<FakeDevice>,
+}
+
+#[async_trait]
+impl DeviceSource for One {
+    async fn list(&self) -> Result<Vec<Listed>, Error> {
+        Ok(vec![Listed {
+            id: self.id.into(),
+            model: "Fake".into(),
+            os: None,
+            tier: "fake".into(),
+            capabilities: self.fake.info().capabilities,
+        }])
+    }
+    async fn connect(&self, _id: &str) -> Result<Arc<dyn Device>, Error> {
+        Ok(self.fake.clone())
+    }
+}
+
+const DARK: &str = "dark_ui_mode/dark_ui_activated";
+const NFC: &str = "nfc_screen/use_nfc";
+const CYCLES: &str = "battery_info/cycle_count";
+const DARK_LINK: &str = "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=dark_ui_mode;end";
+
+fn index() -> SettingsIndex {
+    let item =
+        |key: &str, purpose: &str, writable: bool, confirm: bool, screen: usize| SettingItem {
+            key: key.into(),
+            purpose: purpose.into(),
+            values: "true | false".into(),
+            writable,
+            confirm,
+            screen,
+        };
+    SettingsIndex {
+        screens: vec![
+            SettingScreen {
+                key: "dark_ui_mode".into(),
+                about: "Dark theme. The system-wide dark theme.".into(),
+                link: Some(DARK_LINK.into()),
+            },
+            SettingScreen {
+                key: "nfc_screen".into(),
+                about: "NFC.".into(),
+                link: None,
+            },
+        ],
+        items: vec![
+            item(
+                DARK,
+                "Whether the system dark theme is manually enabled",
+                true,
+                false,
+                0,
+            ),
+            item(NFC, "Whether NFC is on", true, true, 1),
+            item(CYCLES, "The battery charge cycle count", false, false, 1),
+        ],
+    }
+}
+
+fn setup(id: &'static str, settings: bool) -> (Arc<Daemon>, Arc<FakeDevice>, tempfile::TempDir) {
+    let fake = Arc::new(
+        FakeDevice::new(vec![tree(&["One"]), tree(&["Two"])]).lacking(Capabilities::FRAMES),
+    );
+    if settings {
+        fake.with_settings(index(), &[(DARK, "false"), (NFC, "true"), (CYCLES, "12")]);
+    }
+    let home = tempfile::tempdir().unwrap();
+    let d = Daemon::new(
+        Arc::new(One {
+            id,
+            fake: fake.clone(),
+        }),
+        Config {
+            home: home.path().to_path_buf(),
+        },
+    );
+    (d, fake, home)
+}
+
+async fn ok(d: &Daemon, params: Value) -> Value {
+    d.call("default", "setting", params)
+        .await
+        .unwrap_or_else(|e| panic!("setting failed: {e:?}"))
+}
+
+async fn err(d: &Daemon, params: Value) -> RpcError {
+    d.call("default", "setting", params)
+        .await
+        .expect_err("expected an error")
+}
+
+fn writes(fake: &FakeDevice) -> Vec<Call> {
+    fake.calls()
+        .into_iter()
+        .filter(|c| matches!(c, Call::Setting(SettingOp::Set { .. })))
+        .collect()
+}
+
+#[tokio::test(start_paused = true)]
+async fn find_lists_the_settings_and_screens_that_match() {
+    let (d, _fake, _home) = setup("fake:1", true);
+    let r = ok(&d, json!({"find": "dark"})).await;
+    assert_eq!(
+        r["lines"],
+        json!([
+            "dark_ui_mode/dark_ui_activated  [true | false]  Whether the system dark theme is manually enabled",
+            "screen dark_ui_mode  Dark theme",
+        ])
+    );
+    assert_eq!(r["more"], 0);
+    let r = ok(&d, json!({"find": "teapot"})).await;
+    assert_eq!(r["lines"], json!([]));
+}
+
+#[tokio::test(start_paused = true)]
+async fn find_takes_several_searches_separated_by_a_bar() {
+    let (d, _fake, _home) = setup("fake:1", true);
+    let r = ok(&d, json!({"find": "dark theme|nfc|teapot"})).await;
+    let lines: Vec<&str> = r["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(lines.iter().any(|l| l.starts_with(DARK)), "{lines:?}");
+    assert!(lines.iter().any(|l| l.starts_with(NFC)), "{lines:?}");
+    assert_eq!(
+        lines.iter().filter(|l| l.starts_with(DARK)).count(),
+        1,
+        "{lines:?}"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn values_writes_several_settings_in_one_call() {
+    let (d, fake, _home) = setup("fake:1", true);
+    let r = ok(&d, json!({"values": {DARK: "true", NFC: "false"}})).await;
+    assert_eq!(r["values"], json!({DARK: "true", NFC: "false"}));
+    assert_eq!(writes(&fake).len(), 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn nothing_is_written_when_one_of_several_keys_is_wrong_and_a_refusal_says_what_was_already_set()
+ {
+    let (d, fake, _home) = setup("fake:1", true);
+    let e = err(&d, json!({"values": {DARK: "true", CYCLES: "3"}})).await;
+    assert!(e.message.contains("read-only"), "{}", e.message);
+    assert!(writes(&fake).is_empty());
+    let e = err(&d, json!({"values": {DARK: "true", NFC: "refuse"}})).await;
+    assert_eq!(e.code, -32025);
+    assert!(
+        e.message.contains("nfc_screen/use_nfc was not set"),
+        "{}",
+        e.message
+    );
+    assert!(
+        e.message
+            .contains("already set: dark_ui_mode/dark_ui_activated = true"),
+        "{}",
+        e.message
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_key_reads_its_value_and_a_value_writes_it() {
+    let (d, fake, _home) = setup("fake:1", true);
+    let r = ok(&d, json!({"key": DARK})).await;
+    assert_eq!(r["value"], "false");
+    assert!(writes(&fake).is_empty());
+    let r = ok(&d, json!({"key": DARK, "value": "true"})).await;
+    assert_eq!(r["key"], DARK);
+    assert_eq!(r["value"], "true");
+    assert_eq!(
+        writes(&fake),
+        [Call::Setting(SettingOp::Set {
+            key: DARK.into(),
+            value: "true".into()
+        })]
+    );
+    assert_eq!(ok(&d, json!({"key": DARK})).await["value"], "true");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_write_the_device_refuses_is_an_error_with_the_devices_reason() {
+    let (d, _fake, _home) = setup("fake:1", true);
+    let e = err(&d, json!({"key": DARK, "value": "refuse"})).await;
+    assert_eq!(e.code, -32025);
+    assert!(
+        e.message.contains("Preference not enabled"),
+        "{}",
+        e.message
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unknown_key_is_refused_with_the_keys_that_come_closest() {
+    let (d, fake, _home) = setup("fake:1", true);
+    for params in [
+        json!({"key": "dark"}),
+        json!({"key": "dark", "value": "true"}),
+    ] {
+        let e = err(&d, params).await;
+        assert_eq!(e.code, -32025);
+        assert!(
+            e.message.contains("no setting has the key \"dark\""),
+            "{}",
+            e.message
+        );
+        assert!(e.message.contains(DARK), "{}", e.message);
+    }
+    assert!(writes(&fake).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_read_only_setting_is_not_written() {
+    let (d, fake, _home) = setup("fake:1", true);
+    let e = err(&d, json!({"key": CYCLES, "value": "1"})).await;
+    assert_eq!(e.code, -32025);
+    assert!(e.message.contains("read-only"), "{}", e.message);
+    assert!(writes(&fake).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn open_opens_the_screens_link_and_returns_the_screen() {
+    let (d, fake, _home) = setup("fake:1", true);
+    let r = ok(&d, json!({"open": "dark_ui_mode"})).await;
+    assert!(
+        fake.calls()
+            .contains(&Call::OpenUrl(Url(DARK_LINK.into()), None)),
+        "{:?}",
+        fake.calls()
+    );
+    assert_eq!(r["summary"], "opened the settings screen dark_ui_mode");
+    let journal = d.call("default", "journal", json!({})).await.unwrap();
+    assert_eq!(journal["steps"].as_array().unwrap().len(), 1, "{journal}");
+    let e = err(&d, json!({"open": "nfc_screen"})).await;
+    assert_eq!(e.code, -32025);
+    assert!(e.message.contains("cannot be opened"), "{}", e.message);
+    let e = err(&d, json!({"open": "nope"})).await;
+    assert!(
+        e.message.contains("no settings screen has the key"),
+        "{}",
+        e.message
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn on_a_physical_device_a_setting_the_user_must_confirm_needs_force() {
+    let (d, fake, _home) = setup("android:R5CT123", true);
+    let e = err(&d, json!({"key": NFC, "value": "false"})).await;
+    assert_eq!(e.code, -32011);
+    assert!(e.message.contains("confirm"), "{}", e.message);
+    assert!(writes(&fake).is_empty());
+    ok(&d, json!({"key": DARK, "value": "true"})).await;
+    let r = ok(&d, json!({"key": NFC, "value": "false", "force": true})).await;
+    assert_eq!(r["value"], "false");
+    let (d, _fake, _home) = setup("android:emulator-5554", true);
+    ok(&d, json!({"key": NFC, "value": "false"})).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_device_without_settings_says_so_and_a_call_with_nothing_to_do_is_invalid() {
+    let (d, _fake, _home) = setup("fake:1", false);
+    let e = err(&d, json!({"find": "dark"})).await;
+    assert_eq!(e.code, -32011);
+    let (d, _fake, _home) = setup("fake:1", true);
+    let e = err(&d, json!({})).await;
+    assert_eq!(e.code, -32602);
+    let e = err(&d, json!({"value": "true"})).await;
+    assert_eq!(e.code, -32602);
+}

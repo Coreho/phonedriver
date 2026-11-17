@@ -1,0 +1,532 @@
+{
+ "androidAppfunctionsReturnValue": [
+  {
+   "globalHintText": [
+    "When an intentUri includes '%24itemization', that must be replaced by an actual itemization value before launching."
+   ],
+   "deviceLocale": [
+    "en_US"
+   ],
+   "perScreenMetadata": [
+    {
+     "description": [
+      "Dark theme. Allows users to enable and customize the system-wide dark theme, including options for forcing dark theme on unsupported apps and setting an automatic schedule. This screen is identical on device with: api_dark_ui_mode. Preconditions to accessing: Always enabled."
+     ],
+     "deviceStateItemsMetadata": [
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "Preconditions to setting: Always enabled."
+       ],
+       "possibleValues": [
+        "BOOL"
+       ],
+       "purpose": [
+        "Whether the system dark theme is manually enabled"
+       ],
+       "key": [
+        "dark_ui_mode/dark_ui_activated"
+       ]
+      },
+      {
+       "writable": [
+        true
+       ],
+       "possibleValues": [
+        "None (None), Turns on at custom time (Turns on at custom time), Turns on from sunset to sunrise (Turns on from sunset to sunrise)"
+       ],
+       "purpose": [
+        "The schedule for switching dark mode on and off."
+       ],
+       "key": [
+        "dark_ui_mode/dark_ui_auto_mode"
+       ]
+      }
+     ],
+     "itemizationTypes": [],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=dark_ui_mode;end"
+     ]
+    },
+    {
+     "description": [
+      "Allows users to enable and customize the system-wide dark theme, including options for forcing dark theme on unsupported apps and setting an automatic schedule. This screen is identical on device with: dark_ui_mode. Preconditions to accessing: Battery Saver must be off or the device must allow Dark theme settings during Battery Saver."
+     ],
+     "deviceStateItemsMetadata": [
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "Preconditions to accessing: Battery Saver must be off or the device must allow Dark theme settings during Battery Saver."
+       ],
+       "possibleValues": [
+        "itemization:CustomEnum:com.android.settings.display.darkmode.DarkThemeMode"
+       ],
+       "purpose": [
+        "The dark theme mode, either standard (for explicitly supported apps) or expanded (applying to most apps)"
+       ],
+       "key": [
+        "api_dark_ui_mode/dark_theme_mode_selector"
+       ]
+      },
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "Preconditions to accessing: Battery Saver must be off or the device must allow Dark theme settings during Battery Saver, The device must be configured to use a custom dark theme schedule.\nPreconditions to setting: Battery Saver must be off."
+       ],
+       "possibleValues": [
+        "itemization:TimeOfDay"
+       ],
+       "purpose": [
+        "The time when dark theme is scheduled to turn on"
+       ],
+       "key": [
+        "api_dark_ui_mode/dark_theme_start_time"
+       ]
+      },
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "Preconditions to accessing: Battery Saver must be off or the device must allow Dark theme settings during Battery Saver, The device must be configured to use a custom dark theme schedule.\nPreconditions to setting: Battery Saver must be off."
+       ],
+       "possibleValues": [
+        "itemization:TimeOfDay"
+       ],
+       "purpose": [
+        "The time when dark theme is scheduled to turn off"
+       ],
+       "key": [
+        "api_dark_ui_mode/dark_theme_end_time"
+       ]
+      }
+     ],
+     "itemizationTypes": [],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=api_dark_ui_mode;end"
+     ]
+    },
+    {
+     "description": [
+      "Allows users to choose their geographical region, which affects system-wide formatting for dates, times, temperatures, and other measurement systems."
+     ],
+     "deviceStateItemsMetadata": [
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "[Must show to user]: The region is going to be changed, but the device will keep current language as a system language."
+       ],
+       "possibleValues": [
+        "itemization:SystemRegionCountryCode"
+       ],
+       "purpose": [
+        "The geographical region used by the system to determine regional formatting for dates, times, and measurements."
+       ],
+       "key": [
+        "key_system_region_picker_page/default_system_language_region_preference"
+       ]
+      }
+     ],
+     "itemizationTypes": [],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=key_system_region_picker_page;end"
+     ]
+    },
+    {
+     "description": [
+      "Allows users to view, select, and manage Access Point Names (APNs) required for the device to connect to the carrier's data network. Preconditions to accessing: The subscription must have a GSM APN."
+     ],
+     "deviceStateItemsMetadata": [],
+     "itemizationTypes": [
+      "SubscriptionId_ActiveOnly"
+     ],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=telephony_apn_key;S.itemization=%24itemization;end"
+     ]
+    },
+    {
+     "description": [
+      "Sound & vibration. Allows users to manage device audio settings, including adjusting volume levels for various streams, selecting sound patterns for ringtones and notifications, and toggling specific system-wide sounds and vibration behaviors. This screen is identical on device with: api_sound_screen"
+     ],
+     "deviceStateItemsMetadata": [
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "Preconditions to accessing: The device must support configuring media volume in Settings.\nPreconditions to setting: This setting must not be restricted by a device administrator."
+       ],
+       "possibleValues": [
+        "INTEGER(min=0, max=15)"
+       ],
+       "purpose": [
+        "The system volume level for media playback. Higher is louder."
+       ],
+       "key": [
+        "sound_screen/media_volume"
+       ]
+      },
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "Preconditions to accessing: The device must support configuring call volume in Settings and not be a single volume device.\nPreconditions to setting: This setting must not be restricted by a device administrator."
+       ],
+       "possibleValues": [
+        "INTEGER(min=1, max=15)"
+       ],
+       "purpose": [
+        "The system volume level for phone calls. Higher is louder."
+       ],
+       "key": [
+        "sound_screen/call_volume"
+       ]
+      }
+     ],
+     "itemizationTypes": [],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=sound_screen;end"
+     ]
+    },
+    {
+     "description": [
+      "Allows users to toggle NFC for data exchange and contactless payments, select a default payment app, and manage security settings for contactless transactions."
+     ],
+     "deviceStateItemsMetadata": [
+      {
+       "writable": [
+        false
+       ],
+       "hintText": [
+        "Preconditions to accessing: The device must have near field communication(NFC) capability.\nThis is permanently unavailable on this device due to: NFC is not available on this device.\nSetting this preference is permanently unavailable on this device due to: NFC is not available on this device."
+       ],
+       "possibleValues": [
+        "itemization:AnyBoolean"
+       ],
+       "purpose": [
+        "Enable or disable NFC (Near Field Communication)"
+       ],
+       "key": [
+        "nfc_and_payment_screen/use_nfc"
+       ],
+       "sensitivity": [
+        "REQUIRES_CONFIRMATION"
+       ]
+      },
+      {
+       "writable": [
+        false
+       ],
+       "hintText": [
+        "Preconditions to accessing: The device must support the require device unlock for NFC payments feature.\nThis is permanently unavailable on this device due to: Require device unlock for NFC payments is not supported on this device.\nSetting this preference is permanently unavailable on this device due to: Require device unlock for NFC payments is not supported on this device."
+       ],
+       "possibleValues": [
+        "itemization:AnyBoolean"
+       ],
+       "purpose": [
+        "Require device to be unlocked to use NFC"
+       ],
+       "key": [
+        "nfc_and_payment_screen/require_device_unlock_for_nfc"
+       ],
+       "sensitivity": [
+        "REQUIRES_CONFIRMATION"
+       ]
+      }
+     ],
+     "itemizationTypes": [],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=nfc_and_payment_screen;end"
+     ]
+    },
+    {
+     "description": [
+      "Wi\u2011Fi hotspot. Allows users to configure and manage the Wi-Fi hotspot settings for their device, including the network name, password, and security protocol. Preconditions to accessing: Data saver must be turned off and this setting must not be restricted by a device administrator."
+     ],
+     "deviceStateItemsMetadata": [
+      {
+       "writable": [
+        true
+       ],
+       "hintText": [
+        "Preconditions to accessing: Wifi hotspot must be enabled."
+       ],
+       "possibleValues": [
+        "BOOL"
+       ],
+       "purpose": [
+        "Whether the Wi-Fi hotspot is currently enabled"
+       ],
+       "key": [
+        "wifi_tether/use_wifi_hotspot"
+       ],
+       "sensitivity": [
+        "MUST_PROVIDE_UNDO"
+       ]
+      },
+      {
+       "writable": [
+        false
+       ],
+       "hintText": [
+        "Preconditions to accessing: The device must support wifi hotspot."
+       ],
+       "possibleValues": [
+        "STRING"
+       ],
+       "purpose": [
+        "The broadcast name (SSID) of the Wi-Fi hotspot"
+       ],
+       "key": [
+        "wifi_tether/wifi_tether_network_name"
+       ]
+      },
+      {
+       "writable": [
+        true
+       ],
+       "possibleValues": [
+        "BOOL"
+       ],
+       "purpose": [
+        "Whether the hotspot automatically turns off when no devices are connected"
+       ],
+       "key": [
+        "wifi_tether/wifi_tether_auto_turn_off"
+       ]
+      }
+     ],
+     "itemizationTypes": [],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=wifi_tether;end"
+     ]
+    },
+    {
+     "description": [
+      "Displays information about the battery, including the date the battery was manufactured, the date the battery was first used, and the battery charge cycle count. Preconditions to accessing: The battery settings provider must provide the battery information feature.. This is permanently unavailable on this device due to: The battery information feature is not enabled."
+     ],
+     "deviceStateItemsMetadata": [
+      {
+       "writable": [
+        false
+       ],
+       "hintText": [
+        "Preconditions to accessing: The battery settings provider must provide the battery information feature.\nThis is permanently unavailable on this device due to: The battery information feature is not enabled.\nSetting this preference is permanently unavailable on this device due to: The battery information feature is not enabled."
+       ],
+       "possibleValues": [
+        "itemization:Date"
+       ],
+       "purpose": [
+        "Displays the date the battery was manufactured."
+       ],
+       "key": [
+        "battery_info_screen/battery_info_manufacture_date"
+       ]
+      },
+      {
+       "writable": [
+        false
+       ],
+       "hintText": [
+        "Preconditions to accessing: The battery settings provider must provide the battery information feature.\nThis is permanently unavailable on this device due to: The battery information feature is not enabled.\nSetting this preference is permanently unavailable on this device due to: The battery information feature is not enabled."
+       ],
+       "possibleValues": [
+        "itemization:Date"
+       ],
+       "purpose": [
+        "Displays the date the battery was first used."
+       ],
+       "key": [
+        "battery_info_screen/battery_info_first_use_date"
+       ]
+      }
+     ],
+     "itemizationTypes": [],
+     "intentUri": [
+      "intent:#Intent;action=com.android.settings.action.LAUNCH_SETTINGS_PAGES;package=com.android.settings;S.screen_key=battery_info_screen;end"
+     ]
+    }
+   ],
+   "itemizationTypes": [
+    {
+     "hintText": [
+      "Options for dark theme mode"
+     ],
+     "values": [
+      {
+       "key": [
+        "0"
+       ],
+       "value": [
+        "Standard"
+       ]
+      },
+      {
+       "key": [
+        "1"
+       ],
+       "value": [
+        "Expanded"
+       ]
+      }
+     ],
+     "key": [
+      "CustomEnum:com.android.settings.display.darkmode.DarkThemeMode"
+     ]
+    },
+    {
+     "hintText": [
+      "A time of day defined by the 24-hour format HH:mm."
+     ],
+     "values": [],
+     "key": [
+      "TimeOfDay"
+     ]
+    },
+    {
+     "hintText": [
+      "Country code of the chosen region"
+     ],
+     "values": [
+      {
+       "key": [
+        "DM"
+       ],
+       "value": [
+        "Dominica"
+       ]
+      },
+      {
+       "key": [
+        "TV"
+       ],
+       "value": [
+        "Tuvalu"
+       ]
+      },
+      {
+       "key": [
+        "SA"
+       ],
+       "value": [
+        "Saudi Arabia"
+       ]
+      },
+      {
+       "key": [
+        "GG"
+       ],
+       "value": [
+        "Guernsey"
+       ]
+      },
+      {
+       "key": [
+        "NU"
+       ],
+       "value": [
+        "Niue"
+       ]
+      },
+      {
+       "key": [
+        "ZA"
+       ],
+       "value": [
+        "South Africa"
+       ]
+      },
+      {
+       "key": [
+        "MO"
+       ],
+       "value": [
+        "Macao"
+       ]
+      },
+      {
+       "key": [
+        "CZ"
+       ],
+       "value": [
+        "Czechia"
+       ]
+      },
+      {
+       "key": [
+        "SX"
+       ],
+       "value": [
+        "Sint Maarten"
+       ]
+      },
+      {
+       "key": [
+        "AS"
+       ],
+       "value": [
+        "American Samoa"
+       ]
+      }
+     ],
+     "key": [
+      "SystemRegionCountryCode"
+     ]
+    },
+    {
+     "hintText": [
+      "An ID of a network subscription"
+     ],
+     "values": [
+      {
+       "key": [
+        "1"
+       ],
+       "value": [
+        "<external_data>T-Mobile</external_data>"
+       ]
+      }
+     ],
+     "key": [
+      "SubscriptionId_ActiveOnly"
+     ]
+    },
+    {
+     "hintText": [
+      "A boolean value."
+     ],
+     "values": [
+      {
+       "key": [
+        "false"
+       ],
+       "value": [
+        "False"
+       ]
+      },
+      {
+       "key": [
+        "true"
+       ],
+       "value": [
+        "True"
+       ]
+      }
+     ],
+     "key": [
+      "AnyBoolean"
+     ]
+    }
+   ]
+  }
+ ]
+}

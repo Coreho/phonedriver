@@ -1,8 +1,8 @@
 ---
 title: How to control the iOS Simulator with phonedriver
 nav: iOS Simulator
-meta: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode and XcodeGen. Covers the runner build and tap latency.
-description: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode and XcodeGen. Covers the first-run runner build and the Simulator's tap latency.
+meta: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode. Covers the runner build and tap latency.
+description: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode. Covers the first-run runner build and the Simulator's tap latency.
 seo: How to let an AI agent control the iOS Simulator over MCP
 updated: 2026-11-14
 ---
@@ -13,7 +13,7 @@ The iOS Simulator is a tested target: the 12-scenario suite passes on iOS 26.5, 
 
 ## What you need
 
-A Mac with Xcode (I use Xcode 27) and XcodeGen (`brew install xcodegen`). There is no Android toolchain involved: the iOS-only build (`--no-default-features`) skips it.
+A Mac with Xcode 15 or later (I use Xcode 27). There is no Android toolchain involved: the iOS-only build (`--no-default-features`) skips it.
 
 ## Boot a Simulator
 
@@ -43,7 +43,7 @@ A tap on the iOS 26.5 Simulator takes 357 ms, against 80 ms for the Simulator's 
 
 ## If it does not work
 
-Run `phonedriver doctor`. It checks Xcode, XcodeGen and the booted simulators. With a booted Simulator and an iPhone that has no signing team, the Simulator is the default device. More in [troubleshooting](/docs/troubleshooting/).
+Run `phonedriver doctor`. It checks Xcode and the booted simulators. With a booted Simulator and an iPhone that has no signing team, the Simulator is the default device. More in [troubleshooting](/docs/troubleshooting/).
 
 ## Questions
 
@@ -53,7 +53,7 @@ Yes. Boot a Simulator, run `claude mcp add phonedriver -- npx -y phonedriver mcp
 
 ### Do I need idb or WebDriverAgent?
 
-No. phonedriver builds its own XCTest runner with Xcode and XcodeGen the first time it is needed. Its sources are inside the phonedriver binary, so nothing is downloaded.
+No. phonedriver builds its own XCTest runner with Xcode the first time it is needed. Its sources are inside the phonedriver binary, so nothing is downloaded.
 
 ### Can I install my app on the Simulator with it?
 

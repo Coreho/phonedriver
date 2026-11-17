@@ -29,6 +29,14 @@ phonedriver를 사용하면 Claude Code, Codex, Cursor 등 모든 MCP 클라이�
 ## 시작하기
 
 ```sh
+npx -y phonedriver init
+```
+
+이 명령은 컴퓨터에서 찾은 모든 에이전트(Claude Code, Codex, Cursor, VS Code, Gemini CLI)에 phonedriver를 추가한 다음, adb와 기기, Xcode를 확인하고 고칠 점을 알려 줍니다. 이미 추가된 에이전트는 그대로 둡니다. `--dry-run`을 붙이면 무엇을 할지만 보여 줍니다.
+
+에이전트 하나에만 직접 추가하려면:
+
+```sh
 claude mcp add phonedriver -- npx -y phonedriver mcp
 ```
 
@@ -78,7 +86,7 @@ Android 에뮬레이터를 실행하거나, USB 디버깅을 켠 Android 스마�
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings)
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"
@@ -92,7 +100,7 @@ app com.android.settings (Settings) · keyboard hidden · settled in 0ms
 
 ```console
 $ phonedriver tap @e24
-ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms
+ok tapped @e24 "Dark theme"
 ~ @e23 button "Dark theme" "Will turn on when Bedtime starts" → "Will never turn off automatically"
 ~ @e24 switch "Dark theme" off → on
 ```
@@ -132,7 +140,7 @@ Android에서는 설치할 앱이 없습니다. phonedriver는 연결할 때 adb
 
 설정이 끝나면 케이블을 뺄 수 있습니다. iPhone은 `phonedriver ios wifi on`을 실행한 뒤 케이블을 뽑습니다. Mac과 같은 Wi-Fi 네트워크에 있는 동안은 `phonedriver devices`에 계속 표시됩니다. Android 스마트폰은 `phonedriver pair` 또는 `phonedriver untether`로 같은 일을 할 수 있습니다([Android over Wi-Fi](docs/reference.md#android-over-wi-fi)). 스마트폰이 멀리 있을 때, 예를 들어 터널이나 모바일 네트워크를 쓸 때는 phonedriver가 더 작은 화면 스트림과 압축한 화면 트리를 보냅니다. 3G로 제한한 링크에서 에뮬레이터의 탭 중앙값은 1.4 s였고, 이전에는 2.8 s였습니다.
 
-Android 13 이상에서는 에이전트가 숨겨진 두 번째 화면에서 작업할 수 있으므로, 사용자의 화면은 그대로 사용자의 것으로 남습니다. MCP 설정에서 `PHONEDRIVER_DISPLAY=hidden`을 설정하거나 CLI에 `--display hidden`을 전달하세요. 에뮬레이터와 HONOR X8(Android 13)에서 테스트했습니다. 앱 자체 입력란에 입력하면 사용자의 화면에 아무 흔적도 남지 않습니다. 웹 페이지에 입력하면 시스템의 클립보드 안내가 표시되고, 이후 클립보드는 원래대로 복원됩니다.
+Android 13 이상에서는 에이전트가 숨겨진 두 번째 화면에서 작업할 수 있으므로, 사용자의 화면은 그대로 사용자의 것으로 남습니다. MCP 설정에서 `PHONEDRIVER_DISPLAY=hidden`을 설정하거나 CLI에 `--display hidden`을 전달하세요. 에뮬레이터와 HONOR X8(Android 13)에서 테스트했습니다. 휴대폰은 잠금 해제되어 있어야 합니다. 잠겨 있으면 숨겨진 화면에도 잠금 화면이 표시되므로, phonedriver는 휴대폰이 잠겨 있다고 알리고 휴대폰을 깨우지 않습니다. 에이전트가 작업하는 동안 phonedriver는 휴대폰 자체 화면을 켜 두므로, 작업 중에 휴대폰이 잠기지 않습니다. `phonedriver release`를 실행하면 다시 절전 모드로 들어갈 수 있습니다. 앱 자체 입력란에 입력하면 사용자의 화면에 아무 흔적도 남지 않습니다. 웹 페이지에 입력하면 시스템의 클립보드 안내가 표시되고, 이후 클립보드는 원래대로 복원됩니다.
 
 MCP 서버에는 도구가 14개 있습니다. `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`입니다. `snapshot`, `screenshot`, `wait`는 읽기 전용으로 표시되어 있으므로 클라이언트는 권한 프롬프트 없이 실행할 수 있습니다. `phonedriver` CLI에도 같은 명령이 있어, 스크립트나 셸을 선호하는 에이전트에서 쓸 수 있습니다. 터미널에서 사용한 기기는 30초 동안 유휴 상태이면 에이전트에게 넘어갑니다.
 

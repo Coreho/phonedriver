@@ -247,3 +247,20 @@ async fn typing_on_the_hidden_display_sets_the_field_so_the_phone_shows_no_clipb
         "set on a web field falls back to select-all and paste, which would replace what it holds"
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_locked_phone_fails_needs_user_on_the_hidden_display_and_nothing_is_swiped() {
+    let (d, source, _home) = setup(true);
+    let hidden = source.hidden.as_ref().unwrap();
+    hidden.set_screen(phonedriver_core::device::ScreenState {
+        on: true,
+        locked: true,
+        secure: false,
+        focused: true,
+    });
+    let tap = json!({"display": "hidden", "action": {"kind": "tap", "target": {"point": {"x": 10.0, "y": 10.0}}}});
+    let e = d.call("default", "act", tap).await.unwrap_err();
+    assert_eq!(e.code, -32005, "{e:?}");
+    assert_eq!(e.data["action"]["kind"], "unlock_device", "{e:?}");
+    assert_eq!(hidden.calls(), vec![]);
+}

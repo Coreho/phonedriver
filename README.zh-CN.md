@@ -29,6 +29,14 @@ phonedriver 让 Claude Code、Codex、Cursor 或任何 MCP 客户端都能使用
 ## 开始
 
 ```sh
+npx -y phonedriver init
+```
+
+这条命令会把 phonedriver 添加到它在你电脑上找到的每个智能体（Claude Code、Codex、Cursor、VS Code、Gemini CLI），然后检查 adb、你的设备和 Xcode，并告诉你需要修复什么。已经添加过的智能体不会被改动。加上 `--dry-run` 只显示它将要做什么。
+
+只给某一个智能体手动添加：
+
+```sh
 claude mcp add phonedriver -- npx -y phonedriver mcp
 ```
 
@@ -78,7 +86,7 @@ token 是智能体用量上限所消耗的单位。我用 Claude Sonnet 5.5 和�
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings)
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"
@@ -92,7 +100,7 @@ app com.android.settings (Settings) · keyboard hidden · settled in 0ms
 
 ```console
 $ phonedriver tap @e24
-ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms
+ok tapped @e24 "Dark theme"
 ~ @e23 button "Dark theme" "Will turn on when Bedtime starts" → "Will never turn off automatically"
 ~ @e24 switch "Dark theme" off → on
 ```
@@ -132,7 +140,7 @@ ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms
 
 设置完成后可以拔掉数据线。对 iPhone，运行 `phonedriver ios wifi on` 然后拔线；只要它和 Mac 在同一个 Wi-Fi 网络中，就会一直出现在 `phonedriver devices` 里。对 Android 手机，用 `phonedriver pair` 或 `phonedriver untether` 也能做到（[Android over Wi-Fi](docs/reference.md#android-over-wi-fi)）。当手机离得很远，比如走隧道或移动网络时，phonedriver 会发送更小的屏幕流和压缩过的屏幕树。在限速到 3G 的链路上，模拟器上的点击中位耗时是 1.4 s，原先是 2.8 s。
 
-在 Android 13 及更高版本上，智能体可以在一个隐藏的第二屏幕上工作，所以你自己的屏幕仍归你使用。在 MCP 配置中设置 `PHONEDRIVER_DISPLAY=hidden`，或者给 CLI 传 `--display hidden`。已在模拟器和一部 HONOR X8（Android 13）上测试过。向应用自己的输入框输入文字，不会在你的屏幕上留下痕迹。向网页输入文字时，系统会显示剪贴板提示，之后你的剪贴板会被还原。
+在 Android 13 及更高版本上，智能体可以在一个隐藏的第二屏幕上工作，所以你自己的屏幕仍归你使用。在 MCP 配置中设置 `PHONEDRIVER_DISPLAY=hidden`，或者给 CLI 传 `--display hidden`。已在模拟器和一部 HONOR X8（Android 13）上测试过。手机需要处于解锁状态：锁定时隐藏屏幕上显示的也是锁屏，phonedriver 会说明手机已锁定，并且不会唤醒手机。智能体工作期间，phonedriver 会让手机自己的屏幕保持亮着，所以手机不会在智能体工作时锁定；`phonedriver release` 之后它会照常休眠。向应用自己的输入框输入文字，不会在你的屏幕上留下痕迹。向网页输入文字时，系统会显示剪贴板提示，之后你的剪贴板会被还原。
 
 MCP 服务器有 14 个工具：`devices`、`apps`、`snapshot`、`screenshot`、`tap`、`type`、`swipe`、`scroll`、`press`、`launch`、`wait`、`batch`、`clipboard` 和 `shell`。`snapshot`、`screenshot` 和 `wait` 被标记为只读，所以客户端可以不经权限提示就运行它们。`phonedriver` CLI 有同样的命令，供脚本和更喜欢用 shell 的智能体使用。你在终端里用过的设备，空闲 30 秒后会交给你的智能体。
 

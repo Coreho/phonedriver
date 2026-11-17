@@ -236,7 +236,7 @@ async fn typing_into_a_web_field_that_the_page_swaps_for_another_lands_in_the_ne
     let r = rig.json(&["type", "Grace Hopper", "--into", "Search"]);
     assert_eq!(r["verified"], true, "{r}");
     assert!(
-        r["summary"].as_str().unwrap().contains("typed 12 chars"),
+        r["summary"].as_str().unwrap().starts_with("typed into @"),
         "{r}"
     );
     let log = testbed::wait_for_log(&rig.adb, &rig.serial, 3000, |l| {

@@ -463,3 +463,42 @@ async fn set_into_a_field_that_refuses_set_text_selects_all_and_pastes_over_it()
         "{log:?}"
     );
 }
+
+/// The power service's last user activity on the phone's own screen, in ms of uptime, counting activity that leaves the
+/// screen's brightness as it is.
+async fn last_user_activity(raw: &agent::RawAgent) -> u64 {
+    let out = raw.adb.shell(&raw.serial, "dumpsys power").await.unwrap();
+    out.stdout_text()
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim();
+            ["lastUserActivityTime", "mLastUserActivityTime"]
+                .iter()
+                .find_map(|k| l.strip_prefix(k))
+                .map(|rest| rest.strip_prefix("NoChangeLights").unwrap_or(rest))
+                .and_then(|rest| rest.strip_prefix('='))
+        })
+        .filter_map(|v| v.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok())
+        .max()
+        .expect("dumpsys power names the last user activity")
+}
+
+#[tokio::test]
+#[ignore = "needs PHONEDRIVER_TEST_DEVICE, unlocked with its screen on"]
+async fn a_phone_in_use_has_its_screen_timeout_reset_every_ten_seconds() {
+    let _g = agent::exclusive().await;
+    let raw = agent::launch(&support::adb(), &support::serial()).await;
+    let mut c = raw.control().await;
+    let state = c.ok(json!({"op":"state"})).await;
+    assert!(
+        state["screen_on"] == true && state["locked"] == false,
+        "needs an unlocked phone with its screen on: {state}"
+    );
+    let before = last_user_activity(&raw).await;
+    tokio::time::sleep(Duration::from_secs(12)).await;
+    let after = last_user_activity(&raw).await;
+    assert!(
+        after > before,
+        "no user activity in 12 s with a host connected: {before} then {after}"
+    );
+}

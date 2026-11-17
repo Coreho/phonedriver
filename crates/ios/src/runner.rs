@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use phonedriver_core::error::{Error, Op, UserAction};
 use serde::Deserialize;
@@ -23,6 +23,9 @@ pub const VERSION: &str = "0.1.0";
 pub const PORT_BASE: u16 = 27753;
 const PORT_COUNT: u16 = 32;
 const READY_WAIT: Duration = Duration::from_secs(60);
+/// A Simulator just booted on a CI machine took 26 s to start the runner and 41 s for SpringBoard's first answer
+/// (GitHub's macOS runner, 2026-11-17), so the Simulator gets longer; a runner that exits is still seen at once.
+const SIMULATOR_READY_WAIT: Duration = Duration::from_secs(180);
 const POLL: Duration = Duration::from_millis(100);
 const CONNECT_WAIT: Duration = Duration::from_millis(300);
 const HELLO_WAIT: Duration = Duration::from_secs(2);
@@ -31,8 +34,14 @@ const MAX_FRAME: usize = 64 << 20;
 /// The runner's sources, built into the binary so the daemon can build the runner wherever it runs.
 pub const SOURCES: &[(&str, &str)] = &[
     (
-        "project.yml",
-        include_str!("../../../ios-runner/project.yml"),
+        "PhonedriverRunner.xcodeproj/project.pbxproj",
+        include_str!("../../../ios-runner/PhonedriverRunner.xcodeproj/project.pbxproj"),
+    ),
+    (
+        "PhonedriverRunner.xcodeproj/xcshareddata/xcschemes/PhonedriverRunner.xcscheme",
+        include_str!(
+            "../../../ios-runner/PhonedriverRunner.xcodeproj/xcshareddata/xcschemes/PhonedriverRunner.xcscheme"
+        ),
     ),
     (
         "PrivateHeaders/XCTestPrivate.h",
@@ -241,12 +250,14 @@ pub struct Build {
 
 static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Builds the runner for the Simulator once per source hash, under `<home>/runner/<hash>`, and removes older builds.
+/// Builds the runner for the Simulator once per source hash, under `<home>/runner/<hash>`, and removes the builds
+/// of other sources.
 pub async fn build(home: &Path) -> Result<Build> {
     build_for(home, None).await
 }
 
-/// With `team`, builds for physical devices signed with that Apple developer team, under `<home>/runner/<hash>-device`.
+/// With `team`, builds for physical devices signed with that Apple developer team, under `<home>/runner/<hash>-device`,
+/// and builds again when the signing profile of that build has run out.
 pub async fn build_for(home: &Path, team: Option<&str>) -> Result<Build> {
     build_signed(home, team, None).await
 }
@@ -267,7 +278,7 @@ async fn build_signed(home: &Path, team: Option<&str>, register: Option<&str>) -
     });
     let products = dir.join("dd").join("Build").join("Products");
     if register.is_none()
-        && let Some(xctestrun) = find_xctestrun(&products)
+        && let Some(xctestrun) = reusable(&products, team.is_some(), SystemTime::now())
     {
         return Ok(Build {
             xctestrun,
@@ -288,17 +299,6 @@ async fn build_signed(home: &Path, team: Option<&str>, register: Option<&str>) -
         std::fs::write(&file, text).map_err(io)?;
     }
     let log = dir.join("build.log");
-    let xcodegen = find_tool("xcodegen").ok_or_else(|| Error::Transport {
-        detail: "xcodegen is not installed; install it with `brew install xcodegen`".into(),
-    })?;
-    run_logged(
-        Command::new(xcodegen)
-            .args(["generate", "--quiet"])
-            .current_dir(&src),
-        &log,
-        "xcodegen generate",
-    )
-    .await?;
     let arch = if cfg!(target_arch = "aarch64") {
         "arm64"
     } else {
@@ -350,17 +350,72 @@ async fn build_signed(home: &Path, team: Option<&str>, register: Option<&str>) -
             products.display()
         ),
     })?;
-    for entry in std::fs::read_dir(&root).into_iter().flatten().flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name != hash && name.len() == 16 && name.chars().all(|c| c.is_ascii_hexdigit()) {
-            let _ = std::fs::remove_dir_all(entry.path());
-        }
+    for stale in stale_builds(&root, &hash) {
+        let _ = std::fs::remove_dir_all(stale);
     }
     Ok(Build {
         xctestrun,
         hash,
         built: true,
     })
+}
+
+/// Where a device build keeps its signing profile, under its build products.
+pub const DEVICE_PROFILE: &str =
+    "Debug-iphoneos/PhonedriverRunner-Runner.app/embedded.mobileprovision";
+
+/// The `ExpirationDate` of a signing profile as the file writes it, `2027-11-12T20:35:22Z`. The file is a signed
+/// envelope with its property list inside as plain text.
+pub fn profile_expiry(profile: &Path) -> Option<String> {
+    let bytes = std::fs::read(profile).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
+    let after = text.split("<key>ExpirationDate</key>").nth(1)?;
+    let date = after.split("<date>").nth(1)?.split("</date>").next()?;
+    Some(date.to_string())
+}
+
+fn unix_seconds(date: &str) -> Option<u64> {
+    let (day, time) = date.strip_suffix('Z')?.split_once('T')?;
+    let mut ymd = day.split('-').map(|n| n.parse::<i64>().ok());
+    let (y, m, d) = (ymd.next()??, ymd.next()??, ymd.next()??);
+    let mut hms = time.split(':').map(|n| n.parse::<i64>().ok());
+    let (h, min, sec) = (hms.next()??, hms.next()??, hms.next()??);
+    let y = if m <= 2 { y - 1 } else { y };
+    let year_of_era = y.rem_euclid(400);
+    let day_of_year = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = y.div_euclid(400) * 146_097 + day_of_era - 719_468;
+    u64::try_from(days * 86_400 + h * 3600 + min * 60 + sec).ok()
+}
+
+/// True when `date`, a profile's `ExpirationDate`, is `now` or earlier.
+pub fn expired(date: &str, now: SystemTime) -> bool {
+    let now = now.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    unix_seconds(date).is_some_and(|end| now >= end)
+}
+
+/// The build under `products`, unless it is signed and its profile has run out. A free Apple ID's profile lasts
+/// seven days and a paid team's a year; building again signs the runner with a new one.
+fn reusable(products: &Path, signed: bool, now: SystemTime) -> Option<PathBuf> {
+    let xctestrun = find_xctestrun(products)?;
+    let run_out = signed
+        && profile_expiry(&products.join(DEVICE_PROFILE)).is_some_and(|date| expired(&date, now));
+    (!run_out).then_some(xctestrun)
+}
+
+/// The builds under `root` made from other sources than `hash`, for the Simulator and for devices.
+fn stale_builds(root: &Path, hash: &str) -> Vec<PathBuf> {
+    std::fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let sources = name.strip_suffix("-device").unwrap_or(&name);
+            sources != hash && sources.len() == 16 && sources.chars().all(|c| c.is_ascii_hexdigit())
+        })
+        .map(|entry| entry.path())
+        .collect()
 }
 
 fn find_xctestrun(products: &Path) -> Option<PathBuf> {
@@ -514,12 +569,7 @@ impl Runner {
         let err = file.try_clone().map_err(|e| Error::Transport {
             detail: format!("cannot write {}: {e}", log.display()),
         })?;
-        let mut child = Command::new("xcodebuild")
-            .arg("test-without-building")
-            .arg("-xctestrun")
-            .arg(&build.xctestrun)
-            .args(["-destination", &format!("id={udid}")])
-            .args(["-test-timeouts-enabled", "NO"])
+        let mut child = test_without_building(&build.xctestrun, udid, home)
             .env("TEST_RUNNER_PHONEDRIVER_PORT", port.to_string())
             .env("TEST_RUNNER_PHONEDRIVER_BUILD", &build.hash)
             .stdin(std::process::Stdio::null())
@@ -530,7 +580,7 @@ impl Runner {
             .map_err(|e| Error::Transport {
                 detail: format!("cannot run xcodebuild: {e}"),
             })?;
-        let deadline = Instant::now() + READY_WAIT;
+        let deadline = Instant::now() + SIMULATOR_READY_WAIT;
         loop {
             if let Ok(client) = Client::connect(port, &device).await
                 && let Ok(Ok(hello)) = timeout(HELLO_WAIT, client.hello()).await
@@ -554,7 +604,7 @@ impl Runner {
             }
             if Instant::now() >= deadline {
                 return Err(Error::Timeout {
-                    waited_ms: READY_WAIT.as_millis() as u32,
+                    waited_ms: SIMULATOR_READY_WAIT.as_millis() as u32,
                     condition: format!(
                         "the runner to answer on port {port}; see {}",
                         log.display()
@@ -581,6 +631,25 @@ fn blocked(log: &str) -> Option<UserAction> {
 
 /// The runner's fixed port on a device; the host reaches it through usbmuxd, so nothing is claimed on the Mac.
 pub const DEVICE_PORT: u16 = PORT_BASE;
+
+/// `xcodebuild test-without-building`, which runs the runner, for `xctestrun` on `udid`. Xcode otherwise leaves a new
+/// folder in its own DerivedData at every start, and when the runner is stopped it gathers 120 to 250 MB of the
+/// Simulator's system logs into it; here the logs go under `home`, replaced at every start, and none are gathered.
+fn test_without_building(xctestrun: &Path, udid: &str, home: &Path) -> Command {
+    let logs = home.join("runner").join(format!("{udid}.dd"));
+    let _ = std::fs::remove_dir_all(&logs);
+    let mut xcodebuild = Command::new("xcodebuild");
+    xcodebuild
+        .arg("test-without-building")
+        .arg("-xctestrun")
+        .arg(xctestrun)
+        .args(["-destination", &format!("id={udid}")])
+        .args(["-test-timeouts-enabled", "NO"])
+        .args(["-collect-test-diagnostics", "never"])
+        .arg("-derivedDataPath")
+        .arg(logs);
+    xcodebuild
+}
 
 impl Runner {
     /// Starts the runner on a attached device with `xcodebuild test-without-building` (signed build from
@@ -622,12 +691,7 @@ impl Runner {
         };
         let file = std::fs::File::create(&log).map_err(io)?;
         let err = file.try_clone().map_err(io)?;
-        let mut child = Command::new("xcodebuild")
-            .arg("test-without-building")
-            .arg("-xctestrun")
-            .arg(&build.xctestrun)
-            .args(["-destination", &format!("id={udid}")])
-            .args(["-test-timeouts-enabled", "NO"])
+        let mut child = test_without_building(&build.xctestrun, udid, home)
             .env("TEST_RUNNER_PHONEDRIVER_PORT", DEVICE_PORT.to_string())
             .env("TEST_RUNNER_PHONEDRIVER_BUILD", &build.hash)
             .env("TEST_RUNNER_PHONEDRIVER_UDID", udid)
@@ -679,6 +743,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_project_builds_every_source_file_the_binary_carries() {
+        let (_, project) = SOURCES
+            .iter()
+            .find(|(path, _)| path.ends_with("project.pbxproj"))
+            .unwrap();
+        for (path, _) in SOURCES.iter().filter(|(p, _)| p.starts_with("Runner/")) {
+            let name = path.trim_start_matches("Runner/");
+            let listed = if name.ends_with(".m") {
+                format!("/* {name} in Sources */")
+            } else {
+                format!("path = {name};")
+            };
+            assert!(project.contains(&listed), "{path} is not in the project");
+        }
+    }
+
+    #[test]
     fn an_unregistered_or_locked_device_in_the_log_is_a_user_action_and_a_clean_log_is_not() {
         let unregistered = "Failed to install embedded profile for dev.phonedriver.runner.xctrunner : 0xe8008012 (This provisioning profile cannot be installed on this device.)";
         assert_eq!(blocked(unregistered), Some(UserAction::RegisterDevice));
@@ -690,14 +771,91 @@ mod tests {
         );
     }
 
+    const PROFILE: &str = "Debug-iphoneos/PhonedriverRunner-Runner.app/embedded.mobileprovision";
+
+    fn products_with_profile(expires: Option<&str>) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Runner_iphoneos27.0-arm64.xctestrun"), "").unwrap();
+        if let Some(expires) = expires {
+            let profile = dir.path().join(PROFILE);
+            std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+            let mut bytes = vec![0x30, 0x82, 0xff, 0xfe, 0x06, 0x09];
+            bytes.extend_from_slice(
+                format!("<plist><dict>\n\t<key>ExpirationDate</key>\n\t<date>{expires}</date>\n</dict></plist>")
+                    .as_bytes(),
+            );
+            bytes.extend_from_slice(&[0xa0, 0x82, 0x00, 0xff]);
+            std::fs::write(profile, bytes).unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn a_date_in_a_profile_is_read_as_seconds_since_1970() {
+        assert_eq!(unix_seconds("2027-11-12T20:35:22Z"), Some(1_826_051_722));
+        assert_eq!(unix_seconds("2024-02-29T23:59:59Z"), Some(1_709_251_199));
+        assert_eq!(unix_seconds("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(unix_seconds("next week"), None);
+    }
+
+    #[test]
+    fn a_signed_build_is_used_again_until_its_profile_runs_out() {
+        let at = |secs: u64| std::time::UNIX_EPOCH + Duration::from_secs(secs);
+        let week = products_with_profile(Some("2026-11-16T00:00:00Z"));
+        assert_eq!(
+            profile_expiry(&week.path().join(PROFILE)).as_deref(),
+            Some("2026-11-16T00:00:00Z")
+        );
+        assert!(reusable(week.path(), true, at(1_794_787_199)).is_some());
+        assert!(reusable(week.path(), true, at(1_794_787_200)).is_none());
+        assert!(
+            reusable(week.path(), false, at(1_794_787_200)).is_some(),
+            "a Simulator build is not signed"
+        );
+        let unreadable = products_with_profile(None);
+        assert!(reusable(unreadable.path(), true, at(1_794_787_200)).is_some());
+        assert!(reusable(&unreadable.path().join("missing"), true, at(0)).is_none());
+    }
+
+    #[test]
+    fn builds_of_other_sources_are_stale_for_the_simulator_and_for_devices() {
+        let root = tempfile::tempdir().unwrap();
+        for name in [
+            "0f8c198b18fb0011",
+            "0f8c198b18fb0011-device",
+            "4aa8a282c62f4dee",
+            "4aa8a282c62f4dee-device",
+            "00008110-001E04900239801E.log",
+            "notes",
+        ] {
+            std::fs::create_dir(root.path().join(name)).unwrap();
+        }
+        let mut stale: Vec<String> = stale_builds(root.path(), "4aa8a282c62f4dee")
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        stale.sort();
+        assert_eq!(stale, ["0f8c198b18fb0011", "0f8c198b18fb0011-device"]);
+    }
+
     #[test]
     fn every_runner_source_file_is_embedded() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ios-runner");
-        let mut on_disk = vec!["project.yml".to_string()];
-        for dir in ["Runner", "PrivateHeaders"] {
+        fn walk(root: &Path, dir: &str, out: &mut Vec<String>) {
             for e in std::fs::read_dir(root.join(dir)).unwrap().flatten() {
-                on_disk.push(format!("{dir}/{}", e.file_name().to_string_lossy()));
+                let name = format!("{dir}/{}", e.file_name().to_string_lossy());
+                if e.path().is_dir() {
+                    if !name.ends_with("/xcuserdata") && !name.ends_with("/project.xcworkspace") {
+                        walk(root, &name, out);
+                    }
+                } else {
+                    out.push(name);
+                }
             }
+        }
+        let mut on_disk = Vec::new();
+        for dir in ["Runner", "PrivateHeaders", "PhonedriverRunner.xcodeproj"] {
+            walk(&root, dir, &mut on_disk);
         }
         on_disk.sort();
         let mut embedded: Vec<String> = SOURCES.iter().map(|(p, _)| p.to_string()).collect();

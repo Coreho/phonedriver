@@ -47,7 +47,7 @@ Boot a device, then ask Claude Code in plain language:
 Claude Code calls the tools, for example `launch`, `swipe` and `tap`. Each reply is plain text. The tap that turns the switch on returns this on the iOS Simulator:
 
 ```screen
-ok tapped @e41 "Dark Appearance" at 337,198 · settled in 607ms
+ok tapped @e41 "Dark Appearance"
 - @e65 @e66 @e67
 ~ @e41 switch "Dark Appearance" off → on
 + @e68 button "L4S"

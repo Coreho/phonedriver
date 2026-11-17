@@ -29,6 +29,14 @@ phonedriver は、Claude Code、Codex、Cursor、その他あらゆる MCP ク�
 ## 始め方
 
 ```sh
+npx -y phonedriver init
+```
+
+このコマンドは、お使いのコンピューターで見つけたすべてのエージェント（Claude Code、Codex、Cursor、VS Code、Gemini CLI）に phonedriver を追加し、続いて adb、デバイス、Xcode を確認して、直すべき点を伝えます。すでに追加済みのエージェントには手を加えません。`--dry-run` を付けると、何をするかだけを表示します。
+
+エージェントを 1 つだけ手動で追加する場合:
+
+```sh
 claude mcp add phonedriver -- npx -y phonedriver mcp
 ```
 
@@ -78,7 +86,7 @@ Android エミュレーターを起動するか、USB デバッグを有効に�
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden · settled in 0ms
+app com.android.settings (Settings)
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"
@@ -92,7 +100,7 @@ app com.android.settings (Settings) · keyboard hidden · settled in 0ms
 
 ```console
 $ phonedriver tap @e24
-ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms
+ok tapped @e24 "Dark theme"
 ~ @e23 button "Dark theme" "Will turn on when Bedtime starts" → "Will never turn off automatically"
 ~ @e24 switch "Dark theme" off → on
 ```
@@ -132,7 +140,7 @@ Android にはインストールするアプリはありません。phonedriver 
 
 セットアップ後は、ケーブルを外せます。iPhone では、`phonedriver ios wifi on` を実行してからケーブルを抜きます。Mac と同じ Wi-Fi ネットワークにある間は、`phonedriver devices` に表示され続けます。Android スマートフォンでは、`phonedriver pair` または `phonedriver untether` で同じことができます（[Android over Wi-Fi](docs/reference.md#android-over-wi-fi)）。スマートフォンが遠くにある場合、たとえばトンネルやモバイルネットワーク経由のときは、phonedriver は小さめの画面ストリームと圧縮した画面ツリーを送ります。3G に制限した回線では、エミュレーターでのタップの中央値は 1.4 s で、以前は 2.8 s でした。
 
-Android 13 以降では、エージェントは非表示の 2 つ目の画面で作業できます。そのため、あなた自身の画面はそのまま使えます。MCP 設定で `PHONEDRIVER_DISPLAY=hidden` を設定するか、CLI に `--display hidden` を渡します。エミュレーターと HONOR X8（Android 13）でテストしています。アプリ自身の入力欄への入力は、あなたの画面に何も残しません。Web ページへの入力では、システムのクリップボードの通知が表示され、その後クリップボードは元に戻されます。
+Android 13 以降では、エージェントは非表示の 2 つ目の画面で作業できます。そのため、あなた自身の画面はそのまま使えます。MCP 設定で `PHONEDRIVER_DISPLAY=hidden` を設定するか、CLI に `--display hidden` を渡します。エミュレーターと HONOR X8（Android 13）でテストしています。スマートフォンのロックは解除しておく必要があります。ロック中は非表示の画面にもロック画面が表示されるため、phonedriver はロックされていると伝え、スマートフォンをスリープのままにします。エージェントが作業している間、phonedriver はスマートフォン自身の画面をオンのままにするため、作業中にロックされることはありません。`phonedriver release` で再びスリープできるようになります。アプリ自身の入力欄への入力は、あなたの画面に何も残しません。Web ページへの入力では、システムのクリップボードの通知が表示され、その後クリップボードは元に戻されます。
 
 MCP サーバーには 14 個のツールがあります: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`。`snapshot`、`screenshot`、`wait` は読み取り専用としてマークされているため、クライアントは権限プロンプトなしで実行できます。`phonedriver` CLI にも同じコマンドがあり、スクリプトや、シェルを好むエージェントで使えます。ターミナルで使ったデバイスは、30 秒間アイドルになるとエージェントに引き渡されます。
 

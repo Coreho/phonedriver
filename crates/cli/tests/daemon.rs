@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use phonedriver::daemon::rpc::RpcError;
-use phonedriver::daemon::{Config, Daemon, DeviceSource, Listed};
+use phonedriver::daemon::{Booted, Config, Daemon, DeviceSource, Listed, named};
 use phonedriver_core::device::{
-    AppId, Capabilities, Device, DeviceEvent, FrameRef, TextInput, Url,
+    AppId, Capabilities, Device, DeviceEvent, FrameRef, Key, TextInput, Url, WebPage,
 };
-use phonedriver_core::error::Error;
+use phonedriver_core::error::{DeviceSummary, Error};
 use phonedriver_core::geometry::{Point, Rect, Scale};
 use phonedriver_core::raw::RawTree;
 use phonedriver_core::testing::{Call, FakeDevice};
@@ -46,6 +46,7 @@ fn field_tree(value: &str, password: bool) -> RawTree {
 
 struct FakeSource {
     devices: Mutex<Vec<(Listed, Arc<FakeDevice>)>>,
+    off: Mutex<Vec<DeviceSummary>>,
 }
 
 impl FakeSource {
@@ -70,6 +71,7 @@ impl FakeSource {
                 },
                 fake.clone(),
             )]),
+            off: Mutex::new(vec![]),
         });
         (source, fake)
     }
@@ -97,8 +99,106 @@ impl DeviceSource for FakeSource {
             .ok_or(Error::NoDevice {
                 requested: None,
                 connected: vec![],
+                unasked: vec![],
+                off: vec![],
             })
     }
+
+    async fn off(&self) -> Vec<DeviceSummary> {
+        self.off.lock().unwrap().clone()
+    }
+
+    async fn boot(&self, name: &str) -> Result<Option<Booted>, Error> {
+        let mut off = self.off.lock().unwrap();
+        let Some(at) = off.iter().position(|d| named(name, &d.id, &d.model)) else {
+            return Ok(None);
+        };
+        let device = off.remove(at);
+        let fake = Arc::new(FakeDevice::new(vec![]));
+        self.devices.lock().unwrap().push((
+            Listed {
+                id: device.id.clone(),
+                model: device.model.clone(),
+                os: Some(device.os.clone()),
+                tier: "fake".into(),
+                capabilities: fake.info().capabilities,
+            },
+            fake,
+        ));
+        Ok(Some(Booted {
+            device,
+            already: false,
+        }))
+    }
+}
+
+fn off_phone(id: &str, model: &str, os: &str) -> DeviceSummary {
+    DeviceSummary {
+        id: id.into(),
+        model: model.into(),
+        os: os.into(),
+    }
+}
+
+#[tokio::test]
+async fn boot_lists_what_is_off_and_starts_one_by_name_or_id() {
+    let (source, _fake) = FakeSource::with(vec![]);
+    *source.off.lock().unwrap() = vec![
+        off_phone("fake:new", "Phone", "FakeOS 2"),
+        off_phone("fake:old", "Phone", "FakeOS 1"),
+        off_phone("fake:pad", "Pad", "FakeOS 2"),
+    ];
+    let (d, _home) = daemon(source);
+    let listed = ok(&d, "s", "boot", json!({})).await;
+    assert_eq!(
+        listed["off"][0],
+        json!({"id": "fake:new", "model": "Phone", "os": "FakeOS 2"})
+    );
+    assert_eq!(listed["off"].as_array().unwrap().len(), 3);
+    let booted = ok(&d, "s", "boot", json!({"name": "phone"})).await;
+    assert_eq!(
+        booted,
+        json!({"id": "fake:new", "model": "Phone", "os": "FakeOS 2"})
+    );
+    let by_id = ok(&d, "s", "boot", json!({"name": "fake:old"})).await;
+    assert_eq!(by_id["id"], "fake:old");
+    let ids: Vec<String> = ok(&d, "s", "devices", json!({}))
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(ids, ["fake:1", "fake:new", "fake:old"]);
+    let again = ok(&d, "s", "boot", json!({"name": "Phone"})).await;
+    assert_eq!(
+        again,
+        json!({"id": "fake:new", "model": "Phone", "os": "FakeOS 2", "already": true})
+    );
+    let e = err(&d, "s", "boot", json!({"name": "Watch"})).await;
+    assert_eq!(
+        e.message,
+        "no device named \"Watch\" is off; can be started: Pad (FakeOS 2)"
+    );
+    ok(&d, "s", "boot", json!({"name": "pad"})).await;
+    let e = err(&d, "s", "boot", json!({"name": "Watch"})).await;
+    assert_eq!(
+        e.message,
+        "no device named \"Watch\" is off; nothing can be started"
+    );
+}
+
+#[tokio::test]
+async fn with_nothing_connected_a_request_is_answered_with_what_can_be_started() {
+    let (source, _fake) = FakeSource::with(vec![]);
+    source.devices.lock().unwrap().clear();
+    *source.off.lock().unwrap() = vec![off_phone("fake:new", "Phone", "FakeOS 2")];
+    let (d, _home) = daemon(source);
+    let e = err(&d, "s", "snapshot", json!({})).await;
+    assert_eq!(
+        e.message,
+        "no device is connected; can be started: Phone (FakeOS 2)"
+    );
 }
 
 fn daemon(source: Arc<FakeSource>) -> (Arc<Daemon>, tempfile::TempDir) {
@@ -238,13 +338,8 @@ async fn act_tap_resolves_the_ref_on_a_fresh_tree_and_taps_its_center_in_points(
     let (d, _home) = daemon(source);
     ok(&d, "default", "snapshot", json!({})).await;
     let r = ok(&d, "default", "act", tap_ref("e3")).await;
-    assert!(
-        r["summary"]
-            .as_str()
-            .unwrap()
-            .starts_with("tapped @e3 \"Three\" at 180,330"),
-        "{r}"
-    );
+    assert_eq!(r["summary"], "tapped @e3 \"Three\"", "{r}");
+    assert_eq!(r["at"], json!({"x": 180.0, "y": 330.0}), "{r}");
     let Call::Gesture(g) = fake.calls().pop().unwrap() else {
         panic!("no gesture")
     };
@@ -262,13 +357,8 @@ async fn act_on_a_ref_the_screen_no_longer_has_is_stale_with_the_closest_element
     let (d, _home) = daemon(source);
     ok(&d, "default", "snapshot", json!({})).await;
     let moved = ok(&d, "default", "act", tap_ref("e3")).await;
-    assert!(
-        moved["summary"]
-            .as_str()
-            .unwrap()
-            .contains("\"Three\" at 180,430"),
-        "{moved}"
-    );
+    assert_eq!(moved["summary"], "tapped @e3 \"Three\"", "{moved}");
+    assert_eq!(moved["at"], json!({"x": 180.0, "y": 430.0}), "{moved}");
     let e = err(&d, "default", "act", tap_ref("e3")).await;
     assert_eq!(e.code, -32006);
     assert!(e.data["hint"].as_str().unwrap().contains("snapshot"));
@@ -459,6 +549,35 @@ async fn a_settled_tap_leaves_its_phases_in_the_trace() {
         assert!(phases.contains_key(name), "{name} missing in {phases:?}");
     }
     assert!(phases["settle"].as_f64().unwrap() >= 300.0, "{phases:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_batch_trace_adds_up_the_phases_of_its_steps() {
+    let (source, fake) = FakeSource::with(vec![
+        tree(&["One", "Two", "Three"]),
+        tree(&["One", "Two", "Three!"]),
+        tree(&["One", "Two", "Three!!"]),
+    ]);
+    let (d, home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        fake.push_frame(big_frame(1));
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        fake.push_frame(big_frame(2));
+    });
+    let tap = json!({"kind": "tap", "target": {"point": {"x": 10.0, "y": 10.0}}});
+    let r = ok(&d, "default", "batch", json!({"steps": [tap, tap]})).await;
+    assert!(r["settle_ms"].as_u64().unwrap() < 600, "{r}");
+    let line = trace_text(home.path())
+        .lines()
+        .find(|l| l.contains("\"method\":\"batch\""))
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        .unwrap();
+    assert!(
+        line["phases"]["settle"].as_f64().unwrap() >= 600.0,
+        "{line}"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -659,6 +778,56 @@ async fn act_on_a_screen_that_never_changes_reports_no_change_after_500_ms() {
     assert_eq!(r["observation"]["text"], "");
 }
 
+#[tokio::test(start_paused = true)]
+async fn the_third_identical_action_that_changes_nothing_says_so() {
+    let (source, _) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    for n in 1..=2 {
+        let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+        assert_eq!(r["changed"], false, "tap {n}: {r}");
+        assert!(r.get("unchanged_repeats").is_none(), "tap {n}: {r}");
+    }
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["unchanged_repeats"], 3, "{r}");
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["unchanged_repeats"], 4, "{r}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_different_action_starts_the_count_of_unchanged_repeats_again() {
+    let (source, _) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    ok(&d, "default", "act", tap_point(50.0, 50.0)).await;
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert!(r.get("unchanged_repeats").is_none(), "{r}");
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["unchanged_repeats"], 3, "{r}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_action_that_changed_the_screen_starts_the_count_of_unchanged_repeats_again() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    let emitter = fake.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        emitter.set_tree(tree(&["Other"]));
+        emitter.emit(DeviceEvent::WindowChanged { package: None });
+    });
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert_eq!(r["changed"], true, "{r}");
+    let r = ok(&d, "default", "act", tap_point(10.0, 10.0)).await;
+    assert!(r.get("unchanged_repeats").is_none(), "{r}");
+}
+
 #[tokio::test]
 async fn a_window_change_event_counts_as_the_first_change() {
     let (source, fake) = FakeSource::with(vec![tree(&["One"]), tree(&["Other"])]);
@@ -763,6 +932,29 @@ fn trace_text(home: &Path) -> String {
         all += &std::fs::read_to_string(entry.unwrap().path()).unwrap();
     }
     all
+}
+
+#[tokio::test(start_paused = true)]
+async fn text_the_screen_shows_before_the_device_confirms_it_settles_from_when_it_showed() {
+    let (source, fake) = FakeSource::of(
+        FakeDevice::new(vec![
+            field_tree("", false),
+            field_tree("", false),
+            field_tree("hello", false),
+        ])
+        .following_frames(),
+    );
+    fake.text_shows_before_it_returns(Duration::from_millis(40), Duration::from_millis(220));
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let t = tokio::time::Instant::now();
+    let r = ok(&d, "default", "act", type_params("hello", false)).await;
+    let took = t.elapsed();
+    assert_eq!(r["verified"], true, "{r}");
+    assert!(
+        took < Duration::from_millis(350),
+        "the reply came {took:?} after the call: {r}"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -1112,7 +1304,12 @@ async fn secret_text_never_reaches_the_trace_the_reply_or_the_debug_output() {
     let r = ok(&d, "default", "act", type_params("hunter2", true)).await;
     assert_eq!(r["verified"], true);
     assert!(!r.to_string().contains("hunter2"), "{r}");
-    assert!(r["observation"]["text"].as_str().unwrap().contains("•••"));
+    let shown = ok(&d, "default", "snapshot", json!({})).await;
+    assert!(
+        shown["text"].as_str().unwrap().contains("\"•••\""),
+        "{shown}"
+    );
+    assert!(!shown.to_string().contains("hunter2"), "{shown}");
     assert_eq!(
         fake.calls()[1],
         Call::Text(phonedriver_core::device::TextInput::PasteSecret(
@@ -1123,6 +1320,157 @@ async fn secret_text_never_reaches_the_trace_the_reply_or_the_debug_output() {
     let trace = trace_text(home.path());
     assert!(trace.contains("\"secret_len\":7"), "{trace}");
     assert!(!trace.contains("hunter2"), "{trace}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_secret_typed_into_a_plain_field_is_masked_in_a_batch_and_in_every_later_reply() {
+    let (source, fake) = FakeSource::polled(vec![field_tree("", false)]);
+    fake.on_text(|_| Some(vec![field_tree("hunter2", false)]));
+    let home = tempfile::tempdir().unwrap();
+    let d = Daemon::with_trace(
+        source,
+        Config {
+            home: home.path().to_path_buf(),
+        },
+        phonedriver::daemon::trace::TraceOptions {
+            full: true,
+            screens: false,
+        },
+    );
+    ok(&d, "default", "snapshot", json!({})).await;
+    let typed = json!({"kind": "type", "text": "hunter2", "into": {"ref": "e1"}, "secret": true});
+    let batch = ok(&d, "default", "batch", json!({"steps": [typed]})).await;
+    let shown = ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "release", json!({"device": "fake:1"})).await;
+    let found = ok(&d, "other", "find", json!({"text": "Field"})).await;
+    for reply in [&batch, &shown, &found] {
+        assert!(!reply.to_string().contains("hunter2"), "{reply}");
+    }
+    assert!(
+        shown["text"].as_str().unwrap().contains("\"•••\""),
+        "{shown}"
+    );
+    let trace = trace_text(home.path());
+    assert!(!trace.contains("hunter2"), "{trace}");
+}
+
+fn article() -> WebPage {
+    let body: String = (1..=200)
+        .map(|n| format!("Paragraph {n} of the article, which is one line of text.\n\n"))
+        .collect();
+    WebPage {
+        title: "Grace Hopper - Wikipedia".into(),
+        url: "https://en.wikipedia.org/wiki/Grace_Hopper".into(),
+        text: format!(
+            "Grace Hopper\n\n  Born  \nGrace Brewster Murray\nDecember 9, 1906\nNew York City\n\n{body}"
+        ),
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_web_page_is_read_whole_without_blank_lines_and_cut_at_a_line_end() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    let e = err(&d, "default", "page", json!({})).await;
+    assert_eq!(e.code, -32025, "{e:?}");
+    fake.show_page(article());
+    let r = ok(&d, "default", "page", json!({})).await;
+    assert_eq!(r["title"], "Grace Hopper - Wikipedia");
+    assert_eq!(r["lines"], 205);
+    let text = r["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("Grace Hopper\nBorn\nGrace Brewster Murray\n"),
+        "{text}"
+    );
+    let chars = text.lines().map(|l| l.chars().count()).sum::<usize>();
+    assert!(chars <= 8000 && chars > 7900, "{chars}");
+    assert!(text.ends_with("one line of text."), "{text}");
+    let shown = text.lines().count() as u64;
+    assert_eq!(r["omitted_lines"], 205 - shown);
+    let all = ok(&d, "default", "page", json!({"all": true})).await;
+    assert_eq!(all["text"].as_str().unwrap().lines().count(), 205);
+    assert_eq!(all["omitted_lines"], 0);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_page_that_is_one_long_line_is_cut_by_characters_not_bytes() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    fake.show_page(WebPage {
+        title: "長い".into(),
+        url: "https://example.com/".into(),
+        text: "é".repeat(9000),
+    });
+    let (d, _home) = daemon(source);
+    let r = ok(&d, "default", "page", json!({})).await;
+    assert_eq!(r["text"].as_str().unwrap().chars().count(), 8001);
+    assert_eq!(r["omitted_lines"], 0);
+    assert_eq!(r["omitted_chars"], 1000);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_word_keeps_the_lines_of_a_page_that_have_it_and_the_two_after_each() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    fake.show_page(article());
+    let (d, _home) = daemon(source);
+    let r = ok(
+        &d,
+        "default",
+        "page",
+        json!({"grep": "BORN|paragraph 200 "}),
+    )
+    .await;
+    assert_eq!(
+        r["text"],
+        "Born\nGrace Brewster Murray\nDecember 9, 1906\nParagraph 200 of the article, which is one line of text."
+    );
+    let none = ok(&d, "default", "page", json!({"grep": "zebra"})).await;
+    assert_eq!(none["text"], "");
+}
+
+fn two_fields(password_focused: bool) -> RawTree {
+    let (note, password) = if password_focused {
+        ("vVeE", "vVeEPF")
+    } else {
+        ("vVeEF", "vVeEP")
+    };
+    let json = format!(
+        r#"{{"windows":[{{"id":1,"type":"application","package":"com.example","bounds":[0,0,360,800]}}],"nodes":[
+        {{"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"}},
+        {{"p":0,"w":1,"cls":"android.widget.EditText","text":"","desc":"Note","b":[0,100,360,160],"f":"{note}","a":["tap","set_text"]}},
+        {{"p":0,"w":1,"cls":"android.widget.EditText","text":"","desc":"Password","b":[0,200,360,260],"f":"{password}","a":["tap","set_text"]}}]}}"#
+    );
+    RawTree::from_android_json(&json, Scale { density: 1.0 }).unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn after_a_failed_action_the_focused_field_is_read_again_before_plain_text_goes_in() {
+    let (source, fake) = FakeSource::polled(vec![two_fields(false)]);
+    fake.on_gesture(|_| Some(vec![two_fields(true)]));
+    fake.fail_text(vec![Error::Transport {
+        detail: "the agent could not run text".into(),
+    }]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    err(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "hunter2", "into": {"ref": "e2"}, "secret": true}}),
+    )
+    .await;
+    let e = err(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "shopping list"}}),
+    )
+    .await;
+    assert_eq!(e.code, -32020, "{e:?}");
+    assert!(
+        !fake.calls().iter().any(|c| matches!(c, Call::Text(_))),
+        "{:?}",
+        fake.calls()
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -1225,6 +1573,8 @@ async fn typing_a_secret_into_a_password_field_is_verified_by_length() {
     ok(&d, "default", "snapshot", json!({})).await;
     let r = ok(&d, "default", "act", type_params("hunter2", true)).await;
     assert_eq!(r["verified"], true, "{r}");
+    assert_eq!(r["changed"], true, "{r}");
+    assert_eq!(r["observation"]["text"], "", "{r}");
     assert_eq!(
         fake.calls()[1],
         Call::Text(phonedriver_core::device::TextInput::PasteSecret(
@@ -1597,6 +1947,29 @@ async fn wait_settled_right_after_an_unobserved_action_waits_for_its_first_chang
         (500..=600).contains(&ms),
         "the first change arrived 300 ms after the action and quiet takes 250 ms more: {ms}"
     );
+}
+
+/// Seen on the iOS 26.5 Simulator: `wait About` answered `"About" appeared after 1 tree read · still animating after
+/// 123ms, read as it is now`. A wait returns when its text shows and has no settle to report.
+#[tokio::test(start_paused = true)]
+async fn a_wait_that_finds_its_text_reports_no_settle() {
+    let (source, fake) = FakeSource::with(vec![tree(&["Zero"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        fake.set_tree(tree(&["One"]));
+        fake.push_frame(big_frame(1));
+    });
+    let r = ok(
+        &d,
+        "default",
+        "wait",
+        json!({"condition": {"appears": {"text": "One", "role": null}}}),
+    )
+    .await;
+    assert_eq!(r["summary"], "\"One\" appeared after 2 tree reads", "{r}");
+    assert_eq!(r["settle_ms"], 0, "{r}");
 }
 
 #[tokio::test(start_paused = true)]
@@ -2550,8 +2923,67 @@ async fn a_launch_whose_app_is_not_in_front_afterwards_says_which_app_is() {
     assert!(
         summary.contains("Calculator is not in front")
             && summary.contains("com.launcher")
+            && summary.contains("still starting")
             && summary.contains("quit"),
         "{summary}"
+    );
+}
+
+/// Seen on the iOS 26.5 Simulator: Maps asked for the location at start, iOS put SpringBoard's prompt in front of it,
+/// and `launch Maps` waited 13 s and said Maps was not in front.
+#[tokio::test(start_paused = true)]
+async fn a_launch_behind_a_system_prompt_naming_the_app_says_launched_without_waiting() {
+    let prompt = RawTree::from_android_json(
+        r#"{"windows":[{"id":1,"type":"application","package":"com.apple.springboard","bounds":[0,0,360,800]},
+        {"id":2,"type":"alert","package":"com.apple.springboard","bounds":[40,250,320,600]}],"nodes":[
+        {"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"},
+        {"p":-1,"w":2,"cls":"android.widget.TextView","text":"Allow “Calculator” to use your location?","b":[40,260,320,300],"f":"vVe"},
+        {"p":-1,"w":2,"cls":"android.widget.Button","text":"Don’t Allow","b":[40,540,320,590],"f":"vVe","a":["tap"]}]}"#,
+        Scale { density: 1.0 },
+    )
+    .unwrap();
+    let (source, fake) = FakeSource::with(vec![prompt]);
+    fake.install(&[("com.android.calculator2", "Calculator")]);
+    fake.launch(&AppId("com.apple.springboard".into()))
+        .await
+        .unwrap();
+    fake.set_quits_at_launch(true);
+    let (d, _home) = daemon(source);
+    let started = tokio::time::Instant::now();
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        act_with(json!({"kind": "launch", "app": "Calculator"})),
+    )
+    .await;
+    assert_eq!(r["summary"], "launched Calculator", "{r}");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_launch_waits_for_an_app_that_comes_to_the_front_late() {
+    let (source, fake) = installed();
+    fake.launch(&AppId("com.launcher".into())).await.unwrap();
+    fake.set_launch_takes(12);
+    let (d, _home) = daemon(source);
+    let started = tokio::time::Instant::now();
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        act_with(json!({"kind": "launch", "app": "Calculator"})),
+    )
+    .await;
+    assert_eq!(r["summary"], "launched Calculator", "{r}");
+    assert!(
+        started.elapsed() > Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
     );
 }
 
@@ -3272,6 +3704,38 @@ fn keyboard_tree() -> RawTree {
         {"p":0,"w":1,"cls":"android.widget.Button","text":"Cancel","b":[0,300,360,360],"f":"vVe","a":["tap"]},
         {"p":-1,"w":2,"cls":"android.inputmethodservice.SoftInputWindow","b":[0,500,360,800],"f":"vVe"}]}"#;
     RawTree::from_android_json(json, Scale { density: 1.0 }).unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_submit_that_leaves_the_keyboard_up_says_so_and_how_to_close_it() {
+    let (source, fake) = FakeSource::polled(vec![keyboard_tree()]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "Gym", "submit": true}}),
+    )
+    .await;
+    assert!(
+        fake.calls().contains(&Call::Key(Key::Enter)),
+        "{:?}",
+        fake.calls()
+    );
+    let summary = r["summary"].as_str().unwrap();
+    assert!(
+        summary.ends_with("and enter left the keyboard up (`press hide-keyboard` closes it)"),
+        "{summary}"
+    );
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "Gym"}}),
+    )
+    .await;
+    assert!(!r["summary"].as_str().unwrap().contains("keyboard"), "{r}");
 }
 
 fn half_covered_tree() -> RawTree {
@@ -4033,6 +4497,33 @@ fn press_key(key: &str) -> Value {
 }
 
 #[tokio::test(start_paused = true)]
+async fn press_landscape_and_portrait_turn_the_screen_and_an_unknown_key_lists_them() {
+    use phonedriver_core::device::Button;
+    let (source, fake) = FakeSource::with(vec![tree(&["A"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "act", press_key("landscape")).await;
+    ok(&d, "default", "act", press_key("portrait")).await;
+    let turned: Vec<Call> = fake
+        .calls()
+        .into_iter()
+        .filter(|c| matches!(c, Call::Button(_)))
+        .collect();
+    assert_eq!(
+        turned,
+        [
+            Call::Button(Button::Landscape),
+            Call::Button(Button::Portrait)
+        ]
+    );
+    let e = err(&d, "default", "act", press_key("sideways")).await;
+    let valid = e.data["valid"].to_string();
+    assert!(
+        valid.contains("\"landscape\"") && valid.contains("\"portrait\""),
+        "{valid}"
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn press_hide_keyboard_hides_a_shown_keyboard_and_says_how() {
     let (source, fake) = FakeSource::with(vec![ime_tree(true), ime_tree(false)]);
     let (d, _home) = daemon(source);
@@ -4408,6 +4899,7 @@ fn physical() -> (Arc<FakeSource>, Arc<FakeDevice>) {
             },
             fake.clone(),
         )]),
+        off: Mutex::new(vec![]),
     });
     (source, fake)
 }
@@ -4529,6 +5021,92 @@ async fn grant_on_a_physical_device_needs_an_app_phonedriver_installed() {
         fake.calls()
             .iter()
             .any(|c| matches!(c, Call::Grant(a, _) if a.0 == "com.example.installed"))
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn apps_grant_and_revoke_change_an_apps_permissions_without_launching_it() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let r = ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "grant", "app": "Settings", "permissions": ["camera", "location"]}),
+    )
+    .await;
+    assert_eq!(r["summary"], "granted camera, location to Settings");
+    let r = ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "revoke", "app": "Settings", "permissions": ["camera"]}),
+    )
+    .await;
+    assert_eq!(r["summary"], "revoked camera from Settings");
+    let settings = AppId("com.android.settings".into());
+    assert_eq!(
+        fake.calls(),
+        vec![
+            Call::Grant(settings.clone(), vec!["camera".into(), "location".into()]),
+            Call::Revoke(settings, vec!["camera".into()]),
+        ]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn apps_grant_without_permissions_says_what_it_needs() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "grant", "app": "Settings"}),
+    )
+    .await;
+    assert!(e.message.contains("`permissions`"), "{}", e.message);
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+}
+
+#[tokio::test]
+async fn apps_grant_and_revoke_on_a_physical_device_need_an_app_phonedriver_installed() {
+    let (source, fake) = physical();
+    let (d, _home) = daemon(source);
+    for action in ["grant", "revoke"] {
+        let e = err(
+            &d,
+            "default",
+            "app",
+            json!({"action": action, "app": "Theirs", "permissions": ["camera"]}),
+        )
+        .await;
+        assert_eq!(e.code, -32011);
+        assert!(
+            e.message.contains("will not change its permissions"),
+            "{}",
+            e.message
+        );
+    }
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+    ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await;
+    ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "revoke", "app": "Mine", "permissions": ["camera"]}),
+    )
+    .await;
+    assert!(
+        fake.calls()
+            .iter()
+            .any(|c| matches!(c, Call::Revoke(a, _) if a.0 == "com.example.installed"))
     );
 }
 

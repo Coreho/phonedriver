@@ -3,7 +3,7 @@ source: crates/core/src/render.rs
 expression: text
 ---
 device android:emulator-5554 · Pixel 9 · Android 17 · 360x800pt · portrait
-app com.android.settings (Settings) · keyboard hidden · settled in 212ms
+app com.android.settings (Settings)
 @e1 webview "Hacker News" scrollable↓
   @e2 cell "1."
   @e3 button "vote"

@@ -24,17 +24,23 @@ Progress: a client that sends `"progress": true` in `hello` may receive notifica
 | `hello` | `version, client, progress?` | `version, pid` |
 | `shutdown` | none | `{pid}` (the daemon exits, ending the iOS runners it started) |
 | `devices` | none | `[DeviceSummary]` |
+| `boot` | `name?` | without `name`: `{off: [DeviceSummary]}`, the devices that are off and can be started, the ones to prefer first. With `name` (a model, any case, or an id): `{id, model, os}` once it is listed, with `already: true` when a connected device has the name; `Refused` when nothing off has it (decisions D77, D79). For an Android virtual device the id in the list is `avd:<name>` and the id in the reply is the serial it booted as, `android:emulator-<port>` |
 | `release` | `device?` | `{}` |
 | `told` | `line` | `{same}` (records `line` as the device line the session was last shown; `same` is true when it already was. The CLI drops a repeated line from its text output, never from `--json`; no device, no lease) |
 | `snapshot` | `device?, diff?, interactive?, within?, pixels?, max_lines?, no_settle?, elements?, capture?, timeout_ms?` | `Observation` |
 | `screenshot` | `device?, native?, quality?, format?, inline?, marks?` | `{path, width, height, scale, data_b64?, marks?}` (`path` is on the daemon's machine; with `inline: true` the PNG bytes also come back base64-encoded in `data_b64`, for a client that does not share the daemon's file system) |
 | `find` | `device?, text, role?` | `[ElementLine]` (rendered lines such as `@e12 cell "Row 1"`; the elements whose label or hint contains `text`, in any case; `role` is a snake_case role name) |
 | `act` | `device?, action: Action, approval?: "once"\|"session"\|"autonomous", ask?: ("send"\|"delete"\|"install")[], settle?: bool, timeout_ms?, expect_change_ms?` | `ActionResult` |
-| `wait` | `device?, condition: WaitCondition, timeout_ms?, expect_change_ms?` | `ActionResult` |
+| `wait` | `device?, condition: WaitCondition, timeout_ms?, expect_change_ms?` | `ActionResult`; a wait for an element returns when it shows (or is gone), with `settled: false` and `settle_ms: 0`, since nothing was settled; its summary says how many tree reads it took. A text is found in a label, a hint, or, when neither has it, what a field holds (never a password field's) |
 | `batch` | `device?, steps: Step[], ask?: ("send"\|"delete"\|"install")[], timeout_ms?, expect_change_ms?` | `BatchResult` |
 | `apps` | `device?` | `[App]` (launchable apps: `{id, name, system}`) |
-| `app` | `device?, action: "install"|"stop"|"clear"|"uninstall", app?, path?` | `{ok, summary}` (`path` is for install, on the daemon's machine; `app` is a name or id; refused with `unsupported` on a physical device for an app phonedriver did not install) |
+| `app` | `device?, action: "install"|"stop"|"clear"|"uninstall"|"grant"|"revoke", app?, path?, permissions?: string[]` | `{ok, summary}` (`path` is for install, on the daemon's machine; `app` is a name or id; `permissions` is for grant and revoke, with the names `launch`'s `grant` takes; all but install and stop are refused with `unsupported` on a physical device for an app phonedriver did not install) |
 | `shell` | `device?, command, settle? (default true), timeout_ms?, expect_change_ms?, time_limit_s? (default 30), grep?, head? (default 40, 0 = all), force?, secret?` | `{exit, output, omitted, timed_out, ms, action?}`; `action` is an `act` result (`observation` is the diff) and is absent when the command only reads or `settle` is false; `unsupported` for a physical iPhone or iPad, and for a destructive command on a physical device without `force` (decision D21) |
+| `logs` | `device?, app?` (name or id; default: the app in front), `grep?`, `head?` (the last lines to keep; default 40, 0 = all), `since_s?` (default 60) | `{app, output, omitted, crash}`: the app's log lines of the last `since_s` seconds, oldest first; `omitted` counts earlier lines left out; `crash` is its last crash in that time (the exception and the frame that threw it) or null. `unsupported` on a device whose app logs cannot be read (everything but Android; decision D58) |
+| `page` | `device?, grep?` (words, `a|b`), `all?: boolean` | `{title, url, text, lines, omitted_lines, omitted_chars}`: the web page the app in front shows, read through its DevTools socket (decision D71). `text` is the page's `innerText` with blank lines dropped, cut at a line end near 8,000 characters unless `all`; with `grep`, the lines holding one of the words and the two lines after each. `refused` (-32025) when the app in front has no debuggable page; `unsupported` on iOS |
+| `record` | `device?, action: "start"\|"stop", path?` (absolute, on the daemon's machine, for a start; default: a new `.mp4` in the device's folder under `tmp`) | start: `{path}`. stop: `{path, ms, frames, width, height, bytes, steps, steps_path?, early?}`: the finished MP4 (H.264 as the device encoded it), its length, and how many actions ran during it; `steps_path` is `<path>.steps.jsonl`, one `{"t_ms", "summary", "at"?}` line per successful `act` with the time on the video's clock, the reply's summary line (never typed text) and where a tap landed, present when `steps` is above 0; `early` says why the recording ended before the stop (the screen changed size or turned, the stream ended). `refused` for a second start, a stop with none running, and a stop after the connection to the device was replaced (the message names the file, which is whole). On the iOS Simulator the file is the Simulator's own recording (decision D66): `early` is set when its recorder had stopped by itself, and a turned screen does not end it. `unsupported` on an iPhone. Decision D59. |
+| `journal` | `device?` | `{steps: Step[], over}`: what the session has done since the last `journal` call, in order, and the session's list starts again empty (decision D60). A step is `{method, params, summary?, changed?, by_position?}` for a call that succeeded (`act`, `wait`, `shell`, `app`, and a `setting` that wrote or opened), with `params` as that method takes them, or `{manual}` for one that cannot be kept (a typed secret, a shell command given with `secret`). In an action's or a wait's target, a ref is replaced by `{id, text?, role?}` when the element has an id of its own that no other element on the screen the agent had seen shares (decision D67), by `{text, role}` of its label or hint when those single it out, and by its centre as a point otherwise (`by_position: true`, also set for a target that was a point and for `gesture`). `changed` is the action's `changed`. `over` is true when more than 500 steps were done; only the first 500 are kept. The client writes the steps to a file (`save`) and runs them again (`replay`): one call per step, stopping at the first error or at a step saved with `changed: true` that now answers `changed: false`. |
+| `setting` | `device?`, and one of `find: string` (words; `a|b` runs a search per part), `key: string` (with `value?: string` to write), `values: {key: value}` (several writes, in key order), `open: string` (a screen key); `force?`, `settle?`, `timeout_ms?`, `expect_change_ms?` | `find`: `{lines: string[], more}` (each line is `key  [accepted values]  purpose`, or `screen <key>  description`; at most 12 settings and 3 screens, or 4 and 1 per search when there are several). `key`: `{key, value, hint?}`. `key` with `value`: `{key, value, action}`, where `value` is what the device reports after the write and `action` is an `act` result. `values`: `{values: {key: value}, action}`; every key is checked before anything is written, and a write the device declines stops the rest and names what was already set. `open`: an `act` result. `unsupported` on a device without settings functions (decision D57); `refused` when the key is unknown, read-only or the device declines the write; `unsupported` on a physical device for a setting the device marks as needing its user's confirmation, without `force` |
 | `clipboard` | `device?, set?: string` | `{text?: string}` (`{}` after a set; `text` is null when the clipboard is empty) |
 | `health` | `device?` | `{id, model, os, frames_ms}` (what `doctor` needs: connects, reads the tree once, then waits up to 1 s for the next frame; `frames_ms` is null when none came or the device has no frame stream) |
 
@@ -42,14 +48,17 @@ Progress: a client that sends `"progress": true` in `hello` may receive notifica
 
 `device` is omitted when exactly one device is connected or a default is set. Every device method also takes `session` (string, default `"default"`); refs, diff baselines and leases belong to the session, not to the socket connection (architecture section 5).
 
-`open` and `launch` are `act` kinds, not methods. `share?: boolean` is accepted by every device method (architecture 5, leases). So is `display?: "main" | "hidden"` (default `main`; decision D32): a call in the other mode than the live connection reconnects the device in the requested one. `devices` entries and the `health` reply carry `hidden_display` (the virtual display's id) while the device works on one. Typed text and secrets: a `type` action's text is masked (`•••`) in `observation.text` when `secret` is true, and the trace records only its length.
+`open` and `launch` are `act` kinds, not methods. `share?: boolean` is accepted by every device method (architecture 5, leases). So is `display?: "main" | "hidden"` (default `main`; decision D32): a call in the other mode than the live connection reconnects the device in the requested one. A `device` that ends in `+<name>` (1 to 8 lowercase letters or digits; `+a` alone when one device is connected) is a lane of that device (decision D73): it is always `hidden`, has its own lease and refs, and `devices` lists it as an entry of its own while it is open. `devices` entries and the `health` reply carry `hidden_display` (the virtual display's id) while the device works on one. Typed text and secrets: a `type` action's text is masked (`•••`) in `observation.text` when `secret` is true, and the trace records only its length.
 
 ```ts
-type Target = {ref: string} | {point: {x: number, y: number}} | {text: string, role?: Role}
+type Target = {ref: string} | {point: {x: number, y: number}} | {id: string, text?: string, role?: Role} | {text: string, role?: Role}
+// {id}: the one element with that resource name (Android) or accessibility identifier (iOS). When no element
+// or more than one has it, `text` and `role` find the element as a text target does. Saved steps use it.
 type Action =
   | {kind: "tap", target: Target, count?: number, long?: number}   // long: hold ms; count taps are 80 ms apart
   | {kind: "type", text: string, into?: Target, mode?: "paste"|"set"|"keys", secret?: boolean, submit?: boolean, append?: boolean}
-    // the CLI reads secret text from stdin or PHONEDRIVER_SECRET and sends it here over the user-only socket
+    // the CLI reads secret text from stdin or PHONEDRIVER_SECRET and sends it here over the user-only socket;
+    // from then on the daemon replaces that text with ••• in every reply, error and trace line (decision D70)
   | {kind: "clear", target: Target}
   | {kind: "swipe", direction: Dir, from?: Target, distance?: number, fast?: boolean}
   | {kind: "drag", from: Target, to: Target}                       // press and hold, move, hold, lift
@@ -66,7 +75,7 @@ type WaitCondition = {appears: Target} | {gone: Target} | {settled: true}
 // target is a substring match, so `gone:Loading` is not gone while "Hide loading" is on screen. They fail `timeout`
 // (-32013) naming the condition.
 
-type Step = Action | {kind: "wait", condition: WaitCondition}   // `secret` text is for single `act` calls only
+type Step = Action | {kind: "wait", condition: WaitCondition}   // the CLI refuses `secret` text in a batch, the MCP server passes it (D85); the daemon masks it either way (D70)
 type BatchResult = {
   ok: boolean,
   steps: Array<{summary: string, verified?: boolean, unverified?: {shows, hint}}>,   // the steps that ran and succeeded
@@ -85,18 +94,22 @@ type Observation = {
   kind: "full" | "diff",
   changed: boolean, settled: boolean, settle_ms: number,
   still_changing?: Rect,          // the union of recent changed boxes when settled is false
+  empty?: true,                   // nothing to act on: a hollow tree and no text read from the pixels (decision D62)
   loading: boolean,
   elements?: Element[],           // only with `elements: true` (CLI --json)
   capture?: string                // the device's own tree JSON with a `density` key, only with `capture: true`
 }
 type ActionResult = {
   ok: true,
-  summary: string,                // "tapped @e6 \"Display & touch\" at 206,488"
+  summary: string,                // "tapped @e6 \"Display & touch\""; a tap at a point: "tapped at 206,488"
+  at?: {x, y},                    // where a tap landed, in points
   via?: string,                   // "nav-button", "edge-swipe", "paste", ...
   verified?: boolean,             // type: the field holds the input (replace: exactly; append or no target: ends with it)
   unverified?: {shows: string, hint: string},  // with verified: false: what the field shows and a hint for that cause
   settled: boolean, settle_ms: number,
   changed: boolean,               // pixels or windows changed, or the diff is not empty
+  unchanged_repeats?: number,     // from 3: this same action has settled with no change that many times in a row
+  crashed?: {app, what},          // the app that was in front crashed during the action; `what` is the exception and the frame that threw it
   woke?: true,                    // the screen was off and the action woke it first
   unlocked?: true,                // a swipe-only lock screen was swiped away first
   observation: Observation       // kind "diff" with empty text when nothing changed
@@ -130,6 +143,7 @@ JSON-RPC `error` with `code` from the table, `message`, and `data: {code_name, h
 | -32018 | unknown_key (`press` got a key it does not know; `data.valid` lists the keys) |
 | -32020 | secret_field (a `type` with plain text into a password field, or a text field whose label, hint or id names a one-time code, without `secret`; `data.ref`, `data.kind` `password` or `code`; decision D31) |
 | -32024 | point_off_screen (an `x,y` target outside the screen; `data.x`, `data.y`, and the screen's `data.w` and `data.h` in points; nothing is sent to the device) |
+| -32025 | refused (the device answered and did not do what was asked: a setting it would not write, an unknown or read-only setting key, a `pm grant` that changed nothing; the message is the reason; nothing changed) |
 | -32023 | not_focused (a `type` without `into` when the screen shows no focused text field and no keyboard; nothing is typed; `data.fields` lists up to five text fields on screen) |
 | -32019 | needs_approval (a tap or `type --submit` that spends money, deletes an account, or is in a category named in `ask`, without an `approval`; `data.label`, `data.app`, `data.category` (`payment`, `account`, `send`, `delete`, `install`), `data.details`; decisions D27 and D31) |
 | -32016 | not_reached (`data.end` is `ended`, `stuck` or `limit`; `data.scrolls`, `data.last`) |
@@ -145,7 +159,7 @@ Frames: `u32 big-endian length` + UTF-8 JSON. Requests carry `id`; replies echo 
 ```json
 → {"id":1,"op":"hello","version":"0.1.0","token":"<64 hex chars written to the agent's stdin at launch>"}
 ← {"id":1,"ok":true,"api":37,"model":"Pixel 9","density":2.625,"display":{"w":1080,"h":2400,"rotation":0}}
-(an agent started with the argument `hidden` adds "hidden_display":<id>; `display` is then that display's size)
+(a `hello` that carries "display":"hidden", and for a lane "lane":"<name>", opens a virtual display for this connection and adds "hidden_display":<id> to the reply; `display` is then that display's size. The video connection's first frame carries the same two fields. Refusals: `hidden display: <why>`, `lane in use: <name>`)
 ```
 
 `hello` with the right token must be the first frame on the control stream. On the video stream, the frame after the `V` byte is `u32 length + {"token": "..."}`. A wrong or missing token closes the stream with no reply.
@@ -153,7 +167,7 @@ Frames: `u32 big-endian length` + UTF-8 JSON. Requests carry `id`; replies echo 
 | op | Request fields (device px) | Reply |
 |---|---|---|
 | `hello` | `version` | device facts |
-| `tree` | none | `{windows:[{id, type, package, layer, bounds}], nodes:[RawNode]}`; every node is listed with its `v`/`V` flags, and full-width status and navigation bar windows (at most a tenth of the screen high, on the top or bottom edge) are left out |
+| `tree` | none | `{windows:[{id, type, package, layer, bounds}], nodes:[RawNode], bar?}`; every node is listed with its `v`/`V` flags, and full-width status and navigation bar windows (at most a tenth of the screen high, on the top or bottom edge) are left out; `bar` is the bottom edge in pixels of the status bar left out, when there was one |
 | `gesture` | `pointers:[{id, path:[{x, y, t_ms}]}]` | `{}` after the final UP is delivered |
 | `key` | `keycode, meta?, action?: "down"|"up"|"press"` | `{}` |
 | `text` | `mode` (`paste`, `set`, `keys`), `text`, `sensitive?` (marks the clip `IS_SENSITIVE`) | `{}`; `set` acts on the focused input field; `keys` fails with `unmappable character U+XXXX at N` before typing anything |
@@ -166,7 +180,7 @@ Frames: `u32 big-endian length` + UTF-8 JSON. Requests carry `id`; replies echo 
 | `state` | none | `{screen_on, locked, secure_keyguard, ime_visible, foreground}` |
 | `power` | none | `{screen_on, locked, secure_keyguard, focused}` (`focused`: an accessibility window has input focus); cheap, read before every action |
 | `sync_frame` | none | `{}`; next video frame is a keyframe |
-| `video_barrier` | `id` (u64) | `{}`; the agent takes every frame already encoded, then writes a barrier packet with `id` into the video stream (below) |
+| `video_barrier` | `barrier` (u64) | `wait_ms`; the agent writes a barrier packet with that number into the video stream (below) once its encoder has given out what the screen showed when the request came. `wait_ms` is how much longer than usual that may take: 0 while the encoder keeps up. The number is not sent as `id`, which is the request's own (decision D74) |
 | `wake` | none | `{}` |
 
 `RawNode` (flat; tree order is preorder). Empty and false fields are omitted to keep the payload small.
@@ -216,7 +230,7 @@ Then frames:
 
 On display change the agent sends a new codec header preceded by a frame with `pts_us = u64::MAX` and length 0.
 
-A barrier packet answers `video_barrier`: `pts_us = 0`, `flags` bit2 set, length 8, and the request's `id` as a big-endian `u64`. The host reads packets in order, so when it has decoded the barrier every frame the agent wrote before it has been shown.
+A barrier packet answers `video_barrier`: `pts_us = 0`, `flags` bit2 set, length 8, and the request's `barrier` number as a big-endian `u64`. The host reads packets in order, so when it has decoded the barrier every frame the agent wrote before it has been shown. The agent writes it after the encoder output on hand when its last frame came out within 100 ms of its presentation time. When that frame was later than that, the encoder is behind, and the barrier is held until a frame presented after the request has been written, or until the encoder has given nothing for 100 ms plus twice that lateness.
 
 ## 3. Daemon ↔ PhonedriverRunner
 
@@ -227,18 +241,21 @@ Every request carries `id` and `op`. A reply echoes `id` and adds `ok: true` plu
 | op | Request | Reply |
 |---|---|---|
 | `hello` | `version` | `{version, ios, model, screen:{w,h,scale}, udid?, build?}` (points; `model` is the machine id, for example `iPhone18,3`; on a simulator `udid` is the simulator's, from `SIMULATOR_UDID`; `build` echoes the `PHONEDRIVER_BUILD` the daemon launched it with, the hash of the runner sources) |
-| `snapshot` | `max_depth` (default 30) | `{app:{bundle_id, pid}, nodes:[RawNode]}` with bounds in points |
+| `snapshot` | `max_depth` (default 30) | `{app:{bundle_id, pid}, nodes:[RawNode], alerts?, bar?}` with bounds in points; `bar` is the bottom edge of SpringBoard's status bar, asked for once for each width of the app |
 | `gesture` | `pointers:[{path:[{x,y,t_ms}]}]` (points, 1 to 5 pointers, `t_ms` non-decreasing) | `{}` after the last lift is delivered |
+| `banner` | `x`, `y` (points) | `{covered}`: whether a notification banner covers the point, the test the runner's own gestures wait on; the Simulator tier asks it before a touch through simio that starts in the top 200 points (decision D93) |
 | `screenshot` | `quality (0..100, default 80), format: "jpeg"|"png"|"luma"` (default `jpeg`), `scale?` (output pixels per point, above 0 and at most 4; 0 or absent means native pixels; required for `luma`) | `{data_b64, w, h}` (`w`, `h` in pixels); `luma` is one byte of gray per pixel, rows top to bottom, no header |
 | `type` | `text`, `speed?` (characters per second, default 60) | `{}` |
 | `key` | `key` (an `XCUIKeyboardKey` string or a character), `modifiers?` (`"command"`, `"shift"`, `"option"`, `"control"`) | `{}` after the key is delivered |
-| `button` | `name: "home"|"volume_up"|"volume_down"|"lock"` | `{}`; volume is `unsupported` on the Simulator |
+| `button` | `name: "home"|"volume_up"|"volume_down"|"lock"|"landscape"|"portrait"` | `{}`; volume is `unsupported` on the Simulator; `landscape` and `portrait` set `XCUIDevice.orientation` (decision D78) |
 | `activate` | `bundle_id` | `{}` |
 | `open_url` | `url` | `{}` (`XCUIDevice.shared.system.openURL`; unlike `simctl openurl`, raises no "Open in …?" confirmation) |
 
 `snapshot` covers the first of `XCAXClient_iOS activeApplications` (the foreground app). Its attribute list is fixed (label, value, identifier, frame, element type, traits, placeholder value, native focus); a request-chosen list was planned and dropped because nothing needs it.
 
 `type` sends key events to whatever has keyboard focus, through a synthesized text-input event with redaction, so the text never reaches XCTest's activity log, xcodebuild's output or the `.xcresult` bundle. With no focused field the keys are dropped and the reply is still `{}`; the daemon checks the field afterwards (`verified` in `ActionResult`). At `speed` 5000 the runner entered 102 mixed characters (accents, CJK, Arabic, emoji with skin tone) exactly in 267 ms on the iOS 26.5 Simulator; the Simulator tier uses that speed for `paste` mode (architecture 7.3). A newline goes through `type` (`"\n"`): `key` with `"\r"` or `"\n"` did not insert one in a multi-line field.
+
+On the Simulator the daemon also runs simio (decision D93), a helper that speaks one JSON object per line over its stdin and stdout and answers `{"ok":true}` once it holds the device, or `{"ok":false,"error":...}`. Started as `simio <udid> <developer dir> touch`, it takes `{"op":"touch","path":[{"x","y","t_ms"}]}` (one finger, portrait points) and answers when the lift is delivered. Started with `frames <pixels per point>`, it prints `{"w","h","y":<base64 luma>}` each time the screen buffer is written, at most every 16 ms, and `{"locked":bool}` first and on each change, and exits when its parent or the Simulator stops.
 
 iOS `RawNode` uses the same keys as Android with `cls` set to the `XCUIElementType` name and `n` and `w` omitted. `text` is `label`, `desc` is unused, `sd` is `value`, `hint` is `placeholderValue`, `id` is `identifier`, `b` is `[l,t,r,b]` in points rounded to 1/100. Flags: `v` and `V` when the frame intersects the application's frame (`core::prune` drops nodes without `V`); `e` enabled; `s` selected; `F` focused; `c` for switch, toggle and checkbox, plus `C` when the value is `1`; `E` for text field, secure text field, search field and text view; `P` for secure text field; `S` for scroll view, table, collection view and web view. `a` is `["tap"]` for button, cell, link, switch, toggle, checkbox, radio button, tab, menu item, key, icon and the text-entry types; no other actions are emitted.
 

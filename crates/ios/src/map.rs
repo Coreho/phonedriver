@@ -131,12 +131,19 @@ fn scroll_position(n: &Value) -> Option<(bool, u32, f32)> {
 /// width of the row holding an unlabeled switch, the control itself (Settings and SwiftUI `Toggle`); a tap at the row's center does not toggle it, so the row takes
 /// the inner switch's bounds and the inner switch goes.
 fn tidy(reply: &mut Value) {
+    // Seen on an iOS 26.5 simulator, 2026-11-16: with SpringBoard itself in front, its permission prompt is in the
+    // app's tree and in `alerts` both, so each button was listed twice and `tap "Don’t Allow"` matched two elements.
+    let prompt_listed_apart = reply["app"]["bundle_id"] == "com.apple.springboard"
+        && reply["alerts"].as_array().is_some_and(|a| !a.is_empty());
     let Some(nodes) = reply["nodes"].as_array_mut() else {
         return;
     };
     let parent = |n: &Value| usize::try_from(n["p"].as_i64().unwrap_or(-1)).ok();
     let is_switch = |n: &Value| n["cls"] == "XCUIElementTypeSwitch";
-    let mut drop: Vec<bool> = nodes.iter().map(scroll_indicator).collect();
+    let mut drop: Vec<bool> = nodes
+        .iter()
+        .map(|n| scroll_indicator(n) || (prompt_listed_apart && n["cls"] == "XCUIElementTypeAlert"))
+        .collect();
     for i in 0..nodes.len() {
         if drop[i]
             && let Some(p) = parent(&nodes[i])
@@ -256,6 +263,17 @@ fn for_xctest(path: &[TimedPoint]) -> Vec<Value> {
         out.push(json!({"x": round(p.at.x), "y": round(p.at.y + y), "t_ms": p.t_ms}));
     }
     out
+}
+
+/// The runner waits for a notification banner to leave before a gesture that starts this near the top
+/// (`PUBannerZone` in Gesture.m); a touch through the Simulator's HID port there first asks the runner whether one
+/// covers its point.
+pub const BANNER_ZONE: f32 = 200.0;
+
+/// Whether a finger's path can go through the Simulator's HID port (decision D93): its points are the display's
+/// portrait points, which are the app's while the app stands upright.
+pub fn hid_reaches(path: &[TimedPoint], screen: Size) -> bool {
+    !path.is_empty() && screen.w < screen.h
 }
 
 pub fn gesture_request(g: &Gesture) -> Value {
@@ -426,12 +444,27 @@ pub fn notifications_swipe(screen: Size) -> Gesture {
     )
 }
 
+/// An app whose `SBAppTags` holds `hidden` is not on the home screen and is not one a person opens. Seen on an
+/// iPhone with iOS 27.0.1: CarPlay's settings app is named "Settings" too, so `launch Settings` matched two apps.
+pub fn hidden(tags: &[&str]) -> bool {
+    tags.contains(&"hidden")
+}
+
 /// Parses `simctl listapps` output converted to JSON by `plutil`.
 pub fn apps(json: &Value) -> Vec<App> {
     let mut out: Vec<App> = json
         .as_object()
         .into_iter()
         .flatten()
+        .filter(|(_, info)| {
+            let tags: Vec<&str> = info["SBAppTags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            !hidden(&tags)
+        })
         .map(|(id, info)| App {
             id: AppId(id.clone()),
             name: info["CFBundleDisplayName"]
@@ -468,6 +501,22 @@ pub fn devicectl_apps(json: &Value) -> Vec<App> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hid_takes_an_upright_screen_and_leaves_a_turned_one_to_the_runner() {
+        let at = |x, y| {
+            vec![TimedPoint {
+                at: Point { x, y },
+                t_ms: 0,
+            }]
+        };
+        let portrait = Size { w: 402.0, h: 874.0 };
+        let landscape = Size { w: 874.0, h: 402.0 };
+        assert!(hid_reaches(&at(201.0, 350.0), portrait));
+        assert!(hid_reaches(&back_swipe(portrait).fingers[0], portrait));
+        assert!(!hid_reaches(&at(201.0, 350.0), landscape));
+        assert!(!hid_reaches(&[], portrait));
+    }
 
     #[test]
     fn devicectl_apps_are_sorted_by_id_and_an_app_that_cannot_be_removed_is_a_system_app() {
@@ -535,6 +584,48 @@ mod tests {
             })
         );
         assert_eq!(screen_of(&json!({"nodes": []})), None);
+    }
+
+    #[test]
+    fn the_status_bar_springboard_reported_is_kept_with_the_tree() {
+        let mut reply: Value = serde_json::from_str(TESTBED_MAIN).unwrap();
+        assert_eq!(raw_tree(&reply, SCREEN).unwrap().status_bar, None);
+        reply["bar"] = json!(62);
+        assert_eq!(raw_tree(&reply, SCREEN).unwrap().status_bar, Some(62.0));
+    }
+
+    #[test]
+    fn a_prompt_of_springboard_in_front_is_listed_once() {
+        let prompt = |parent: i64| {
+            json!([
+                {"p": parent, "cls": "XCUIElementTypeAlert", "text": "Allow “Maps” to use your location?", "b": [41, 268, 361, 634], "f": "vVe"},
+                {"p": parent + 1, "cls": "XCUIElementTypeButton", "text": "Don’t Allow", "b": [57, 570, 345, 618], "f": "vVe", "a": ["tap"]}
+            ])
+        };
+        let mut nodes = vec![
+            json!({"p": -1, "cls": "XCUIElementTypeApplication", "text": " ", "b": [0, 0, 402, 874], "f": "vVe"}),
+            json!({"p": 0, "cls": "XCUIElementTypeButton", "text": "Maps", "b": [20, 100, 80, 160], "f": "vVe", "a": ["tap"]}),
+        ];
+        nodes.extend(prompt(0).as_array().unwrap().iter().cloned().map(|mut n| {
+            if n["cls"] == "XCUIElementTypeButton" {
+                n["p"] = 2.into();
+            }
+            n
+        }));
+        let listed = |bundle: &str| {
+            let reply = json!({"app": {"bundle_id": bundle, "pid": 1}, "nodes": nodes, "alerts": [prompt(-1)]});
+            let tree = raw_tree(&reply, SCREEN).unwrap();
+            phonedriver_core::prune::prune(&tree)
+                .iter()
+                .filter(|n| n.label.as_deref() == Some("Don’t Allow"))
+                .count()
+        };
+        assert_eq!(listed("com.apple.springboard"), 1);
+        assert_eq!(
+            listed("com.example.app"),
+            2,
+            "an app's own alert is not SpringBoard's"
+        );
     }
 
     #[test]
@@ -852,6 +943,16 @@ mod tests {
         assert!(path[0].at.x <= 2.0);
         assert!(path.last().unwrap().at.x > SCREEN.w / 2.0);
         assert!(path.windows(2).all(|w| w[1].t_ms >= w[0].t_ms));
+    }
+
+    #[test]
+    fn an_app_ios_hides_from_the_home_screen_is_not_listed() {
+        let json = json!({
+            "com.apple.Preferences": {"CFBundleDisplayName": "Settings", "ApplicationType": "System", "SBAppTags": []},
+            "com.apple.CarPlaySettings": {"CFBundleDisplayName": "Settings", "ApplicationType": "System", "SBAppTags": ["hidden"]}
+        });
+        let ids: Vec<String> = apps(&json).into_iter().map(|a| a.id.0).collect();
+        assert_eq!(ids, ["com.apple.Preferences"]);
     }
 
     #[test]

@@ -8,6 +8,7 @@ use tokio::sync::{broadcast, watch};
 use crate::error::{DeviceId, Error, Op};
 use crate::geometry::{Point, Rect, Size};
 use crate::raw::RawTree;
+use crate::settings::{SettingOp, SettingReply};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -138,6 +139,15 @@ pub enum Button {
     Lock,
     VolumeUp,
     VolumeDown,
+    /// A touch of the fingerprint sensor by the finger a test enrolled. Only an emulator has a sensor that can
+    /// be touched from outside.
+    Fingerprint,
+    /// A touch by a finger that is not enrolled.
+    WrongFingerprint,
+    /// Turn the screen on its side, as when the device is turned a quarter to the left.
+    Landscape,
+    /// Turn the screen upright.
+    Portrait,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,6 +208,42 @@ pub enum AppOp {
     Uninstall,
 }
 
+/// What `Device::logs` reads: the log lines of `app` from the last `since`, or (`crashes`) only whether it crashed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogRequest {
+    pub app: AppId,
+    pub since: std::time::Duration,
+    pub crashes: bool,
+}
+
+/// `text` is the app's lines, oldest first (empty for a crash-only request). `crash` is the app's last crash in
+/// that time: the exception and the frame that threw it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LogReply {
+    pub text: String,
+    pub crash: Option<String>,
+}
+
+/// The web page in front as its browser has it: the text a person can read on it, whole, in reading order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WebPage {
+    pub title: String,
+    pub url: String,
+    pub text: String,
+}
+
+/// A finished screen recording: an MP4 file of `frames` pictures over `ms`. `early` says why it ended before it was
+/// stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recorded {
+    pub path: std::path::PathBuf,
+    pub width: u32,
+    pub height: u32,
+    pub frames: u32,
+    pub ms: u64,
+    pub early: Option<String>,
+}
+
 /// A command for the device's own shell. `Debug` never prints the command, because it may hold a secret.
 #[derive(Clone, PartialEq, Eq)]
 pub struct ShellRequest {
@@ -253,6 +299,23 @@ pub enum DisplayMode {
     Hidden,
 }
 
+/// Splits a device id into the device and its lane. `android:emulator-5554+a` is lane `a` of that phone: a hidden
+/// display of its own, so several sessions can work on one phone at once (decision D73). A lane name is one to eight
+/// lower-case letters and digits; any other suffix is part of the id.
+pub fn lane_of(id: &str) -> (&str, Option<&str>) {
+    match id.rsplit_once('+') {
+        Some((device, lane))
+            if (1..=8).contains(&lane.len())
+                && lane
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) =>
+        {
+            (device, Some(lane))
+        }
+        _ => (id, None),
+    }
+}
+
 /// The seam between the domain and each platform (architecture 4.8).
 #[async_trait]
 pub trait Device: Send + Sync {
@@ -264,6 +327,10 @@ pub trait Device: Send + Sync {
     async fn tree(&self) -> Result<RawTree>;
     /// `None` when the device has no frame stream and settle polls screenshots.
     fn frames(&self) -> Option<watch::Receiver<FrameRef>>;
+    /// Whether `frames()` follows the screen as it is drawn, so a change made during an input shows when it happens.
+    fn frames_follow(&self) -> bool {
+        self.info().capabilities.contains(Capabilities::FRAMES)
+    }
     async fn screenshot(&self, q: Quality) -> Result<Image>;
     fn events(&self) -> broadcast::Receiver<DeviceEvent>;
     async fn gesture(&self, g: Gesture) -> Result<()>;
@@ -281,6 +348,48 @@ pub trait Device: Send + Sync {
         Err(Error::Unsupported {
             op: Op::Launch,
             reason: "this device cannot grant permissions",
+        })
+    }
+    /// Takes runtime permissions away from an installed app, so its next request asks again.
+    async fn revoke(&self, _app: &AppId, _permissions: &[String]) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::App,
+            reason: "this device cannot revoke permissions",
+        })
+    }
+    /// Starts writing the screen's video to an MP4 file at `path`, from the picture now on screen.
+    async fn record_start(&self, _path: &std::path::Path) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::Record,
+            reason: "this device has no video stream to record; Android devices and the iOS Simulator record",
+        })
+    }
+    /// Ends the recording and finishes its file. `None` when none was running.
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        Err(Error::Unsupported {
+            op: Op::Record,
+            reason: "this device has no video stream to record; Android devices and the iOS Simulator record",
+        })
+    }
+    async fn logs(&self, _req: &LogRequest) -> Result<LogReply> {
+        Err(Error::Unsupported {
+            op: Op::Logs,
+            reason: "this device's app logs cannot be read; Android devices have them",
+        })
+    }
+    /// The web page the app in front shows, read from the browser and not from the screen.
+    async fn page(&self) -> Result<WebPage> {
+        Err(Error::Unsupported {
+            op: Op::Page,
+            reason: "this device's web pages cannot be read whole; on Android, Chrome's and a debug build's can",
+        })
+    }
+    /// System settings as typed reads and writes: the index of what there is, one value, or a write (which answers
+    /// with the value afterwards).
+    async fn setting(&self, _op: SettingOp) -> Result<SettingReply> {
+        Err(Error::Unsupported {
+            op: Op::Setting,
+            reason: "this device has no settings to read or write by key (Android 17 has them); use `shell`, or the Settings app",
         })
     }
     /// Installs the app file at `path` (on the daemon's machine). Returns the new app's id when it can tell.

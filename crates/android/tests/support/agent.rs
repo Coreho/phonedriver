@@ -1,7 +1,7 @@
 use phonedriver_android::adb::Adb;
 use phonedriver_android::agent::{self, Launched};
 use serde_json::{Value, json};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
 pub use phonedriver_android::agent::VERSION;
@@ -18,13 +18,11 @@ pub struct RawAgent {
     pub serial: String,
     pub name: String,
     pub token: String,
-    pub launched: Launched,
+    pub launched: std::sync::Arc<Launched>,
 }
 
 pub async fn launch(adb: &Adb, serial: &str) -> RawAgent {
-    let launched = agent::launch(adb, serial, phonedriver_core::device::DisplayMode::Main)
-        .await
-        .unwrap();
+    let launched = agent::launch(adb, serial).await.unwrap();
     RawAgent {
         adb: adb.clone(),
         serial: serial.to_string(),
@@ -41,12 +39,11 @@ pub async fn write_frame(s: &mut TcpStream, v: &Value) {
     s.write_all(&m).await.unwrap();
 }
 
+/// One frame from the agent, inflated when the agent deflated it.
 pub async fn read_frame(s: &mut TcpStream) -> std::io::Result<Value> {
-    let mut l = [0u8; 4];
-    s.read_exact(&mut l).await?;
-    let mut b = vec![0u8; u32::from_be_bytes(l) as usize];
-    s.read_exact(&mut b).await?;
-    Ok(serde_json::from_slice(&b).unwrap())
+    agent::read_frame(s)
+        .await
+        .map_err(|e| std::io::Error::other(e.to_string()))
 }
 
 pub struct RawControl {

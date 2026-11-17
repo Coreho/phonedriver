@@ -120,6 +120,107 @@ fn a_tap_lands_on_the_element_center() {
     }
 }
 
+fn enrolled(udid: &str, on: bool) {
+    const STATE: &str = "com.apple.BiometricKit.enrollmentChanged";
+    let value = if on { "1" } else { "0" };
+    for args in [vec!["-s", STATE, value], vec!["-p", STATE]] {
+        let done = std::process::Command::new("xcrun")
+            .args(["simctl", "spawn", udid, "notifyutil"])
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(done.success());
+    }
+}
+
+#[test]
+#[ignore]
+fn a_face_id_prompt_is_failed_by_the_wrong_face_and_passed_by_the_right_one() {
+    let d = device();
+    let udid = udid();
+    enrolled(&udid, false);
+    testbed::launch(&udid, "dialogs");
+    tap_id(&d, "dialogs.biometric");
+    let log = testbed::wait_for(&udid, "biometric", |e| ev(e, "biometric").is_some());
+    let asked: Vec<&Value> = log.iter().filter_map(|e| ev(e, "biometric")).collect();
+    assert_eq!(asked[0]["result"], "unavailable", "nothing is enrolled yet");
+
+    RT.block_on(d.button(Button::Fingerprint)).unwrap();
+    testbed::clear_log(&udid);
+    tap_id(&d, "dialogs.biometric");
+    std::thread::sleep(Duration::from_millis(1500));
+    RT.block_on(d.button(Button::WrongFingerprint)).unwrap();
+    std::thread::sleep(Duration::from_millis(1500));
+    let prompt = tree(&d);
+    assert!(
+        prompt.nodes.iter().any(|n| n
+            .label
+            .as_deref()
+            .is_some_and(|l| l.contains("Not Recogni"))),
+        "the system says the face was not recognised: {:?}",
+        prompt
+            .nodes
+            .iter()
+            .filter_map(|n| n.label.clone())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        testbed::read_log(&udid)
+            .iter()
+            .all(|e| ev(e, "biometric").is_none()),
+        "the app has no answer yet"
+    );
+    RT.block_on(d.button(Button::Fingerprint)).unwrap();
+    let log = testbed::wait_for(&udid, "biometric", |e| ev(e, "biometric").is_some());
+    let answer: Vec<&Value> = log.iter().filter_map(|e| ev(e, "biometric")).collect();
+    assert_eq!(answer[0]["result"], "succeeded");
+    enrolled(&udid, false);
+}
+
+#[test]
+#[ignore]
+fn a_recording_of_the_simulator_is_an_mp4_of_the_taps_made_while_it_ran() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "taps");
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("sim_record.mp4");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(RT.block_on(d.record_stop()).unwrap(), None);
+    RT.block_on(d.record_start(&path)).unwrap();
+    let began = std::time::Instant::now();
+    assert!(matches!(
+        RT.block_on(d.record_start(&path)),
+        Err(Error::Refused { .. })
+    ));
+    for id in ["taps.b17", "taps.b3", "taps.b20"] {
+        tap_id(&d, id);
+        std::thread::sleep(Duration::from_millis(600));
+    }
+    let wall_ms = began.elapsed().as_millis() as u64;
+    let done = RT
+        .block_on(d.record_stop())
+        .unwrap()
+        .expect("a recording was running");
+    assert_eq!(done.path, path);
+    assert_eq!(done.early, None);
+    assert!(
+        done.width >= 1000 && done.height > done.width,
+        "an upright phone screen in pixels: {done:?}"
+    );
+    assert!(done.frames >= 3, "{done:?}");
+    assert!(
+        done.ms >= 1200 && done.ms <= wall_ms + 300,
+        "{done:?} in {wall_ms} ms"
+    );
+    assert_eq!(
+        phonedriver_video::record::probe(&path).unwrap().frames,
+        done.frames
+    );
+    assert_eq!(RT.block_on(d.record_stop()).unwrap(), None);
+    let taps = testbed::wait_for(&udid, "three taps", |e| ev(e, "tap").is_some());
+    assert_eq!(taps.iter().filter_map(|e| ev(e, "tap")).count(), 3);
+}
+
 #[test]
 #[ignore]
 fn a_screenshot_is_a_png_at_one_pixel_per_point() {
@@ -297,6 +398,27 @@ fn back_without_a_back_button_swipes_from_the_left_edge() {
 
 #[test]
 #[ignore]
+fn a_tap_through_the_hid_port_returns_in_under_150_ms_and_lands() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "taps");
+    let at = center_of(&tree(&d), "taps.b9");
+    let started = std::time::Instant::now();
+    tap(&d, at);
+    let took = started.elapsed();
+    let log = testbed::wait_for(&udid, "tap", |e| ev(e, "tap").is_some());
+    assert_eq!(
+        log.iter().filter_map(|e| ev(e, "tap")).next().unwrap()["id"],
+        "b9"
+    );
+    assert!(
+        took < Duration::from_millis(150),
+        "the tap took {took:?}; through XCTest it takes about 330 ms"
+    );
+}
+
+#[test]
+#[ignore]
 fn polled_frames_report_a_screen_change_after_a_tap() {
     let d = device();
     testbed::launch(&udid(), "taps");
@@ -349,4 +471,61 @@ fn the_tree_right_after_a_launch_is_the_launched_app() {
             Some("com.apple.Preferences")
         );
     }
+}
+
+#[test]
+#[ignore = "needs PHONEDRIVER_TEST_DEVICE"]
+fn landscape_turns_an_app_that_can_turn_and_portrait_turns_it_back() {
+    let d = device();
+    let udid = udid();
+    let screen = |d: &IosDevice| tree(d).windows[0].bounds;
+    std::process::Command::new("xcrun")
+        .args(["simctl", "launch", &udid, "com.apple.mobilesafari"])
+        .status()
+        .unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    let upright = screen(&d);
+    assert!(upright.h > upright.w, "{upright:?}");
+    RT.block_on(d.button(Button::Landscape)).unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    let turned = screen(&d);
+    assert_eq!((turned.w, turned.h), (upright.h, upright.w));
+    RT.block_on(d.button(Button::Portrait)).unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    assert_eq!(screen(&d), upright);
+}
+
+#[test]
+#[ignore = "needs PHONEDRIVER_TEST_DEVICE"]
+fn a_tap_lands_in_an_upright_app_on_a_device_turned_on_its_side() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "taps");
+    RT.block_on(d.button(Button::Landscape)).unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    let t = tree(&d);
+    let at = center_of(&t, "taps.b17");
+    tap(&d, at);
+    let log = testbed::wait_for(&udid, "tap", |e| ev(e, "tap").is_some());
+    RT.block_on(d.button(Button::Portrait)).unwrap();
+    let screen = t.windows[0].bounds;
+    assert!(screen.h > screen.w, "the testbed turned: {screen:?}");
+    let taps: Vec<&Value> = log.iter().filter_map(|e| ev(e, "tap")).collect();
+    assert_eq!(taps.len(), 1);
+    assert_eq!(taps[0]["id"], "b17");
+}
+
+#[test]
+#[ignore]
+fn paste_keeps_quotes_dashes_and_capitals_in_a_field_with_smart_punctuation() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "text");
+    tap_id(&d, "text.plain");
+    std::thread::sleep(Duration::from_millis(500));
+    let text = "x \"q\" 'r' -- teh ok. Gary@Mail.com";
+    RT.block_on(d.text(TextInput::Paste(text.into()))).unwrap();
+    testbed::wait_for(&udid, "plain text", |e| {
+        e["field"] == "plain" && e["value"] == text
+    });
 }

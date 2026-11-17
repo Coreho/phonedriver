@@ -1,0 +1,4 @@
+{"changed":true,"method":"act","params":{"action":{"app":"phonedriver testbed","grant":[],"kind":"launch","restart":true}},"summary":"restarted phonedriver testbed"}
+{"changed":true,"method":"act","params":{"action":{"count":null,"kind":"tap","long":null,"target":{"role":null,"text":"Text"}}},"summary":"tapped \"Text\""}
+{"changed":true,"method":"act","params":{"action":{"append":false,"into":{"role":null,"text":"plain"},"kind":"type","mode":null,"secret":false,"submit":false,"text":"hello from CI"}},"summary":"typed into @e4"}
+{"method":"wait","params":{"condition":{"appears":{"role":null,"text":"hello from CI"}}},"summary":"\"hello from CI\" appeared"}

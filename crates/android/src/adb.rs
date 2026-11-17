@@ -87,6 +87,11 @@ impl Adb {
         }
     }
 
+    /// True for the default server on this machine, false for one named by `ADB_SERVER_SOCKET`.
+    pub fn is_local(&self) -> bool {
+        matches!(self.server, Server::Local { .. })
+    }
+
     pub fn local(addr: &str, adb_program: &str) -> Adb {
         Adb {
             addr: addr.to_string(),
@@ -310,6 +315,12 @@ impl Adb {
                 None => return Err(transport(format!("`{cmd}` ended without an exit code"))),
             }
         }
+    }
+
+    /// Starts a command whose input and output are the stream itself, unframed (`exec:`): for a command that is a
+    /// connection, such as `nc`.
+    pub async fn exec_stream(&self, serial: &str, cmd: &str) -> Result<TcpStream> {
+        self.transport_stream(serial, &format!("exec:{cmd}")).await
     }
 
     /// Starts a command and keeps the stream open. Closing the stream kills the command on the device.

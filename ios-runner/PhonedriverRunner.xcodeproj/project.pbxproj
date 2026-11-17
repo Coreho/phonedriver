@@ -1,0 +1,335 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		066104471C03F529817CA266 /* Server.m in Sources */ = {isa = PBXBuildFile; fileRef = 85F4CA83695B191DBD7D70EE /* Server.m */; };
+		06A8903982E59FBFB409C9FD /* Buttons.m in Sources */ = {isa = PBXBuildFile; fileRef = 3C0A50DFD5400F119FC6C290 /* Buttons.m */; };
+		1FA2508FDE5B25E47EF49120 /* Gesture.m in Sources */ = {isa = PBXBuildFile; fileRef = 919332CCC244AD39E3463174 /* Gesture.m */; };
+		2DEE3D571C6E1A4DFDAB9994 /* Typing.m in Sources */ = {isa = PBXBuildFile; fileRef = B444480C997A591FD6B22265 /* Typing.m */; };
+		49A61451F7ABEFAB997FB50B /* Screenshot.m in Sources */ = {isa = PBXBuildFile; fileRef = 819BBB4D71B7746864168524 /* Screenshot.m */; };
+		7068470591186F6072BCE0F1 /* PhonedriverRunnerTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 5B2D620811884CB466015AA4 /* PhonedriverRunnerTests.m */; };
+		9F0D0702EAAFC5F31B32CC12 /* Json.m in Sources */ = {isa = PBXBuildFile; fileRef = 87BA116B8FA8EACC6B09FB1E /* Json.m */; };
+		C301C265CB5A550CEAF5522C /* Snapshot.m in Sources */ = {isa = PBXBuildFile; fileRef = 05CE04F1242B16BC9B161CA8 /* Snapshot.m */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		05CE04F1242B16BC9B161CA8 /* Snapshot.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Snapshot.m; sourceTree = "<group>"; };
+		3C0A50DFD5400F119FC6C290 /* Buttons.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Buttons.m; sourceTree = "<group>"; };
+		5955DA35B5ACC2250F57EB28 /* Json.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Json.h; sourceTree = "<group>"; };
+		5B2D620811884CB466015AA4 /* PhonedriverRunnerTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhonedriverRunnerTests.m; sourceTree = "<group>"; };
+		5EBE48BCD2B7BF43F5ADFD52 /* Gesture.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Gesture.h; sourceTree = "<group>"; };
+		80ADF4DCA1501347BB116298 /* Buttons.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Buttons.h; sourceTree = "<group>"; };
+		819BBB4D71B7746864168524 /* Screenshot.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Screenshot.m; sourceTree = "<group>"; };
+		85F4CA83695B191DBD7D70EE /* Server.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Server.m; sourceTree = "<group>"; };
+		87BA116B8FA8EACC6B09FB1E /* Json.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Json.m; sourceTree = "<group>"; };
+		919332CCC244AD39E3463174 /* Gesture.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Gesture.m; sourceTree = "<group>"; };
+		943EBCAE784F6C52E2FF448A /* Typing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Typing.h; sourceTree = "<group>"; };
+		98C8AE5AF41EB2111409B5B6 /* Server.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Server.h; sourceTree = "<group>"; };
+		A2401B7F084812D1BB6C4E44 /* PhonedriverRunner.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PhonedriverRunner.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B444480C997A591FD6B22265 /* Typing.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Typing.m; sourceTree = "<group>"; };
+		EB2F664264D0BF035DA5F24D /* Snapshot.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Snapshot.h; sourceTree = "<group>"; };
+		F0E0FBF28FAC431AAC082911 /* Screenshot.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Screenshot.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		180D744A5022993ACDEAC771 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A2401B7F084812D1BB6C4E44 /* PhonedriverRunner.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		619E4DDB1199B11014F016C3 /* Runner */ = {
+			isa = PBXGroup;
+			children = (
+				80ADF4DCA1501347BB116298 /* Buttons.h */,
+				3C0A50DFD5400F119FC6C290 /* Buttons.m */,
+				5EBE48BCD2B7BF43F5ADFD52 /* Gesture.h */,
+				919332CCC244AD39E3463174 /* Gesture.m */,
+				5955DA35B5ACC2250F57EB28 /* Json.h */,
+				87BA116B8FA8EACC6B09FB1E /* Json.m */,
+				5B2D620811884CB466015AA4 /* PhonedriverRunnerTests.m */,
+				F0E0FBF28FAC431AAC082911 /* Screenshot.h */,
+				819BBB4D71B7746864168524 /* Screenshot.m */,
+				98C8AE5AF41EB2111409B5B6 /* Server.h */,
+				85F4CA83695B191DBD7D70EE /* Server.m */,
+				EB2F664264D0BF035DA5F24D /* Snapshot.h */,
+				05CE04F1242B16BC9B161CA8 /* Snapshot.m */,
+				943EBCAE784F6C52E2FF448A /* Typing.h */,
+				B444480C997A591FD6B22265 /* Typing.m */,
+			);
+			path = Runner;
+			sourceTree = "<group>";
+		};
+		65056154CC81DFEA2EE5B4D6 = {
+			isa = PBXGroup;
+			children = (
+				619E4DDB1199B11014F016C3 /* Runner */,
+				180D744A5022993ACDEAC771 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		47DCEE45C5865F02BCA00643 /* PhonedriverRunner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 69E89D27287428E5279A16B3 /* Build configuration list for PBXNativeTarget "PhonedriverRunner" */;
+			buildPhases = (
+				55220C9722D8B0B0C25E4DBC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PhonedriverRunner;
+			packageProductDependencies = (
+			);
+			productName = PhonedriverRunner;
+			productReference = A2401B7F084812D1BB6C4E44 /* PhonedriverRunner.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0B1FD1F8D1FF25492C97D2FD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					47DCEE45C5865F02BCA00643 = {
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 3FC7D0CD7C2CFFEB724A81B3 /* Build configuration list for PBXProject "PhonedriverRunner" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 65056154CC81DFEA2EE5B4D6;
+			minimizedProjectReferenceProxies = 1;
+			productRefGroup = 180D744A5022993ACDEAC771 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				47DCEE45C5865F02BCA00643 /* PhonedriverRunner */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		55220C9722D8B0B0C25E4DBC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				06A8903982E59FBFB409C9FD /* Buttons.m in Sources */,
+				1FA2508FDE5B25E47EF49120 /* Gesture.m in Sources */,
+				9F0D0702EAAFC5F31B32CC12 /* Json.m in Sources */,
+				7068470591186F6072BCE0F1 /* PhonedriverRunnerTests.m in Sources */,
+				49A61451F7ABEFAB997FB50B /* Screenshot.m in Sources */,
+				066104471C03F529817CA266 /* Server.m in Sources */,
+				C301C265CB5A550CEAF5522C /* Snapshot.m in Sources */,
+				2DEE3D571C6E1A4DFDAB9994 /* Typing.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		16F57447CD86BA79E580591A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/PrivateHeaders";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.phonedriver.runner;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7CCC9115C940C776F1F49E53 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		932EB51793506E496B26BEF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/PrivateHeaders";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.phonedriver.runner;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		CEC6C129A56603DC9002829F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3FC7D0CD7C2CFFEB724A81B3 /* Build configuration list for PBXProject "PhonedriverRunner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CEC6C129A56603DC9002829F /* Debug */,
+				7CCC9115C940C776F1F49E53 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		69E89D27287428E5279A16B3 /* Build configuration list for PBXNativeTarget "PhonedriverRunner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				16F57447CD86BA79E580591A /* Debug */,
+				932EB51793506E496B26BEF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0B1FD1F8D1FF25492C97D2FD /* Project object */;
+}

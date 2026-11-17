@@ -62,7 +62,7 @@ brew install hridaya423/tap/phonedriver
 powershell -ExecutionPolicy Bypass -c "irm {{REPO}}/releases/latest/download/phonedriver-installer.ps1 | iex"
 ```
 
-The shell and PowerShell installers put `phonedriver` in `$CARGO_HOME/bin` (`~/.cargo/bin`) and add it to your `PATH`. The iOS Simulator runner needs no download: its sources are inside the binary, and the first command that needs it builds it on your Mac with Xcode and XcodeGen.
+The shell and PowerShell installers put `phonedriver` in `$CARGO_HOME/bin` (`~/.cargo/bin`) and add it to your `PATH`. The iOS Simulator runner needs no download: its sources are inside the binary, and the first command that needs it builds it on your Mac with Xcode.
 
 ## Build from source
 

@@ -1,18 +1,20 @@
 //! A scripted `Device` for daemon tests.
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, watch};
 
 use crate::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    FrameRef, Gesture, Image, Key, Quality, Result, ScreenState, ShellReply, ShellRequest,
-    TextInput, Url,
+    FrameRef, Gesture, Image, Key, LogReply, LogRequest, Quality, Recorded, Result, ScreenState,
+    ShellReply, ShellRequest, TextInput, Url, WebPage,
 };
 use crate::error::{Error, Op};
-use crate::geometry::Size;
+use crate::geometry::{Rect, Size};
 use crate::raw::RawTree;
+use crate::settings::{SettingOp, SettingReply, SettingsIndex};
 
 /// One input the fake received, in order.
 #[derive(Debug, Clone, PartialEq)]
@@ -24,10 +26,15 @@ pub enum Call {
     Text(TextInput),
     Launch(AppId),
     Grant(AppId, Vec<String>),
+    Revoke(AppId, Vec<String>),
+    Setting(SettingOp),
+    Logs(AppId, bool),
+    RecordStart(std::path::PathBuf),
+    RecordStop,
     Install(std::path::PathBuf),
     AppOp(AppOp, AppId),
     Wake,
-    Shell(String),
+    Shell(ShellRequest),
 }
 
 pub struct FakeDevice {
@@ -38,6 +45,8 @@ pub struct FakeDevice {
     foreground: Mutex<Option<AppId>>,
     url_handler: Mutex<Option<AppId>>,
     quits_at_launch: std::sync::atomic::AtomicBool,
+    slow_launch: Mutex<Option<(usize, AppId)>>,
+    launch_reads: std::sync::atomic::AtomicUsize,
     screen: Mutex<ScreenState>,
     screen_reads: std::sync::atomic::AtomicUsize,
     tree_reads: std::sync::atomic::AtomicUsize,
@@ -46,14 +55,22 @@ pub struct FakeDevice {
     events: broadcast::Sender<DeviceEvent>,
     frames: watch::Sender<FrameRef>,
     shell: Mutex<ShellReply>,
+    page: Mutex<Option<WebPage>>,
     on_text: Mutex<Option<TextHook>>,
+    text_failures: Mutex<Vec<Error>>,
     on_gesture: Mutex<Option<GestureHook>>,
     hidden: Option<u32>,
     shot: Mutex<Option<Image>>,
     shot_failures: Mutex<Vec<Error>>,
     order: Mutex<Vec<&'static str>>,
+    settings: Mutex<Option<FakeSettings>>,
+    logs: Mutex<Option<LogReply>>,
+    recorder: Mutex<Option<Option<std::path::PathBuf>>>,
+    text_shows: Mutex<Option<(Duration, Duration)>>,
+    follows: bool,
 }
 
+type FakeSettings = (std::sync::Arc<SettingsIndex>, Vec<(String, String)>);
 type TextHook = Box<dyn Fn(&TextInput) -> Option<Vec<RawTree>> + Send + Sync>;
 type GestureHook = Box<dyn Fn(&Gesture) -> Option<Vec<RawTree>> + Send + Sync>;
 
@@ -75,6 +92,8 @@ impl FakeDevice {
             foreground: Mutex::new(None),
             url_handler: Mutex::new(None),
             quits_at_launch: Default::default(),
+            slow_launch: Mutex::new(None),
+            launch_reads: Default::default(),
             screen_reads: Default::default(),
             tree_reads: Default::default(),
             screen: Mutex::new(ScreenState {
@@ -88,12 +107,19 @@ impl FakeDevice {
             events: broadcast::channel(64).0,
             frames: watch::channel(FrameRef::default()).0,
             shell: Mutex::new(ShellReply::default()),
+            page: Mutex::new(None),
             on_text: Mutex::new(None),
+            text_failures: Mutex::new(Vec::new()),
             on_gesture: Mutex::new(None),
             hidden: None,
             shot: Mutex::new(None),
             shot_failures: Mutex::new(Vec::new()),
             order: Mutex::new(Vec::new()),
+            settings: Mutex::new(None),
+            logs: Mutex::new(None),
+            recorder: Mutex::new(None),
+            text_shows: Mutex::new(None),
+            follows: false,
         }
     }
 
@@ -109,6 +135,11 @@ impl FakeDevice {
         *lock(&self.shot_failures) = errors.into_iter().rev().collect();
     }
 
+    /// The next `text()` calls fail with these errors, in order, before one succeeds.
+    pub fn fail_text(&self, errors: Vec<Error>) {
+        *lock(&self.text_failures) = errors.into_iter().rev().collect();
+    }
+
     /// `"tree"` and `"screenshot"` in the order the device was asked, to tell what a screenshot was taken after.
     pub fn order(&self) -> Vec<&'static str> {
         lock(&self.order).clone()
@@ -121,6 +152,19 @@ impl FakeDevice {
     }
 
     /// After a `gesture` call for which `f` returns trees, `tree()` returns those in order, then keeps the last.
+    /// Frames that follow the screen without the `FRAMES` capability, as simio's on the iOS Simulator.
+    pub fn following_frames(mut self) -> FakeDevice {
+        self.info.capabilities -= Capabilities::FRAMES;
+        self.follows = true;
+        self
+    }
+
+    /// `text()` draws a frame `shown` after it starts and returns at `confirmed`, as the iOS runner confirms text
+    /// after the app has drawn it.
+    pub fn text_shows_before_it_returns(&self, shown: Duration, confirmed: Duration) {
+        *lock(&self.text_shows) = Some((shown, confirmed));
+    }
+
     pub fn on_gesture(&self, f: impl Fn(&Gesture) -> Option<Vec<RawTree>> + Send + Sync + 'static) {
         *lock(&self.on_gesture) = Some(Box::new(f));
     }
@@ -141,6 +185,13 @@ impl FakeDevice {
     pub fn set_quits_at_launch(&self, quits: bool) {
         self.quits_at_launch
             .store(quits, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// A launched app comes to the front only at the `reads`th `foreground()` call after its launch, as a slow cold
+    /// start does.
+    pub fn set_launch_takes(&self, reads: usize) {
+        self.launch_reads
+            .store(reads, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// The app `open_url` reports as handling a link that names no app.
@@ -176,9 +227,40 @@ impl FakeDevice {
             .collect();
     }
 
+    /// The device has these settings, with these values by key. A write is kept; a write of `"refuse"` fails.
+    pub fn with_settings(&self, index: SettingsIndex, values: &[(&str, &str)]) {
+        let values = values
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        *lock(&self.settings) = Some((std::sync::Arc::new(index), values));
+    }
+
+    /// The device can record its screen: a start writes a small file, a stop answers 2 frames over 1500 ms.
+    pub fn with_recorder(&self) {
+        *lock(&self.recorder) = Some(None);
+    }
+
+    /// Ends a running recording the way a lost connection does: the next stop finds none.
+    pub fn lose_recording(&self) {
+        if let Some(running) = lock(&self.recorder).as_mut() {
+            *running = None;
+        }
+    }
+
+    /// What `logs()` answers from now on; without it the device has no logs.
+    pub fn answer_logs(&self, reply: LogReply) {
+        *lock(&self.logs) = Some(reply);
+    }
+
     /// What `shell()` answers from now on.
     pub fn answer_shell(&self, reply: ShellReply) {
         *lock(&self.shell) = reply;
+    }
+
+    /// The web page `page()` reads from now on; without one it refuses, as an app with no web page does.
+    pub fn show_page(&self, page: WebPage) {
+        *lock(&self.page) = Some(page);
     }
 
     pub fn set_screen(&self, state: ScreenState) {
@@ -263,6 +345,10 @@ impl Device for FakeDevice {
         self.events.subscribe()
     }
 
+    fn frames_follow(&self) -> bool {
+        self.follows || self.info.capabilities.contains(Capabilities::FRAMES)
+    }
+
     async fn gesture(&self, g: Gesture) -> Result<()> {
         {
             let mut screen = lock(&self.screen);
@@ -290,8 +376,26 @@ impl Device for FakeDevice {
     }
 
     async fn text(&self, t: TextInput) -> Result<()> {
+        if let Some(e) = lock(&self.text_failures).pop() {
+            return Err(e);
+        }
         if let Some(trees) = lock(&self.on_text).as_ref().and_then(|f| f(&t)) {
             *lock(&self.trees) = trees.into_iter().rev().collect();
+        }
+        let shows = *lock(&self.text_shows);
+        if let Some((shown, confirmed)) = shows {
+            tokio::time::sleep(shown).await;
+            self.push_frame(FrameRef {
+                seq: u64::MAX,
+                changed_area_pt2: 10_000.0,
+                changed_box: Some(Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 100.0,
+                    h: 100.0,
+                }),
+            });
+            tokio::time::sleep(confirmed.saturating_sub(shown)).await;
         }
         self.record(Call::Text(t))
     }
@@ -312,7 +416,10 @@ impl Device for FakeDevice {
     }
 
     async fn launch(&self, app: &AppId) -> Result<()> {
-        if !self
+        let reads = self.launch_reads.load(std::sync::atomic::Ordering::Relaxed);
+        if reads > 0 {
+            *lock(&self.slow_launch) = Some((reads, app.clone()));
+        } else if !self
             .quits_at_launch
             .load(std::sync::atomic::Ordering::Relaxed)
         {
@@ -325,7 +432,104 @@ impl Device for FakeDevice {
         self.record(Call::Grant(app.clone(), permissions.to_vec()))
     }
 
+    async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
+        self.record(Call::Revoke(app.clone(), permissions.to_vec()))
+    }
+
+    async fn record_start(&self, path: &std::path::Path) -> Result<()> {
+        let mut recorder = lock(&self.recorder);
+        let Some(running) = recorder.as_mut() else {
+            return Err(Error::Unsupported {
+                op: Op::Record,
+                reason: "this fake has no video stream",
+            });
+        };
+        if running.is_some() {
+            return Err(Error::Refused {
+                detail: "a recording is already running".into(),
+            });
+        }
+        std::fs::write(path, b"video").map_err(|e| Error::Transport {
+            detail: e.to_string(),
+        })?;
+        *running = Some(path.to_path_buf());
+        self.record(Call::RecordStart(path.to_path_buf()))
+    }
+
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        let mut recorder = lock(&self.recorder);
+        let Some(running) = recorder.as_mut() else {
+            return Err(Error::Unsupported {
+                op: Op::Record,
+                reason: "this fake has no video stream",
+            });
+        };
+        self.record(Call::RecordStop)?;
+        Ok(running.take().map(|path| Recorded {
+            path,
+            width: 360,
+            height: 800,
+            frames: 2,
+            ms: 1500,
+            early: None,
+        }))
+    }
+
+    async fn logs(&self, req: &LogRequest) -> Result<LogReply> {
+        let Some(reply) = lock(&self.logs).clone() else {
+            return Err(Error::Unsupported {
+                op: Op::Logs,
+                reason: "this fake has no logs",
+            });
+        };
+        self.record(Call::Logs(req.app.clone(), req.crashes))?;
+        Ok(reply)
+    }
+
+    async fn setting(&self, op: SettingOp) -> Result<SettingReply> {
+        let mut settings = lock(&self.settings);
+        let Some((index, values)) = settings.as_mut() else {
+            return Err(Error::Unsupported {
+                op: Op::Setting,
+                reason: "this fake has no settings",
+            });
+        };
+        lock(&self.calls).push(Call::Setting(op.clone()));
+        let read = |values: &[(String, String)], key: &str| {
+            values
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| SettingReply::Value {
+                    value: v.clone(),
+                    hint: None,
+                })
+                .ok_or(Error::Refused {
+                    detail: format!("the device reported no value for {key}"),
+                })
+        };
+        match op {
+            SettingOp::Index => Ok(SettingReply::Index(index.clone())),
+            SettingOp::Get(key) => read(values, &key),
+            SettingOp::Set { key, value } if value == "refuse" => Err(Error::Refused {
+                detail: format!("{key} was not set: Preference not enabled"),
+            }),
+            SettingOp::Set { key, value } => {
+                values.retain(|(k, _)| *k != key);
+                values.push((key.clone(), value));
+                read(values, &key)
+            }
+        }
+    }
+
     async fn foreground(&self) -> Result<Option<AppId>> {
+        let mut slow = lock(&self.slow_launch);
+        if let Some((left, app)) = slow.as_mut() {
+            *left -= 1;
+            if *left == 0 {
+                *lock(&self.foreground) = Some(app.clone());
+                *slow = None;
+            }
+        }
         Ok(lock(&self.foreground).clone())
     }
 
@@ -338,8 +542,14 @@ impl Device for FakeDevice {
         self.record(Call::AppOp(op, app.clone()))
     }
 
+    async fn page(&self) -> Result<WebPage> {
+        lock(&self.page).clone().ok_or(Error::Refused {
+            detail: "com.example has no web page that can be read".into(),
+        })
+    }
+
     async fn shell(&self, req: &ShellRequest) -> Result<ShellReply> {
-        self.record(Call::Shell(req.command.clone()))?;
+        self.record(Call::Shell(req.clone()))?;
         Ok(lock(&self.shell).clone())
     }
 

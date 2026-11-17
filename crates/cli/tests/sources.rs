@@ -35,6 +35,8 @@ impl DeviceSource for Fixed {
             _ => Err(Error::NoDevice {
                 requested: None,
                 connected: vec![],
+                unasked: vec![],
+                off: vec![],
             }),
         }
     }
@@ -142,4 +144,31 @@ async fn a_prefixed_request_asks_only_its_owner_and_a_bare_one_falls_through() {
     assert_eq!(ids(s.list_for(Some("s")).await.unwrap()), ["sim:s"]);
     assert_eq!((calls(&adb), calls(&sim), calls(&phys)), (1, 1, 1));
     assert_eq!(ids(s.list_for(None).await.unwrap()), ["sim:s", "ios:p"]);
+}
+
+#[tokio::test]
+async fn a_bare_id_that_is_nowhere_says_which_source_could_not_be_asked() {
+    let s = sources(
+        Fixed(Err("cannot reach the adb server")),
+        Fixed(Ok(vec!["sim:b"])),
+    );
+    let e = s.list_for(Some("emulator-5554")).await.unwrap_err();
+    assert_eq!(
+        e.to_string(),
+        "no device \"emulator-5554\"; connected: sim:b (m); could not ask: connection error: cannot reach the adb server"
+    );
+    assert!(
+        e.hint().starts_with("Run `phonedriver doctor`"),
+        "{}",
+        e.hint()
+    );
+}
+
+#[tokio::test]
+async fn a_bare_id_a_later_source_has_is_found_although_an_earlier_one_failed() {
+    let s = sources(
+        Fixed(Err("cannot reach the adb server")),
+        Fixed(Ok(vec!["sim:b"])),
+    );
+    assert_eq!(ids(s.list_for(Some("b")).await.unwrap()), ["sim:b"]);
 }

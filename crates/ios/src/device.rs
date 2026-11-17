@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use phonedriver_core::device::{
     App, AppId, AppOp, Button, Capabilities, ClipboardOp, Device, DeviceEvent, DeviceInfo,
-    FrameRef, Gesture, Image, ImageFormat, Key, Quality, Result, ScreenState, ShellReply,
+    FrameRef, Gesture, Image, ImageFormat, Key, Quality, Recorded, Result, ScreenState, ShellReply,
     ShellRequest, TextInput, Url,
 };
 use phonedriver_core::element::Role;
@@ -28,6 +28,7 @@ use idevice::services::installation_proxy::InstallationProxyClient;
 
 use crate::map;
 use crate::runner::{Client, Runner};
+use crate::simio::{Frames, Seen, SimIo};
 use crate::simulator::{
     Simulator, privacy_service, shell_args, simctl, simctl_shell, simctl_with_input,
 };
@@ -38,6 +39,8 @@ const POLL_SCALE: f32 = 0.25;
 /// After an input or a visible change, settle polls back to back for this long; after that, at `IDLE_POLL`.
 const ACTIVE_WINDOW: Duration = Duration::from_secs(3);
 const IDLE_POLL: Duration = Duration::from_millis(500);
+const RECORDER_START: Duration = Duration::from_secs(10);
+const RECORDER_FINISH: Duration = Duration::from_secs(30);
 /// For this long after the host last used the device, the poller keeps its screen awake (decision D56). It is the
 /// length of a session's hold on a device, so a phone does not lock under an agent that still holds it.
 const KEEP_AWAKE: Duration = Duration::from_secs(600);
@@ -56,7 +59,8 @@ const APP_START_WAIT: Duration = Duration::from_secs(5);
 const APP_START_RETRY: Duration = Duration::from_millis(100);
 /// Characters per second for paste mode. A synthesized Cmd+V does not paste text another app put on the
 /// pasteboard (observed on the iOS 26.5 Simulator), so paste types through the runner's text input at a speed
-/// that still entered 102 mixed characters exactly in 267 ms; keys mode types at the runner's default 60.
+/// that still entered 102 mixed characters exactly in 267 ms; keys mode types at the runner's default 60. Not through
+/// the Simulator's HID keys: those lost shift and took smart punctuation where the runner's text was exact (D93).
 const PASTE_SPEED: u32 = 5000;
 
 enum Host {
@@ -77,6 +81,25 @@ pub struct IosDevice {
     activity: Arc<Activity>,
     events: broadcast::Sender<DeviceEvent>,
     poller: JoinHandle<()>,
+    recording: tokio::sync::Mutex<Option<SimRecording>>,
+    simio: Option<tokio::sync::Mutex<SimIo>>,
+}
+
+/// `xcrun simctl io <udid> recordVideo` while it runs. It finishes its file when it is interrupted, not when it
+/// is killed.
+struct SimRecording {
+    recorder: tokio::process::Child,
+    path: std::path::PathBuf,
+}
+
+impl SimRecording {
+    fn interrupt(&self) {
+        if let Some(pid) = self.recorder.id() {
+            let _ = std::process::Command::new("kill")
+                .args(["-INT", &pid.to_string()])
+                .status();
+        }
+    }
 }
 
 struct Activity {
@@ -87,6 +110,8 @@ struct Activity {
     inputs: AtomicUsize,
     /// The lock state in the runner's last hello or screenshot reply.
     locked: AtomicBool,
+    /// While simio follows the Simulator's screen buffer and lock state, the poller leaves the runner alone.
+    followed: AtomicBool,
 }
 
 /// While an input runs, settle polls wait: a poll between the requests of one input (the tree read and the tap of
@@ -154,12 +179,28 @@ impl IosDevice {
     /// Starts or reuses the runner on `sim` (task 5.4) and starts settle polling. `home` holds the runner build.
     pub async fn connect(sim: &Simulator, home: &Path) -> Result<IosDevice> {
         let runner = Runner::start(&sim.udid, home).await?;
+        let simio = match SimIo::start(home, &sim.udid).await {
+            Ok(io) => Some(io),
+            Err(e) => {
+                eprintln!("touches on {} go through XCTest: {e}", sim.udid);
+                None
+            }
+        };
+        let frames = match Frames::start(home, &sim.udid, POLL_SCALE).await {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("the screen of {} is polled through XCTest: {e}", sim.udid);
+                None
+            }
+        };
         IosDevice::with_runner(
             Host::Simulator,
             format!("sim:{}", sim.udid),
             &sim.udid,
             &sim.name,
             runner,
+            simio,
+            frames,
         )
     }
 
@@ -181,7 +222,7 @@ impl IosDevice {
             Link::Usb { .. } => Host::Cable(provider),
             Link::Network { .. } => Host::Network,
         };
-        IosDevice::with_runner(host, id, &device.udid, model, runner)
+        IosDevice::with_runner(host, id, &device.udid, model, runner, None, None)
     }
 
     fn with_runner(
@@ -190,6 +231,8 @@ impl IosDevice {
         udid: &str,
         model: &str,
         runner: Runner,
+        simio: Option<SimIo>,
+        frames: Option<Frames>,
     ) -> Result<IosDevice> {
         let runner = Arc::new(runner);
         let hello = runner.hello.clone();
@@ -205,7 +248,16 @@ impl IosDevice {
             kick: Notify::new(),
             inputs: AtomicUsize::new(0),
             locked: AtomicBool::new(hello.locked),
+            followed: AtomicBool::new(frames.is_some()),
         });
+        if let Some(frames) = frames {
+            tokio::spawn(follow(
+                frames,
+                store.clone(),
+                activity.clone(),
+                events.clone(),
+            ));
+        }
         let poller = tokio::spawn(poll(
             runner.clone(),
             store.clone(),
@@ -229,6 +281,8 @@ impl IosDevice {
             activity,
             events,
             poller,
+            recording: tokio::sync::Mutex::new(None),
+            simio: simio.map(tokio::sync::Mutex::new),
         })
     }
 
@@ -271,6 +325,22 @@ impl IosDevice {
         self.client().request(op, req).await
     }
 
+    /// Whether a notification banner covers where the path starts, or the runner could not say. The runner waits for
+    /// one to leave before its own gestures; a touch through the HID port would land on it.
+    async fn banner_covers(&self, path: &[phonedriver_core::device::TimedPoint]) -> bool {
+        let Some(p) = path.first().filter(|p| p.at.y <= map::BANNER_ZONE) else {
+            return false;
+        };
+        let reply = self
+            .client()
+            .request(
+                Op::Gesture,
+                json!({"op": "banner", "x": p.at.x, "y": p.at.y}),
+            )
+            .await;
+        !matches!(reply, Ok(r) if r["covered"] == false)
+    }
+
     async fn snapshot(&self, max_depth: u32) -> Result<Value> {
         self.activity.used();
         let deadline = Instant::now() + APP_START_WAIT;
@@ -289,13 +359,79 @@ impl IosDevice {
     }
 }
 
-impl Drop for IosDevice {
-    fn drop(&mut self) {
-        self.poller.abort();
+impl IosDevice {
+    /// Shows the Simulator's Face ID or Touch ID a face or finger that matches, or one that does not (decision
+    /// D69), through the notifications the Simulator's own Features menu posts. A Simulator with nothing enrolled
+    /// is enrolled first, since an app asks only when something is.
+    async fn show_face(&self, matches: bool) -> Result<()> {
+        const ENROLLED: &str = "com.apple.BiometricKit.enrollmentChanged";
+        if !matches!(self.host, Host::Simulator) {
+            return Err(Error::Unsupported {
+                op: Op::Button,
+                reason: "an iPhone's Face ID and Touch ID take their owner; only a Simulator's can be answered from here",
+            });
+        }
+        let notify = async |args: &[&str]| {
+            let mut all = vec!["spawn", self.udid.as_str(), "notifyutil"];
+            all.extend_from_slice(args);
+            simctl(&all).await
+        };
+        if !notify(&["-g", ENROLLED]).await?.trim_end().ends_with(" 1") {
+            notify(&["-s", ENROLLED, "1"]).await?;
+            notify(&["-p", ENROLLED]).await?;
+        }
+        let outcome = if matches { "match" } else { "nomatch" };
+        // `pearl` is Face ID and `fingerTouch` is Touch ID; a Simulator listens to the one it has.
+        for sensor in ["pearl", "fingerTouch"] {
+            notify(&[
+                "-p",
+                &format!("com.apple.BiometricKit_Sim.{sensor}.{outcome}"),
+            ])
+            .await?;
+        }
+        Ok(())
     }
 }
 
+impl Drop for IosDevice {
+    fn drop(&mut self) {
+        self.poller.abort();
+        if let Some(recording) = self.recording.get_mut().as_ref() {
+            recording.interrupt();
+        }
+    }
+}
+
+/// Feeds the frame store with simio's pictures of the Simulator's screen buffer, and announces its lock state,
+/// until the helper stops.
+async fn follow(
+    mut frames: Frames,
+    store: Arc<FrameStore>,
+    activity: Arc<Activity>,
+    events: broadcast::Sender<DeviceEvent>,
+) {
+    while let Some(seen) = frames.next().await {
+        match seen {
+            Seen::Picture(l) => {
+                let chroma = (l.width.div_ceil(2) * l.height.div_ceil(2)) as usize;
+                let frame =
+                    Frame::from_i420(l.width, l.height, l.y, vec![128; chroma], vec![128; chroma]);
+                if store.publish(frame).changed_area_pt2 > ACTIVE_CHANGE_PT2 {
+                    activity.touch();
+                }
+            }
+            Seen::Locked(locked) => {
+                if activity.locked.swap(locked, Ordering::Relaxed) != locked {
+                    let _ = events.send(DeviceEvent::Locked(locked));
+                }
+            }
+        }
+    }
+    activity.followed.store(false, Ordering::SeqCst);
+}
+
 /// Feeds the frame store with small luma screenshots: back to back while the screen is busy, slowly when idle.
+/// While simio follows the screen, it only keeps the screen awake.
 async fn poll(
     runner: Arc<Runner>,
     store: Arc<FrameStore>,
@@ -320,6 +456,10 @@ async fn poll(
         ) {
             nudged = Instant::now();
             let _ = runner.client.request(Op::Key, json!({"op": "awake"})).await;
+        }
+        if activity.followed.load(Ordering::SeqCst) {
+            tokio::time::sleep(IDLE_POLL).await;
+            continue;
         }
         if !activity.active() {
             tokio::select! {
@@ -382,6 +522,17 @@ async fn installed_apps(provider: &dyn IdeviceProvider, id: &str) -> Result<Vec<
     let found = client.get_apps(None, None).await.map_err(gone)?;
     let mut apps: Vec<App> = found
         .iter()
+        .filter(|(_, info)| {
+            let tags: Vec<&str> = info
+                .as_dictionary()
+                .and_then(|d| d.get("SBAppTags"))
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|t| t.as_string())
+                .collect();
+            !crate::map::hidden(&tags)
+        })
         .map(|(id, info)| {
             let field = |k: &str| {
                 info.as_dictionary()
@@ -418,8 +569,112 @@ impl Device for IosDevice {
         Some(self.screen())
     }
 
+    /// While simio follows the Simulator's screen; the runner's polled screenshots fall behind it.
+    fn frames_follow(&self) -> bool {
+        self.activity.followed.load(Ordering::Relaxed)
+    }
+
     fn frames(&self) -> Option<watch::Receiver<FrameRef>> {
         Some(self.store.subscribe())
+    }
+
+    /// The Simulator records itself: `simctl io recordVideo` writes H.264 into an MP4. It says `Recording started`
+    /// about 300 ms after it is run, and this waits for that line so that the next action is in the video.
+    async fn record_start(&self, path: &Path) -> Result<()> {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+        if !matches!(self.host, Host::Simulator) {
+            return Err(Error::Unsupported {
+                op: Op::Record,
+                reason: "recording an iPhone's screen is not built; the iOS Simulator and Android devices record",
+            });
+        }
+        let mut slot = self.recording.lock().await;
+        if let Some(running) = slot.as_mut()
+            && matches!(running.recorder.try_wait(), Ok(None))
+        {
+            return Err(Error::Refused {
+                detail: "a recording is already running".into(),
+            });
+        }
+        let mut recorder = tokio::process::Command::new("xcrun")
+            .args([
+                "simctl",
+                "io",
+                &self.udid,
+                "recordVideo",
+                "--codec=h264",
+                "--force",
+            ])
+            .arg(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| Error::Transport {
+                detail: format!("cannot run xcrun simctl (is Xcode installed?): {e}"),
+            })?;
+        let mut said = BufReader::new(recorder.stderr.take().ok_or_else(|| Error::Transport {
+            detail: "the Simulator's recorder has no output to read".into(),
+        })?)
+        .lines();
+        let mut last = String::new();
+        let started = tokio::time::timeout(RECORDER_START, async {
+            while let Ok(Some(line)) = said.next_line().await {
+                if line.contains("Recording started") {
+                    return true;
+                }
+                last = line;
+            }
+            false
+        })
+        .await
+        .unwrap_or(false);
+        if !started {
+            let _ = recorder.kill().await;
+            return Err(Error::Transport {
+                detail: format!("the Simulator's recorder did not start: {last}"),
+            });
+        }
+        // The recorder writes two more lines when it is interrupted; with nobody reading them it would be
+        // stopped by the closed pipe before it finishes the file.
+        tokio::spawn(async move { while let Ok(Some(_)) = said.next_line().await {} });
+        *slot = Some(SimRecording {
+            recorder,
+            path: path.to_path_buf(),
+        });
+        Ok(())
+    }
+
+    async fn record_stop(&self) -> Result<Option<Recorded>> {
+        let Some(mut recording) = self.recording.lock().await.take() else {
+            return Ok(None);
+        };
+        let early = matches!(recording.recorder.try_wait(), Ok(Some(_)))
+            .then(|| "the Simulator's recorder had stopped by itself".to_string());
+        if early.is_none() {
+            recording.interrupt();
+        }
+        if tokio::time::timeout(RECORDER_FINISH, recording.recorder.wait())
+            .await
+            .is_err()
+        {
+            let _ = recording.recorder.kill().await;
+            return Err(Error::Transport {
+                detail: "the Simulator's recorder did not finish its file".into(),
+            });
+        }
+        let read =
+            phonedriver_video::record::probe(&recording.path).map_err(|e| Error::Transport {
+                detail: format!("cannot read {}: {e}", recording.path.display()),
+            })?;
+        Ok(Some(Recorded {
+            path: read.path,
+            width: read.width,
+            height: read.height,
+            frames: read.frames,
+            ms: read.ms,
+            early,
+        }))
     }
 
     async fn screenshot(&self, _q: Quality) -> Result<Image> {
@@ -450,6 +705,13 @@ impl Device for IosDevice {
     }
 
     async fn gesture(&self, g: Gesture) -> Result<()> {
+        if let (Some(simio), [path]) = (&self.simio, g.fingers.as_slice())
+            && map::hid_reaches(path, self.screen())
+            && !self.banner_covers(path).await
+        {
+            let _busy = Busy::new(&self.activity);
+            return simio.lock().await.touch(path).await;
+        }
         self.input(Op::Gesture, map::gesture_request(&g)).await?;
         Ok(())
     }
@@ -469,6 +731,8 @@ impl Device for IosDevice {
             Button::Lock => "lock",
             Button::VolumeUp => "volume_up",
             Button::VolumeDown => "volume_down",
+            Button::Landscape => "landscape",
+            Button::Portrait => "portrait",
             Button::Back => return self.back().await.map(|_| ()),
             Button::Notifications => {
                 return self.gesture(map::notifications_swipe(self.screen())).await;
@@ -478,6 +742,9 @@ impl Device for IosDevice {
                     op: Op::Button,
                     reason: "iOS has no recents button",
                 });
+            }
+            Button::Fingerprint | Button::WrongFingerprint => {
+                return self.show_face(b == Button::Fingerprint).await;
             }
         };
         self.input(Op::Button, json!({"op": "button", "name": name}))
@@ -568,6 +835,13 @@ impl Device for IosDevice {
             ClipboardOp::Get => Ok(Some(simctl(&["pbpaste", &self.udid]).await?)),
             ClipboardOp::Set(text) => {
                 simctl_with_input(&["pbcopy", &self.udid], Some(&text)).await?;
+                // Seen on a Mac mini with Xcode 27, 2026-11-16: `simctl pbcopy` exited 0 on every booted simulator
+                // and `pbpaste` stayed empty, also after the simulator was shut down and booted again.
+                if simctl(&["pbpaste", &self.udid]).await? != text {
+                    return Err(Error::Refused {
+                        detail: "the Simulator's clipboard did not take the text: `xcrun simctl pbcopy` reported success and `pbpaste` gives something else".into(),
+                    });
+                }
                 Ok(None)
             }
         }
@@ -676,6 +950,15 @@ impl Device for IosDevice {
         for name in permissions {
             let service = privacy_service(name)?;
             simctl(&["privacy", &self.udid, "grant", service, &app.0]).await?;
+        }
+        Ok(())
+    }
+
+    async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
+        self.simulator_only()?;
+        for name in permissions {
+            let service = privacy_service(name)?;
+            simctl(&["privacy", &self.udid, "revoke", service, &app.0]).await?;
         }
         Ok(())
     }

@@ -25,9 +25,25 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Target {
-    Ref { r#ref: Ref },
-    Point { point: PointJson },
-    Text { text: String, role: Option<Role> },
+    Ref {
+        r#ref: Ref,
+    },
+    Point {
+        point: PointJson,
+    },
+    /// The one element with this id (an Android resource name, an iOS accessibility identifier). When no element
+    /// has it, or several do, `text` and `role` find the element as a text target would. Saved steps use it.
+    Id {
+        id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<Role>,
+    },
+    Text {
+        text: String,
+        role: Option<Role>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -184,12 +200,23 @@ pub struct Observation {
     /// The device's own tree JSON, only when the request asked to capture a fixture.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub capture: Option<String>,
+    /// The screen gives nothing to act on: no elements (or a web view with none inside) and no text read from
+    /// its pixels.
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    pub empty: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionResult {
     pub ok: bool,
     pub summary: String,
+    /// Where a tap landed, in points.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub at: Option<phonedriver_core::geometry::Point>,
+    /// The field a verified `type` went into and whether it replaced the field's text, for a batch's reply to leave
+    /// out what that step already said.
+    #[serde(skip)]
+    pub typed_into: Option<(phonedriver_core::element::Ref, bool)>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub via: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -200,6 +227,12 @@ pub struct ActionResult {
     pub settled: bool,
     pub settle_ms: u32,
     pub changed: bool,
+    /// How many times in a row this same action has settled with no change, from the third time on.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub unchanged_repeats: Option<u32>,
+    /// The app that was in front crashed during the action.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub crashed: Option<Crashed>,
     /// The screen was off and the action woke it first.
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub woke: bool,
@@ -207,6 +240,13 @@ pub struct ActionResult {
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub unlocked: bool,
     pub observation: Observation,
+}
+
+/// `what` is the exception and the frame that threw it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Crashed {
+    pub app: String,
+    pub what: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -236,6 +276,9 @@ pub struct ScreenshotResult {
     /// How many elements were boxed, when the screenshot asked for marks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marks: Option<u32>,
+    /// How many rows at the top of the picture the system's status bar covers, when the last screen read showed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_bar: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -272,6 +315,8 @@ pub struct SnapshotParams {
     #[serde(default)]
     pub pixels: bool,
     pub timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub audit: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -287,6 +332,60 @@ pub struct AppParams {
     pub action: String,
     pub app: Option<String>,
     pub path: Option<String>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordAction {
+    Start,
+    Stop,
+}
+
+/// A recording of the screen to an MP4 file (`docs/protocol.md`, `record`). `path` is absolute, and only for a
+/// start; without it the file goes under the daemon's `tmp`.
+#[derive(Debug, Deserialize)]
+pub struct RecordParams {
+    pub action: RecordAction,
+    pub path: Option<std::path::PathBuf>,
+}
+
+/// An app's recent log lines (`docs/protocol.md`, `logs`). `app` defaults to the one in front.
+#[derive(Debug, Deserialize)]
+pub struct LogsParams {
+    pub app: Option<String>,
+    pub grep: Option<String>,
+    /// The last lines to keep; default 40, 0 keeps all.
+    pub head: Option<usize>,
+    /// How far back to read, in seconds; default 60.
+    pub since_s: Option<u64>,
+}
+
+/// The web page in front, whole (`docs/protocol.md`, `page`).
+#[derive(Debug, Deserialize)]
+pub struct PageParams {
+    pub grep: Option<String>,
+    /// Print everything, however long.
+    #[serde(default)]
+    pub all: bool,
+}
+
+/// A system setting by key (`docs/protocol.md`, `setting`): `find` searches (`a|b` for several searches), `key`
+/// reads, `key` with `value` writes, `values` writes several, `open` shows the settings screen with that key.
+#[derive(Debug, Deserialize)]
+pub struct SettingParams {
+    pub find: Option<String>,
+    pub key: Option<String>,
+    pub value: Option<String>,
+    pub values: Option<std::collections::BTreeMap<String, String>>,
+    pub open: Option<String>,
+    #[serde(default)]
+    pub force: bool,
+    #[serde(default = "yes")]
+    pub settle: bool,
+    pub timeout_ms: Option<u64>,
+    pub expect_change_ms: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -150,10 +150,19 @@ fn devices_lists_the_simulator_tier() {
 fn snapshot_then_tap_a_ref_lands_on_its_center_and_returns_a_diff() {
     let rig = Rig::new();
     rig.tab("taps");
-    let text = rig.ok(&["snapshot"]);
+    let first = |verb: &str| {
+        rig.command()
+            .env("PHONEDRIVER_SESSION", "first-snapshot")
+            .arg(verb)
+            .output()
+            .unwrap()
+    };
+    rig.ok(&["release"]);
+    let text = String::from_utf8(first("snapshot").stdout).unwrap();
+    first("release");
     assert!(
         text.starts_with(&format!("device sim:{}", rig.udid)),
-        "{text}"
+        "a session's first snapshot names the device: {text}"
     );
     assert!(text.contains("app dev.phonedriver.testbed"), "{text}");
     let els = rig.elements();
@@ -343,7 +352,7 @@ fn doctor_finds_xcode_the_simulator_and_a_runner_that_answers() {
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(out.status.success(), "{text}");
-    for name in ["xcode", "xcodegen", "simulators", "runner build"] {
+    for name in ["xcode", "simulators", "runner build"] {
         assert!(
             text.lines()
                 .any(|l| l.starts_with("ok") && l.contains(name)),

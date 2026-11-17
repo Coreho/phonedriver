@@ -47,7 +47,7 @@ const ASKS = [
 
 const TAPDIFF = [
   "$ phonedriver tap @e24",
-  'ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms',
+  'ok tapped @e24 "Dark theme"',
   '~ @e23 button "Dark theme" "Will turn on when Bedtime starts" → "Will never turn off automatically"',
   '~ @e24 switch "Dark theme" off → on',
 ];

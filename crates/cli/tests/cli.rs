@@ -20,7 +20,7 @@ fn version_prints_name_and_version() {
         .arg("version")
         .assert()
         .success()
-        .stdout("phonedriver 0.1.4\n");
+        .stdout("phonedriver 0.1.5\n");
 }
 
 #[test]
@@ -31,8 +31,49 @@ fn the_version_flag_prints_the_same_line_as_the_version_verb() {
             .arg(flag)
             .assert()
             .success()
-            .stdout("phonedriver 0.1.4\n");
+            .stdout("phonedriver 0.1.5\n");
     }
+}
+
+#[test]
+fn compare_of_two_files_needs_no_device_and_says_why_a_pair_cannot_be_compared() {
+    let dir = tempfile::tempdir().unwrap();
+    let small = dir.path().join("small.png");
+    std::fs::write(&small, fakes::PNG).unwrap();
+    let wide = dir.path().join("wide.png");
+    let mut png = Vec::new();
+    let mut encoder = png::Encoder::new(&mut png, 2, 1);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&[0, 0])
+        .unwrap();
+    std::fs::write(&wide, png).unwrap();
+    let text = dir.path().join("notes.txt");
+    std::fs::write(&text, "not a picture").unwrap();
+    let boxed = dir.path().join("boxed.png");
+    let compare = |a: &PathBuf, b: &PathBuf| {
+        let mut c = Command::cargo_bin("phonedriver").unwrap();
+        c.env("PHONEDRIVER_HOME", dir.path())
+            .arg("compare")
+            .arg(a)
+            .arg(b)
+            .arg("--image")
+            .arg(&boxed);
+        c.assert()
+    };
+    compare(&small, &small).success().stdout("same\n");
+    assert!(!boxed.exists(), "nothing changed, so nothing is drawn");
+    compare(&small, &wide)
+        .code(1)
+        .stderr("error: the pictures are 1x1 and 2x1; compare two screenshots of one device\n");
+    let out = compare(&small, &text).code(1);
+    let err = String::from_utf8_lossy(&out.get_output().stderr).to_string();
+    assert!(
+        err.starts_with("error: the second picture cannot be read: "),
+        "{err}"
+    );
 }
 
 #[test]
@@ -177,9 +218,9 @@ async fn devices_starts_the_daemon_and_the_next_call_reuses_it() {
     assert!(table.contains("android:emulator-5554"), "{table}");
     assert!(table.contains("Pixel_9"), "{table}");
     assert!(table.lines().next().unwrap().contains("TIER"), "{table}");
-    let first = env.rpc("hello", json!({"version": "0.1.4"})).await;
+    let first = env.rpc("hello", json!({"version": "0.1.5"})).await;
     env.cmd().arg("devices").assert().success();
-    let second = env.rpc("hello", json!({"version": "0.1.4"})).await;
+    let second = env.rpc("hello", json!({"version": "0.1.5"})).await;
     let pid = first["result"]["pid"].as_u64().unwrap();
     assert!(pid > 0);
     assert_eq!(second["result"]["pid"].as_u64().unwrap(), pid);
@@ -201,13 +242,12 @@ async fn no_device_exits_4_with_the_message_then_the_hint() {
     let out = env.cmd().arg("snapshot").assert().code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let mut lines = stderr.lines();
-    assert_eq!(
-        lines.next(),
-        Some("error: no device is connected"),
-        "{stderr}"
-    );
+    let message = lines.next().unwrap();
+    let hint = lines.next().unwrap();
     assert!(
-        lines.next().unwrap().contains("phonedriver doctor"),
+        (message == "error: no device is connected" && hint.contains("phonedriver doctor"))
+            || (message.starts_with("error: no device is connected; can be started: ")
+                && hint.contains("phonedriver boot")),
         "{stderr}"
     );
     assert!(out.get_output().stdout.is_empty());
@@ -264,7 +304,7 @@ async fn a_daemon_of_another_version_is_shut_down_and_replaced() {
     );
     stopped.await.unwrap();
     old.await.unwrap();
-    let pid = env.rpc("hello", json!({"version": "0.1.4"})).await["result"]["pid"]
+    let pid = env.rpc("hello", json!({"version": "0.1.5"})).await["result"]["pid"]
         .as_u64()
         .unwrap();
     assert_ne!(pid, u64::from(std::process::id()));
@@ -481,4 +521,82 @@ async fn json_output_keeps_the_device_line_in_every_reply() {
             "{out}"
         );
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn replay_with_screens_keeps_each_steps_screen_then_compares_with_it() {
+    let (home, socket) = fake_daemon(vec![fakes::tree(&["One", "Two"])]).await;
+    let steps = home.path().join("run.steps");
+    let tap = |text: &str| json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": text}}}});
+    std::fs::write(&steps, format!("{}\n{}\n", tap("One"), tap("Two"))).unwrap();
+    let shots = home.path().join("shots");
+    let (file, dir) = (steps.to_str().unwrap(), shots.to_str().unwrap());
+    let replay = ["replay", file, "--screens", dir];
+
+    let first = cli(&home, &socket, &replay).await;
+    assert!(
+        first.contains(&format!(
+            "\nkept 2 screens in {dir}; a replay with --screens {dir} compares each step's screen with them\n"
+        )),
+        "{first}"
+    );
+    for n in ["01.png", "02.png"] {
+        assert_eq!(std::fs::read(shots.join(n)).unwrap(), fakes::PNG, "{n}");
+    }
+
+    let again = cli(&home, &socket, &replay).await;
+    assert!(
+        again.contains(&format!("\n2 screens matched those in {dir}\n")),
+        "{again}"
+    );
+
+    std::fs::remove_file(shots.join("01.png")).unwrap();
+    let mut wide = Vec::new();
+    let mut encoder = png::Encoder::new(&mut wide, 2, 1);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&[0, 0])
+        .unwrap();
+    std::fs::write(shots.join("02.png"), wide).unwrap();
+    let mut c = Command::cargo_bin("phonedriver").unwrap();
+    c.env("PHONEDRIVER_HOME", home.path())
+        .env("PHONEDRIVER_SOCKET", &socket)
+        .env_remove("PHONEDRIVER_SESSION")
+        .env_remove("PHONEDRIVER_DEVICE")
+        .args(replay);
+    let out = tokio::task::spawn_blocking(move || c.assert().failure().get_output().clone())
+        .await
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    let png2 = shots.join("02.png");
+    assert!(
+        err.contains(&format!(
+            "step 2 of 2 (tap \"Two\") failed: its screen cannot be compared with {}: the pictures are 2x1 and 1x1",
+            png2.display()
+        )),
+        "{err}"
+    );
+    assert!(err.contains("\n1. tapped @e1 \"One\""), "{err}");
+    assert!(
+        shots.join("01.png").exists(),
+        "step 1 kept its screen again"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn snapshot_audit_adds_the_screens_accessibility_problems() {
+    let (home, socket) = fake_daemon(vec![fakes::tree(&["One", ""])]).await;
+    let out = cli(&home, &socket, &["snapshot", "--audit"]).await;
+    assert!(
+        out.ends_with("\naudit: 1 finding\n@e2 button: no name a screen reader can say\n"),
+        "{out}"
+    );
+    let (home, socket) = fake_daemon(vec![fakes::tree(&["One"])]).await;
+    let out = cli(&home, &socket, &["snapshot", "--audit"]).await;
+    assert!(
+        out.ends_with("\naudit: no unnamed controls or small tap targets\n"),
+        "{out}"
+    );
 }
