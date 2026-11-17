@@ -166,9 +166,13 @@ static NSDictionary *PUPerform(NSDictionary *request, NSError **error)
     return reply;
 }
 
+// On a Simulator just booted on a CI machine, SpringBoard's first answer to a query took 40.7 s (GitHub's macOS
+// runner, 2026-11-17: the first snapshot's look for alerts ran from 2.8 s to 43.5 s after the runner listened), and
+// the runner answers nothing else meanwhile. So it asks once before it listens, and is ready only when it can answer.
 - (void)testServe
 {
     self.continueAfterFailure = YES;
+    (void)[[XCUIApplication alloc] initWithBundleIdentifier:@"com.apple.springboard"].alerts.count;
     NSString *portString = NSProcessInfo.processInfo.environment[@"PHONEDRIVER_PORT"];
     uint16_t port = portString.length ? (uint16_t)portString.integerValue : PUDefaultPort;
     __weak PhonedriverRunnerTests *weakSelf = self;

@@ -23,6 +23,9 @@ pub const VERSION: &str = "0.1.0";
 pub const PORT_BASE: u16 = 27753;
 const PORT_COUNT: u16 = 32;
 const READY_WAIT: Duration = Duration::from_secs(60);
+/// A Simulator just booted on a CI machine took 26 s to start the runner and 41 s for SpringBoard's first answer
+/// (GitHub's macOS runner, 2026-11-17), so the Simulator gets longer; a runner that exits is still seen at once.
+const SIMULATOR_READY_WAIT: Duration = Duration::from_secs(180);
 const POLL: Duration = Duration::from_millis(100);
 const CONNECT_WAIT: Duration = Duration::from_millis(300);
 const HELLO_WAIT: Duration = Duration::from_secs(2);
@@ -577,7 +580,7 @@ impl Runner {
             .map_err(|e| Error::Transport {
                 detail: format!("cannot run xcodebuild: {e}"),
             })?;
-        let deadline = Instant::now() + READY_WAIT;
+        let deadline = Instant::now() + SIMULATOR_READY_WAIT;
         loop {
             if let Ok(client) = Client::connect(port, &device).await
                 && let Ok(Ok(hello)) = timeout(HELLO_WAIT, client.hello()).await
@@ -601,7 +604,7 @@ impl Runner {
             }
             if Instant::now() >= deadline {
                 return Err(Error::Timeout {
-                    waited_ms: READY_WAIT.as_millis() as u32,
+                    waited_ms: SIMULATOR_READY_WAIT.as_millis() as u32,
                     condition: format!(
                         "the runner to answer on port {port}; see {}",
                         log.display()

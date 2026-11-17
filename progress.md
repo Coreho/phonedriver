@@ -3076,3 +3076,9 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Changed: `Snapshot.m` keeps the app of the last snapshot (`PULastApplication`); `Gesture.m` turns points by its `interfaceOrientation` (declared in `XCTestPrivate.h`).
 - Test: `a_tap_lands_in_an_upright_app_on_a_device_turned_on_its_side` with `PHONEDRIVER_TEST_DEVICE=sim:E02F...`: passed, with `landscape_turns_an_app_that_can_turn_and_portrait_turns_it_back` and `a_tap_lands_on_the_element_center` (3 passed, 20.1 s). Its first run failed in both landscape tests at the tree read, right after `daemon stop` left the daemon's runner on the Simulator; the next two runs passed.
 - By hand: three taps in that state landed (`b5`, `b10`, `b21`); in Safari on its side a tap on a tab switched to it. Tap input 353 to 369 ms, as before.
+
+## 2026-11-17: the iOS runner is ready only once SpringBoard answers, and a Simulator gets 3 minutes
+
+- Asked by CI: the Action's iOS job (125e788) stopped at `launch Settings` with `timed out after 60000 ms waiting for the runner to answer on port 27753`. The runner log from the artifact: xcodebuild at 01:45:24, `listening` at 01:45:50, the first snapshot's `Descendants matching type Alert` from 2.81 s to 43.49 s, error at 01:46:36. The runner was built in about 3 minutes before that, after a 3.5-minute boot.
+- Changed: `testServe` counts SpringBoard's alerts once before it listens; `SIMULATOR_READY_WAIT` is 180 s (devices keep 60 s); the Action copies `daemon.log` into a stopped run's artifact.
+- On the mini (iPhone 17 Simulator just booted, load average near 100 from other work): two fresh starts answered in 10.9 s and 2.6 s; the log shows `Get number of matches for: Descendants matching type Alert` before `listening`. CI on a cold runner is the real test.
