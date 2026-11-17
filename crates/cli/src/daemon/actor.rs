@@ -1872,7 +1872,14 @@ impl Actor {
                                     .is_none_or(|l| w.package.as_deref() != Some(l.0.as_str())))
                     })
             });
-            if app_is_back && stable && !page_pending && device.screen_state().await?.focused {
+            // Observed on the iOS 26.5 Simulator: Maps asked for the location at start, and SpringBoard, the app
+            // in front before the launch, held the prompt in front of it, so nothing new came to the front.
+            let alert_up = !phonedriver_core::alert::find(&tree, self.screen_size()).is_empty();
+            if (app_is_back || alert_up)
+                && stable
+                && !page_pending
+                && device.screen_state().await?.focused
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -2364,16 +2371,26 @@ impl Actor {
                     Some(f) => *f != found.id,
                     None => empty_counts,
                 };
+                let names_it = |tree: &RawTree| {
+                    phonedriver_core::alert::find(tree, self.screen_size())
+                        .iter()
+                        .any(|(_, a)| a.title.as_deref().is_some_and(|t| t.contains(&found.name)))
+                };
                 let mut front = device.foreground().await?;
+                let mut prompted = false;
                 let late = Instant::now();
                 while elsewhere(&front) && late.elapsed() < LATE_START_WAIT {
+                    if names_it(&device.tree().await?) {
+                        prompted = true;
+                        break;
+                    }
                     tokio::time::sleep(LATE_START_STEP).await;
                     front = device.foreground().await?;
                     if front.as_ref() == Some(&found.id) {
                         self.until_app_content(leaving.as_ref()).await?;
                     }
                 }
-                if elsewhere(&front) {
+                if elsewhere(&front) && !prompted {
                     summary = format!(
                         "{summary}, but {} is not in front after {} s ({} is): it is still starting, or it quit at start; `snapshot` shows which",
                         found.name,
@@ -2880,11 +2897,14 @@ impl Actor {
         }
     }
 
-    fn screen_rect(&self) -> Rect {
-        let size = self
-            .live
+    fn screen_size(&self) -> Size {
+        self.live
             .as_ref()
-            .map_or(Size { w: 0.0, h: 0.0 }, Live::screen);
+            .map_or(Size { w: 0.0, h: 0.0 }, Live::screen)
+    }
+
+    fn screen_rect(&self) -> Rect {
+        let size = self.screen_size();
         Rect {
             x: 0.0,
             y: 0.0,

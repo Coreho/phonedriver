@@ -2954,3 +2954,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
   - `support/testbed.rs` installs `PHONEDRIVER_TESTBED_APK` when set and builds with gradle otherwise;
   - `device_live.rs` waits up to 10 s for a cold start (`COLD_START`), and `settings_tree` takes the "Network & internet" row's bounds only when two reads agree (Settings adds its Google row late) and waits up to 6 s for Airplane mode.
 - After: `agent_live` 12 of 12; `device_live` all pass, `settings_tree` 3 of 3 in a row.
+
+## 2026-11-17: a launch behind the app's own permission prompt
+
+- Checked first: the Maps location prompt that listed "Don’t Allow" twice (20:41 the day before) is listed once since `c24f4f5`. On the iPhone 17 Simulator, with Maps' location reset (`simctl privacy reset location com.apple.Maps`), `phonedriver snapshot` shows `@e1 alert "Allow “Maps” to use your location?"` with one `@e5 button "Don’t Allow"`.
+- Found in the same run: `launch Maps` answered `ok launched Maps, but Maps is not in front after 13 s (com.apple.springboard is): it is still starting, or it quit at start`. The prompt belongs to SpringBoard, so the runner reports SpringBoard in front, and the launch waited for Maps through both of its waits (`until_app_content`, then `LATE_START_WAIT`).
+- Changed (`daemon/actor.rs`): a system alert on screen ends `until_app_content`'s wait, and a system alert whose title names the app ends the late-start wait without the "not in front" sentence.
+- Test first, seen failing (`launched Calculator, but Calculator is not in front after 9 s (com.apple.springboard is)`): `a_launch_behind_a_system_prompt_naming_the_app_says_launched_without_waiting`. `cargo test -p phonedriver --test daemon`: 179 passed.
+- On the Simulator, twice: `ok launched Maps · new screen` with the alert on screen, in 12.0 s (daemon and runner starting) and 7.9 s; then `tap "Don’t Allow"` -> `app com.apple.Maps (Maps)`, `@e6 text "Location Services is Off"`. The trace of the 7.9 s launch: `launch` 1,784 ms (`simctl launch`), `app_content` 3,074 ms, `settle` 1,155 ms. The Simulator has no frame stream, so `until_app_content` wants three equal reads, and Maps raises its prompt about 2 s after it starts.

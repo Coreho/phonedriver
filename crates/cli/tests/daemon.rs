@@ -1253,7 +1253,10 @@ async fn secret_text_never_reaches_the_trace_the_reply_or_the_debug_output() {
     assert_eq!(r["verified"], true);
     assert!(!r.to_string().contains("hunter2"), "{r}");
     let shown = ok(&d, "default", "snapshot", json!({})).await;
-    assert!(shown["text"].as_str().unwrap().contains("\"•••\""), "{shown}");
+    assert!(
+        shown["text"].as_str().unwrap().contains("\"•••\""),
+        "{shown}"
+    );
     assert!(!shown.to_string().contains("hunter2"), "{shown}");
     assert_eq!(
         fake.calls()[1],
@@ -2848,6 +2851,42 @@ async fn a_launch_whose_app_is_not_in_front_afterwards_says_which_app_is() {
             && summary.contains("still starting")
             && summary.contains("quit"),
         "{summary}"
+    );
+}
+
+/// Seen on the iOS 26.5 Simulator: Maps asked for the location at start, iOS put SpringBoard's prompt in front of it,
+/// and `launch Maps` waited 13 s and said Maps was not in front.
+#[tokio::test(start_paused = true)]
+async fn a_launch_behind_a_system_prompt_naming_the_app_says_launched_without_waiting() {
+    let prompt = RawTree::from_android_json(
+        r#"{"windows":[{"id":1,"type":"application","package":"com.apple.springboard","bounds":[0,0,360,800]},
+        {"id":2,"type":"alert","package":"com.apple.springboard","bounds":[40,250,320,600]}],"nodes":[
+        {"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"},
+        {"p":-1,"w":2,"cls":"android.widget.TextView","text":"Allow “Calculator” to use your location?","b":[40,260,320,300],"f":"vVe"},
+        {"p":-1,"w":2,"cls":"android.widget.Button","text":"Don’t Allow","b":[40,540,320,590],"f":"vVe","a":["tap"]}]}"#,
+        Scale { density: 1.0 },
+    )
+    .unwrap();
+    let (source, fake) = FakeSource::with(vec![prompt]);
+    fake.install(&[("com.android.calculator2", "Calculator")]);
+    fake.launch(&AppId("com.apple.springboard".into()))
+        .await
+        .unwrap();
+    fake.set_quits_at_launch(true);
+    let (d, _home) = daemon(source);
+    let started = tokio::time::Instant::now();
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        act_with(json!({"kind": "launch", "app": "Calculator"})),
+    )
+    .await;
+    assert_eq!(r["summary"], "launched Calculator", "{r}");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
     );
 }
 
