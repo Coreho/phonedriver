@@ -220,8 +220,8 @@ async fn a_recording_started_mid_stream_opens_with_the_picture_on_screen_and_run
         video.store.latest().is_some_and(|f| f.seq >= 20)
     })
     .await;
-    video.record_start(&path).unwrap();
     let began = std::time::Instant::now();
+    video.record_start(&path).unwrap();
     assert!(video.recording());
     assert!(video.record_start(&dir.path().join("second.mp4")).is_err());
     agent.write_all(&FIXTURE[half..]).await.unwrap();
