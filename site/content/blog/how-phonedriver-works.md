@@ -4,6 +4,7 @@ short: How phonedriver reads a phone without uiautomator dump
 meta: How phonedriver lets an AI agent operate Android and iOS phones: the resident agent, settle detection, the text format, the benchmarks and what it loses.
 description: How phonedriver reads and drives a phone, with the 12.7 ms against 2,163.7 ms comparison scoped, the prior work it builds on, the token result with every run, and what does not work.
 date: 2026-11-14
+updated: 2026-11-17
 label: ENGINEERING
 short_card: How phonedriver works, without uiautomator dump
 card_sub: The mechanism, the method, the prior art, the losses and the data.
@@ -156,9 +157,9 @@ largest single-frame change seen, pt²
 
 My first design had one threshold, 4,096 pt², a 64 by 64 point region. It separated transitions from the caret, spinner and toggle, and it hid the toggle: zero of 20 toggle taps produced a frame above it, so a tap that worked would have been reported as `changed: false`. A failing test came first, then the second threshold.
 
-I was also wrong about the frame rate. I expected a steady one on a static screen. On the API 37 emulator through an ssh tunnel the stream sent bursts of about 10 frames per second and then nothing for up to 5 s, so a rule of "no frame for 1 s means dead" made 18 of 40 screenshots of an idle screen fail. Screenshots now serve the last frame unless the video socket has ended.
+I was also wrong about the frame rate. I expected a steady one on a static screen. On the API 37 emulator through an ssh tunnel the stream sent bursts of about 10 frames per second and then nothing for up to 5 s, so a rule of "no frame for 1 s means dead" made 18 of 40 screenshots of an idle screen fail. Screenshots now serve the last frame unless the video socket has ended. Later I found the frame on hand could also be too old: right after an action, newer frames were still inside the encoder. Since 0.1.5 a screenshot waits for them when the encoder is behind ([D74]({{REPO}}/blob/main/docs/decisions.md#d74-a-screenshot-waits-for-the-frames-the-encoder-still-holds-and-a-hidden-display-on-a-software-encoder-is-lighter)); the 9.1 ms above was measured before that wait.
 
-The same burstiness is the detector's known limit. A gap over 250 ms in the middle of an animation reads as quiet, and the screen is reported settled early. I saw this on the emulators' software encoder. The design notes say hardware encoders were not measured for it, and the HONOR X8 pass did not test settle. On iOS 26 and below and on the Simulator there is no frame stream, and the detector is fed by polling gray screenshots instead.
+The same burstiness is the detector's known limit. A gap over 250 ms in the middle of an animation reads as quiet, and the screen is reported settled early. I saw this on the emulators' software encoder. The design notes say hardware encoders were not measured for it, and the HONOR X8 pass did not test settle. On iOS 26 and below there is no frame stream, and the detector is fed by polling gray screenshots instead. On the Simulator, since 0.1.5, it watches the Simulator's own screen buffer as it is drawn.
 
 ## Making the text small
 
@@ -242,7 +243,7 @@ Against WDA with only `snapshotMaxDepth` set, the runner is 8x to 19x faster. Ag
 
 Everything here is a simulator. WDA is maintained by Appium and is the better choice if you already run Appium. My runner uses private headers that drift between Xcode releases, so a build failure after an Xcode update is expected maintenance. It needs a Mac with Xcode and your Apple Development team.
 
-Taps cost more on iOS, because XCTest's completion for a synthesized event arrives about 240 ms after the request. A tap takes 357 ms on the Simulator and 450 to 530 ms on a real iPhone, against a target of 80 ms.
+Taps cost more on a real iPhone, because XCTest's completion for a synthesized event arrives about 240 ms after the request: a tap takes 450 to 530 ms, against a target of 80 ms. On the Simulator it took 357 ms the same way. Since 0.1.5 a one-finger tap there goes to the Simulator's own touch input, and on simulator-use's benchmark a tap with its reply takes 316 ms and a read 29 ms, the fastest of four tools ([the benchmark](/benchmarks/#simulator), decision D93). Typing still goes through XCTest, which types exactly.
 
 ## The tap that asks
 

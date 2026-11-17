@@ -4,10 +4,10 @@ nav: iOS Simulator
 meta: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode. Covers the runner build and tap latency.
 description: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode. Covers the first-run runner build and the Simulator's tap latency.
 seo: How to let an AI agent control the iOS Simulator over MCP
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
-To let an AI agent control the iOS Simulator, boot a Simulator on a Mac with Xcode and add phonedriver to your agent as an MCP server. The agent reads the screen as text and taps through an XCTest runner that phonedriver builds for you.
+To let an AI agent control the iOS Simulator, boot a Simulator on a Mac with Xcode and add phonedriver to your agent as an MCP server. The agent reads the screen as text through an XCTest runner that phonedriver builds for you, and its taps go to the Simulator's own touch input.
 
 The iOS Simulator is a tested target: the 12-scenario suite passes on iOS 26.5, three runs in a row. One scenario, `settings-dark-appearance`, failed twice in six full runs and I have not found the cause.
 
@@ -39,7 +39,7 @@ The first command that needs the runner builds a small XCTest runner on your Mac
 
 ## Speed
 
-A tap on the iOS 26.5 Simulator takes 357 ms, against 80 ms for the Simulator's own tool, because XCTest takes about 240 ms to confirm the event. Screenshots and the diff after a tap meet the targets I set. If speed on iOS matters, read [the benchmarks](/benchmarks/) before you decide.
+Since 0.1.5 a one-finger tap goes to the Simulator's own touch input, and phonedriver watches the Simulator's screen as it is drawn to know when it has settled. On simulator-use's own benchmark a tap with its reply takes 316 ms and a read 29 ms, the fastest of four tools ([the benchmark](/benchmarks/#simulator)). Typing still goes through XCTest, which types exactly, and so do taps with several fingers, in an app on its side and under a notification banner.
 
 ## If it does not work
 

@@ -3,7 +3,7 @@ title: How to keep an AI agent from spending your money on a phone
 nav: Approval guard
 meta: phonedriver holds taps on Pay, Place order and Delete account and asks you first. How it works, how to answer, full autonomy, and what it misses.
 description: phonedriver stops taps on Pay, Place order and Delete account and asks you first. How the guard works, how to answer, how to switch it off for full autonomy, and what it does not catch.
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 The guard classifies the element the agent is about to tap and, for a button that spends money or cannot be undone, asks the human instead of tapping. It is on by default. The reasoning is in [Letting Claude order dinner without letting it spend your money](/blog/letting-claude-order-dinner-without-letting-it-spend-your-money/).
@@ -72,7 +72,7 @@ Not without your answer, unless you switched the guard off or told the agent to 
 
 ### What happens if my MCP client cannot show the prompt?
 
-The tool replies `Needs the human's approval; nothing was tapped` with the facts from the screen. The agent then has to ask you in chat. In headless `claude -p` nobody can answer, so the tap is declined.
+The tool replies `Needs the human's approval; nothing was tapped` with the facts from the screen. The agent then has to ask you in chat. In headless `claude -p` nobody can answer, so nothing is tapped.
 
 ### Does the guard work on an iPhone?
 

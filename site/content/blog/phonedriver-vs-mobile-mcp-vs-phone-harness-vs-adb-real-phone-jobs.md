@@ -2,13 +2,13 @@
 title: "phonedriver vs mobile-mcp vs phone-harness vs adb: benchmarked on real phone jobs"
 seo: phonedriver vs mobile-mcp vs phone-harness vs adb on real phone jobs
 short: Benchmarked on real phone jobs
-meta: The method and results of a benchmark of phonedriver, mobile-mcp, phone-harness and adb on nine jobs only a phone can do, rerun on 10 November 2026. Results in.
+meta: The method and results of a benchmark of phonedriver, mobile-mcp, phone-harness and adb on nine jobs only a phone can do, rerun on 10 November 2026.
 description: The method and results of a benchmark that gives Claude nine jobs only a phone can do, with phonedriver, mobile-mcp, phone-harness and adb, rerun on 10 November 2026 on one emulator. phonedriver ran each job three times and the others twice.
 date: 2026-11-07
 label: BENCHMARK
 short_card: phonedriver vs mobile-mcp vs phone-harness vs adb on real phone jobs
 card_sub: Nine jobs, independent checks, every result sourced. 27 of 27 for phonedriver, 17 of 18 for mobile-mcp, 14 of 18 for phone-harness.
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 > **Status: finished.** The numbers were rerun on 10 November 2026 on one emulator, with all four harnesses on the same device. phonedriver ran each job three times and the others twice. Every number below that is a measurement is the median of those runs, and the raw runs are in the repository. Nothing here is a projection. The first results, from 7 November, are kept below where the comparison between the two dates is the point.
@@ -117,4 +117,4 @@ The discarded files are kept outside the repository.
 
 A job where adb finishes a core job I claimed it cannot would remove that job. A check that passes a wrong result would void every run of that job. A run where the agent reached the right state by a route I did not expect, for example by editing a database, would be reported and the check tightened. Raw run logs go in the repository next to the results so that you can read what the agent did.
 
-Method and the other posts: [the jobs method](/blog/benchmarking-ai-agents-on-jobs-only-a-phone-can-do/), [how speed was measured](/blog/how-phonedriver-reads-a-screen-170x-faster-than-adb/), and [the token benchmark](/benchmarks/#tokens), which is already finished.
+Method and the other posts: [the jobs method](/blog/benchmarking-ai-agents-on-jobs-only-a-phone-can-do/), [how speed was measured](/blog/how-phonedriver-reads-a-screen-170x-faster-than-adb/), and [the token benchmark](/benchmarks/#tokens).

@@ -7,7 +7,7 @@ date: 2026-11-07
 label: METHOD
 short_card: Benchmarking AI agents on jobs only a phone can do
 card_sub: UI-only jobs, independent checks, and what I threw out.
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 A phone benchmark has an obvious way to go wrong. If the tasks can be done without a phone, the tool that is best at not using the phone wins. "Set an alarm" can be done with one intent. "Turn on dark mode" is `cmd uimode night yes`. "What year was Grace Hopper born" is a web search. Run those through a phone harness and you are measuring how fast the model finds the shortcut.
@@ -16,7 +16,7 @@ My first agent evaluation had tasks of exactly that kind, and it showed the prob
 
 ## The rule: the job must need the phone
 
-A job goes in the core set only if the result cannot be produced by adb, `am`, `cmd`, `settings`, `content` or a browser. The reason is written per job, in the open, so that anyone can argue with it.
+A job goes in the core set only if the result cannot be produced by a command (`am`, `cmd`, `settings`, `content`) or a browser, only by working the app's own screens. The reason is written per job, in the open, so that anyone can argue with it.
 
 - Chrome keeps the default search engine and "Always use secure connections" in a private `Preferences` file. No intent, `cmd` or `settings` key reaches them, and the web cannot change a native browser's settings.
 - World clocks and snooze live in Clock's private preferences. The alarm intents set alarms and timers only.

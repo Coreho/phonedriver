@@ -89,7 +89,7 @@ It reads the element list only, so it does not check colour contrast or text tha
 
 ## Run it with nobody watching
 
-The benchmarks ran headless: `claude -p` against an emulator started with `-no-window` (the flags are on [the emulator page](/docs/android-emulator/)). In a headless run nobody can answer the [approval prompt](/docs/approval-guard/), so a tap on Pay or Place order is declined and nothing is tapped.
+The benchmarks ran headless: `claude -p` against an emulator started with `-no-window` (the flags are on [the emulator page](/docs/android-emulator/)). In a headless run nobody can answer the [approval prompt](/docs/approval-guard/), so a tap on Pay or Place order gets no answer and nothing is tapped.
 
 ## What was measured
 
@@ -109,7 +109,7 @@ I have not tested an app built with React Native, Expo or Flutter. phonedriver d
 ## Limits
 
 - WebViews and custom-drawn views can have an empty accessibility tree. The agent then works from OCR and screenshots.
-- A tap on the iOS Simulator takes 357 ms, so a long flow on iOS is slower than on Android.
+- A tap alone takes 450 to 530 ms on a real iPhone, against 29 to 39 ms on an Android emulator, so a long flow on an iPhone is slower.
 - Screens that block screenshots come out black in a screenshot, though their text can still be read.
 - A saved run is the steps one agent took, found again by their text. It is not a suite your team writes and reviews as code; for that, on a device farm, Appium is the usual choice ([phonedriver vs Appium](/compare/appium/)).
 
