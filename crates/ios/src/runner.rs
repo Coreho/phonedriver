@@ -838,11 +838,21 @@ mod tests {
     #[test]
     fn every_runner_source_file_is_embedded() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ios-runner");
-        let mut on_disk = vec!["project.yml".to_string()];
-        for dir in ["Runner", "PrivateHeaders"] {
+        fn walk(root: &Path, dir: &str, out: &mut Vec<String>) {
             for e in std::fs::read_dir(root.join(dir)).unwrap().flatten() {
-                on_disk.push(format!("{dir}/{}", e.file_name().to_string_lossy()));
+                let name = format!("{dir}/{}", e.file_name().to_string_lossy());
+                if e.path().is_dir() {
+                    if !name.ends_with("/xcuserdata") && !name.ends_with("/project.xcworkspace") {
+                        walk(root, &name, out);
+                    }
+                } else {
+                    out.push(name);
+                }
             }
+        }
+        let mut on_disk = Vec::new();
+        for dir in ["Runner", "PrivateHeaders", "PhonedriverRunner.xcodeproj"] {
+            walk(&root, dir, &mut on_disk);
         }
         on_disk.sort();
         let mut embedded: Vec<String> = SOURCES.iter().map(|(p, _)| p.to_string()).collect();

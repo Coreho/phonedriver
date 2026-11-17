@@ -3049,3 +3049,9 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Android: `shell "dumpsys gfxinfo com.android.settings reset"`, `launch Settings`, `swipe up`, then `shell "dumpsys gfxinfo com.android.settings" --grep "Janky|percentile"` answered `Janky frames: 16 (94.12%)`, `50th percentile: 200ms`, ... (the emulator was starved by another session's builds on win-pc's disk).
 - Both SKILL.md files list them.
 
+
+## 2026-11-17: the embedded-sources test reads the Xcode project
+
+- CI's `ci` failed on a9457bb on all three systems: `runner::tests::every_runner_source_file_is_embedded` still listed `project.yml` and read only `Runner` and `PrivateHeaders`, while SOURCES now carries the committed project and scheme (D91). I had run the new runner test but not the whole library.
+- Changed: the test walks `Runner`, `PrivateHeaders` and `PhonedriverRunner.xcodeproj`, skipping the git-ignored `xcuserdata` and `project.xcworkspace`, so a new file in the project that the binary does not carry fails it.
+- `cargo test -p phonedriver-ios --lib` on the mini: 74 passed. `cargo clippy -p phonedriver-ios --all-targets -- -D warnings`: clean.
