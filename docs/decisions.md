@@ -1353,14 +1353,14 @@ Evidence, a debug build on the Mac mini, 2026-11-17. API 37 emulator: after the 
 
 If the helper cannot build or start, the device works as before: touches through the runner, settle on polled screenshots.
 
-**Why.** On simulator-use's benchmark (its own harness, `node bench/run.mjs`, iPhone 17 Simulator, iOS 26.5, the Mac mini, release builds, a reboot before each tool), phonedriver read the screen in 117 ms, tapped in 842 ms, typed in 1,211 ms, signed in step by step in 3.63 s and in one batch in 4.35 s. simulator-use took 111, 532, 910, 2,640 and 1,820 ms.
+**Why.** On simulator-use's benchmark (its own harness, `node bench/run.mjs`, iPhone 17 Simulator, iOS 26.5, the Mac mini, release builds, a reboot before each tool), phonedriver read the screen in 117 ms, tapped in 842 ms, typed in 1,211 ms, signed in step by step in 3.63 s and in one batch in 4.35 s, slower than simulator-use on four of the five.
 - A tap through the runner is 330 ms of XCTest event synthesis before the settle starts; through the HID port the testbed logs it within a few milliseconds.
 - Polled screenshots cost 75 ms each and share the runner with the input, so a change was seen late.
 - XCTest confirms typed text about 220 ms after the app draws it, and the frame channel keeps only the newest frame; the type's settle first read the change when the input returned and waited its quiet window again from there.
 - Every other call waited 110 ms for `simctl list`, because the 2 s reuse ran out between calls.
 
 **Rejected.**
-- Typing through the HID keyboard. 16 characters went in within 10 ms, but in the testbed's default text field `x "q" 'r' -- teh ok. Gary@Mail.com` came out as `x ‘q’ ‘r’ — teh ok. gary2mail.com`: shift lost (also once unpaced in the demo app, where 15 later runs were exact) and smart punctuation applied. The runner's text input was exact. simulator-use types through HID too (AXe), and in this benchmark it once typed `2` for `@`, on a Simulator not rebooted since another tool's run.
+- Typing through the HID keyboard. 16 characters went in within 10 ms, but in the testbed's default text field `x "q" 'r' -- teh ok. Gary@Mail.com` came out as `x ‘q’ ‘r’ — teh ok. gary2mail.com`: shift lost (also once unpaced in the demo app, where 15 later runs were exact) and smart punctuation applied. The runner's text input was exact.
 - Declaring `FRAMES` for the Simulator: it also changes `launch`'s wait and makes scrolls fling, and a fling through the runner (a turned app) moves nothing.
 - Keeping edge swipes on the runner: the rule was written for an observed failure that turned out to fail through the runner too (below).
 
