@@ -449,7 +449,7 @@ A turned screen ends the recording, and `record stop` says so. Stop a recording 
 
 ### Shell
 
-`phonedriver shell "cmd uimode night yes"` runs a command on the device and prints the exit code, the output (cut at 40 lines; `--grep`, `--head`) and what changed on screen. On Android it runs in the agent already on the device, not in a new `adb shell`. On an iOS Simulator it runs through `simctl spawn`, and `shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands. A physical iPhone has no shell. A physical device refuses wipes and removing apps phonedriver did not install unless you pass `--force`. See `docs/bench/history/shell.md` and decision D21.
+`phonedriver shell "cmd uimode night yes"` runs a command on the device and prints the exit code, the output (cut at 40 lines; `--grep`, `--head`) and what changed on screen. On Android it runs in the agent already on the device, not in a new `adb shell`. On an iOS Simulator it runs through `simctl spawn`, and `shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands. On an Android emulator, a command that starts with `emu` goes to the emulator's console instead of the device's shell, as `adb emu` does: `shell "emu geo fix -122.41 37.77"` puts the emulator at that longitude and latitude, `emu sms send 5551234 hello` delivers a text message, `emu power capacity 15` sets the battery. A phone has no console. A physical iPhone has no shell. A physical device refuses wipes and removing apps phonedriver did not install unless you pass `--force`. See `docs/bench/history/shell.md` and decision D21.
 
 ## Development
 

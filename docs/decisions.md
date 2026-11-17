@@ -1319,3 +1319,15 @@ D85 rejected two of these cuts, because each took away something an agent uses. 
 
 **Reopen if.** A runner change needs build settings that are easier to keep in a spec than in the project.
 
+## D92. On an Android emulator, `shell "emu ..."` goes to the emulator's console
+
+**Choice.** A `shell` command on an Android emulator that starts with `emu ` is sent to the emulator's console, as `adb emu` sends it, over the connection `press fingerprint` uses (D63, D68: the console port on this machine, or `nc 10.0.2.2 <port>` from inside the emulator when adb is on another machine), with the token from `~/.emulator_console_auth_token`. The reply is the shell reply: exit 0 and what the console said, or exit 1 and why it refused. On a phone the command is refused (`emu` commands go to an Android emulator's console, and a phone has none). No new verb and no new MCP tool.
+
+**Why.** Tests of maps, delivery and ride apps need a location, and the iOS Simulator already had it through `shell "simctl location set <lat>,<lon>"` (`simctl` subcommands get the device filled in). The console also sends text messages, sets the battery and the network's speed, and rotates the sensors, all of which a test of an app wants and none of which a device shell can do.
+
+**Rejected.** A `location` verb for both platforms: it would take the order of latitude and longitude off the user's hands (the console's `geo fix` takes longitude first), but a verb and its MCP schema cost every agent tokens on every turn, and the console has dozens of commands a verb per command would not cover.
+
+**Evidence.** `console::tests::a_command_answers_with_what_the_console_said_or_why_it_refused` (and the four touch tests, which now go through the same `run_on`). Live, the API 37 emulator on win-pc reached from the Mac mini through `ADB_SERVER_SOCKET`, debug build: `shell "emu avd name"` answered `exit 0` and `Pixel_API_37` in 970 ms; `shell "emu geo fix -122.4194 37.7749"` `exit 0`; `shell "emu geo fixx 1"` `exit 1` with `the emulator console refused: bad sub-command`; with the mini's token file from an earlier emulator, `the emulator console refused: authentication token does not match ~/.emulator_console_auth_token`.
+
+**Limits.** That the location reached apps was not checked: `dumpsys location` showed `last location=null` with no app asking for one. The console answers only to the token of the user who started the emulator.
+

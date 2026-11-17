@@ -19,14 +19,18 @@ pub fn port(serial: &str) -> Option<u16> {
     serial.strip_prefix("emulator-")?.parse().ok()
 }
 
+/// Opens the console at `addr` on this machine.
+pub async fn connect(addr: &str) -> Result<TcpStream, String> {
+    tokio::time::timeout(ANSWER_WAIT, TcpStream::connect(addr))
+        .await
+        .map_err(|_| format!("the emulator console at {addr} did not answer"))?
+        .map_err(|e| format!("cannot reach the emulator console at {addr}: {e}"))
+}
+
 /// Touches the emulator's fingerprint sensor with finger `finger` and lifts it again. `token` is the content of
 /// the token file, used only when the console asks for it.
 pub async fn touch_sensor(addr: &str, token: Option<&str>, finger: u32) -> Result<(), String> {
-    let stream = tokio::time::timeout(ANSWER_WAIT, TcpStream::connect(addr))
-        .await
-        .map_err(|_| format!("the emulator console at {addr} did not answer"))?
-        .map_err(|e| format!("cannot reach the emulator console at {addr}: {e}"))?;
-    touch_sensor_on(stream, token, finger).await
+    touch_sensor_on(connect(addr).await?, token, finger).await
 }
 
 /// `touch_sensor` over a connection to the console that is already open, such as one made from inside the
@@ -36,9 +40,36 @@ pub async fn touch_sensor_on(
     token: Option<&str>,
     finger: u32,
 ) -> Result<(), String> {
+    run_on(
+        console,
+        token,
+        &[&format!("finger touch {finger}"), "finger remove"],
+        TOUCH,
+    )
+    .await
+    .map(drop)
+}
+
+/// Sends one console command, such as `geo fix -122.41 37.77`, and returns what the console said to it.
+pub async fn command_on(
+    console: impl AsyncRead + AsyncWrite + Unpin,
+    token: Option<&str>,
+    command: &str,
+) -> Result<String, String> {
+    run_on(console, token, &[command], Duration::ZERO).await
+}
+
+/// Authenticates when the console asks, then sends `commands` in order with `pause` between them, and returns
+/// what the console said to the last one.
+async fn run_on(
+    console: impl AsyncRead + AsyncWrite + Unpin,
+    token: Option<&str>,
+    commands: &[&str],
+    pause: Duration,
+) -> Result<String, String> {
     let (read, mut write) = tokio::io::split(console);
     let mut lines = BufReader::new(read).lines();
-    let mut answer = async |sent: Option<String>| -> Result<String, String> {
+    let mut answer = async |sent: Option<&str>| -> Result<String, String> {
         if let Some(line) = sent {
             write
                 .write_all(format!("{line}\r\n").as_bytes())
@@ -68,12 +99,16 @@ pub async fn touch_sensor_on(
             .map(str::trim)
             .filter(|t| !t.is_empty())
             .ok_or("the emulator console asks for a token: `.emulator_console_auth_token`, from the home folder of whoever started the emulator, has to be in the home folder here")?;
-        answer(Some(format!("auth {token}"))).await?;
+        answer(Some(&format!("auth {token}"))).await?;
     }
-    answer(Some(format!("finger touch {finger}"))).await?;
-    tokio::time::sleep(TOUCH).await;
-    answer(Some("finger remove".into())).await?;
-    Ok(())
+    let mut said = String::new();
+    for (i, command) in commands.iter().enumerate() {
+        if i > 0 {
+            tokio::time::sleep(pause).await;
+        }
+        said = answer(Some(command)).await?;
+    }
+    Ok(said)
 }
 
 #[cfg(test)]
@@ -158,6 +193,29 @@ mod tests {
         .await;
         touch_sensor(&addr, None, 2).await.unwrap();
         assert_eq!(served.await.unwrap(), ["finger touch 2", "finger remove"]);
+    }
+
+    #[tokio::test]
+    async fn a_command_answers_with_what_the_console_said_or_why_it_refused() {
+        let (addr, served) = console(ASKS, &["OK\r\n", "Pixel_API_37\r\nOK\r\n"]).await;
+        let stream = TcpStream::connect(&addr).await.unwrap();
+        let said = command_on(stream, Some("s3cr3t"), "avd name")
+            .await
+            .unwrap();
+        assert_eq!(said, "Pixel_API_37\n");
+        assert_eq!(served.await.unwrap(), ["auth s3cr3t", "avd name"]);
+
+        let (addr, _served) = console(
+            "Android Console: type 'help'\r\nOK\r\n",
+            &["KO: unknown command, try 'help'\r\n"],
+        )
+        .await;
+        let stream = TcpStream::connect(&addr).await.unwrap();
+        let e = command_on(stream, None, "geo fixx 1 2").await.unwrap_err();
+        assert_eq!(
+            e,
+            "the emulator console refused: unknown command, try 'help'"
+        );
     }
 
     #[tokio::test]

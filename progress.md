@@ -3026,3 +3026,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Changed: `Session::seek` (used by `wait` and `scroll --until`), when no label or hint matches, matches what `shown_value` shows, which masks password fields. Taps still match labels and hints only, so a typed value cannot make a tap ambiguous.
 - Test first, seen failing (`Err(NotFound { query: "hello from CI", ... }) in @e1 textbox "hello from CI"`): `a_search_finds_text_typed_into_a_field_but_never_a_password`. After: session tests 19 pass, `--test daemon wait` 28 pass.
 
+## 2026-11-17: `shell "emu ..."` reaches an Android emulator's console (D92)
+
+- Planned as K2 (location for testing). The Simulator already had `shell "simctl location set ..."`; the Android emulator had no way.
+- Changed: `crates/android/src/console.rs` has one `run_on` (token, commands, pause) under the fingerprint touch and the new `command_on`; `device.rs` opens the console in one place (`console`) for both, and `shell` sends a command that starts with `emu ` there. Docs: the shell verb's help, the reference's shell paragraph, both SKILL.md files.
+- Test first (it could not compile without `command_on`): `a_command_answers_with_what_the_console_said_or_why_it_refused`; the Android crate's 70 unit tests pass.
+- Live: see D92's Evidence. The mini's `~/.emulator_console_auth_token` was from an older emulator and was replaced with win-pc's.
+- Also found: after a boot under heavy disk load the emulator's screen was off (`mWakefulness=0`, `mCurrentFocus=null` for 30 minutes); `input keyevent KEYCODE_WAKEUP` gave the launcher focus.
+

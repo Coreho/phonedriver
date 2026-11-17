@@ -392,8 +392,8 @@ pub(crate) enum Verb {
         /// `@ref`, `x,y` or the field's text.
         target: String,
     },
-    /// Run a command in the device's shell (Android: the agent's shell, no `adb` spawn; Simulator: `simctl spawn`, or
-    /// `simctl <subcommand> ...` with the device filled in). Prints the exit code, trimmed output, and what changed on
+    /// Run a command in the device's shell (Android: the agent's shell, no `adb` spawn, or `emu <command>` for an
+    /// emulator's console; Simulator: `simctl spawn`, or `simctl <subcommand> ...` with the device filled in). Prints the exit code, trimmed output, and what changed on
     /// screen. Secrets come from stdin or PHONEDRIVER_SECRET.
     Shell {
         /// The command, such as `cmd uimode night yes`. Leave it out with `--secret`.
