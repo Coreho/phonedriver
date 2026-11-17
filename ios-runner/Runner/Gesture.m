@@ -1,6 +1,7 @@
 #import "Gesture.h"
 
 #import "Json.h"
+#import "Snapshot.h"
 #import "XCTestPrivate.h"
 
 static const NSUInteger PUMaxFingers = 5;
@@ -17,7 +18,10 @@ static BOOL PUSpinUntil(BOOL (^done)(void), NSTimeInterval timeout)
 
 // Events are synthesized in the portrait frame whatever the orientation (observed on an iPad Pro 13-inch simulator
 // in landscape: a tap at (519, 438) landed at (438, 513) in a 1376 x 1032 app, and the interfaceOrientation of the
-// record made no difference). Points arrive in the screen as the app sees it, so they are rotated back. The screen's
+// record made no difference). Points arrive in the screen as the app sees it, so they are rotated by the app's
+// orientation, not the device's: an app that stays upright on a device turned on its side needs none (observed on
+// the iPhone 17 Simulator: after `press landscape` the testbed stayed upright and taps by ref missed). An interface
+// orientation has the value of the device orientation that gives it, so one switch serves both. The screen's
 // portrait size is read from SpringBoard once, and the orientation once for each gesture, not for each point.
 static CGSize PUPortraitSize(void)
 {
@@ -29,7 +33,7 @@ static CGSize PUPortraitSize(void)
     return size;
 }
 
-static CGPoint PUPortraitPoint(CGPoint p, UIDeviceOrientation orientation)
+static CGPoint PUPortraitPoint(CGPoint p, long long orientation)
 {
     switch (orientation) {
         case UIDeviceOrientationLandscapeLeft: return CGPointMake(PUPortraitSize().width - p.y, p.x);
@@ -77,7 +81,7 @@ static BOOL PUClearOfBanner(NSArray *pointers, NSError **error)
     return YES;
 }
 
-static XCPointerEventPath *PUPath(id pointer, UIDeviceOrientation orientation, double *end, NSError **error)
+static XCPointerEventPath *PUPath(id pointer, long long orientation, double *end, NSError **error)
 {
     NSArray *points = [pointer isKindOfClass:NSDictionary.class] ? pointer[@"path"] : nil;
     if (![points isKindOfClass:NSArray.class] || points.count == 0) {
@@ -117,7 +121,8 @@ BOOL PUGesture(NSArray *pointers, NSError **error)
     XCSynthesizedEventRecord *record = [[XCSynthesizedEventRecord alloc] initWithName:@"phonedriver gesture"
                                                                  interfaceOrientation:UIInterfaceOrientationPortrait];
     double end = 0;
-    UIDeviceOrientation orientation = XCUIDevice.sharedDevice.orientation;
+    XCUIApplication *app = PULastApplication();
+    long long orientation = app ? app.interfaceOrientation : XCUIDevice.sharedDevice.orientation;
     for (id pointer in pointers) {
         XCPointerEventPath *path = PUPath(pointer, orientation, &end, error);
         if (!path) return NO;

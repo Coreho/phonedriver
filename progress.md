@@ -3069,3 +3069,10 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Changed (`Gesture.m`): the portrait size is read once per runner, the orientation once per gesture.
 - Measured on the iPhone 17 Simulator, debug build, Settings, six swipes alternating up and down (daemon trace `ms`): 1436 to 1839, median about 1510 before; 1258 to 1462, median about 1270 after. A tap's `input` phase: 383 to 471 ms before, 358 to 383 after. The banner check costs about 35 ms of a tap in the top 200 points (testbed: 324 to 352 below, 337 to 369 above).
 - Found, not fixed here: points are rotated by the device's orientation, not the app's. With `press landscape` on the testbed, which stays upright, two taps by ref missed (`Last tap` stayed `b2`); the code before this change did the same.
+
+## 2026-11-17: iOS touches are turned by the app's orientation, not the device's (D78 amended)
+
+- Found while checking d5a8392 in landscape: with `press landscape` the upright testbed's taps by ref missed (`Last tap` stayed `b2`), as they did before that commit.
+- Changed: `Snapshot.m` keeps the app of the last snapshot (`PULastApplication`); `Gesture.m` turns points by its `interfaceOrientation` (declared in `XCTestPrivate.h`).
+- Test: `a_tap_lands_in_an_upright_app_on_a_device_turned_on_its_side` with `PHONEDRIVER_TEST_DEVICE=sim:E02F...`: passed, with `landscape_turns_an_app_that_can_turn_and_portrait_turns_it_back` and `a_tap_lands_on_the_element_center` (3 passed, 20.1 s). Its first run failed in both landscape tests at the tree read, right after `daemon stop` left the daemon's runner on the Simulator; the next two runs passed.
+- By hand: three taps in that state landed (`b5`, `b10`, `b21`); in Safari on its side a tap on a tab switched to it. Tap input 353 to 369 ms, as before.

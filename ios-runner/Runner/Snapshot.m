@@ -203,6 +203,13 @@ static CGFloat PUStatusBarBottom(CGFloat width)
     return bottoms[key].doubleValue;
 }
 
+static XCUIApplication *PULast;
+
+XCUIApplication *PULastApplication(void)
+{
+    return PULast;
+}
+
 NSDictionary *PUSnapshot(NSInteger maxDepth, NSError **error)
 {
     id<XCAccessibilityElement> element = PUActiveElement(error);
@@ -210,6 +217,7 @@ NSDictionary *PUSnapshot(NSInteger maxDepth, NSError **error)
     int pid = element.processIdentifier;
     XCUIApplication *app = PUApplication(pid, error);
     if (!app) return nil;
+    PULast = app;
 
     NSMutableDictionary *params = [PUClient().defaultParameters mutableCopy];
     params[@"maxDepth"] = @(maxDepth);

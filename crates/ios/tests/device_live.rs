@@ -473,3 +473,23 @@ fn landscape_turns_an_app_that_can_turn_and_portrait_turns_it_back() {
     std::thread::sleep(Duration::from_secs(2));
     assert_eq!(screen(&d), upright);
 }
+
+#[test]
+#[ignore = "needs PHONEDRIVER_TEST_DEVICE"]
+fn a_tap_lands_in_an_upright_app_on_a_device_turned_on_its_side() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "taps");
+    RT.block_on(d.button(Button::Landscape)).unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    let t = tree(&d);
+    let at = center_of(&t, "taps.b17");
+    tap(&d, at);
+    let log = testbed::wait_for(&udid, "tap", |e| ev(e, "tap").is_some());
+    RT.block_on(d.button(Button::Portrait)).unwrap();
+    let screen = t.windows[0].bounds;
+    assert!(screen.h > screen.w, "the testbed turned: {screen:?}");
+    let taps: Vec<&Value> = log.iter().filter_map(|e| ev(e, "tap")).collect();
+    assert_eq!(taps.len(), 1);
+    assert_eq!(taps[0]["id"], "b17");
+}
