@@ -2940,3 +2940,17 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
   - `taps.png text.png`: 1.17 s, 14 lines, `+ "Plain" at 76,185` first;
   - `gestures.png dialogs.png`: 0.44 s; `busy.png nav.png`: 0.27 s, `changed: 6 regions, 2.3% of the screen`;
   - `list.png list.png`: 0.15 s, `same` (no text read).
+
+## 2026-11-16: the Android emulator suite on 0.1.5, and the test fixes it needed
+
+- Asked: "spin up another emulator?" so that record, settings by key, fingerprint, lanes, permissions and crashes were checked together on this version.
+- Ran on the Mac mini against win-pc's Pixel_API_37 (`emulator-5554` through the adb tunnel), with the testbed APK built on win-pc (`gradlew.bat assembleDebug`), since the mini has no JDK: the android crate and the CLI's `actions`, `coverage`, `e2e`, `pixels`, `settle` and `states` tests, `--ignored --test-threads=1`.
+- First run (`suite.log`, 22:27):
+  - `agent_live`: 4 passed, 8 failed, at `support/agent.rs:103` with `Os { code: 22, kind: InvalidInput }`. The test reader ignored the agent's deflate bit (frames of 1 KB or more have been compressed since 0.1.3) and read a length with the top bit set.
+  - `device_live`: `text_clipboard_keys_buttons_apps_and_events` failed waiting 3 s for the plain field after a cold start that took 2.5 to 2.9 s.
+  - Everything else passed except three timing tests on the loaded mini (`e2e` busy screen 268 ms against 100, `actions` scroll-until, `settle` 400 ms animation), each of which passed when run alone.
+- Changed (tests only):
+  - `support/agent.rs` reads frames with the agent crate's own `read_frame`, which inflates;
+  - `support/testbed.rs` installs `PHONEDRIVER_TESTBED_APK` when set and builds with gradle otherwise;
+  - `device_live.rs` waits up to 10 s for a cold start (`COLD_START`), and `settings_tree` takes the "Network & internet" row's bounds only when two reads agree (Settings adds its Google row late) and waits up to 6 s for Airplane mode.
+- After: `agent_live` 12 of 12; `device_live` all pass, `settings_tree` 3 of 3 in a row.

@@ -35,6 +35,8 @@ async fn nodes(device: &AndroidDevice) -> Vec<Node> {
     prune(&device.tree().await.unwrap())
 }
 
+const COLD_START: Duration = Duration::from_secs(10);
+
 async fn wait_for_node(
     device: &AndroidDevice,
     within: Duration,
@@ -89,23 +91,40 @@ async fn settings_tree_has_the_network_and_internet_button_and_a_tap_opens_it() 
         "points: {info:?}"
     );
 
-    let button = wait_for_node(&device, Duration::from_secs(5), |n| {
-        n.role == Role::Button && label_starts(n, "Network & internet")
-    })
-    .await
-    .expect("a Button labeled Network & internet");
+    // Settings on API 37 adds its Google row above this one after the list first draws, so tap where two reads agree.
+    let is_network = |n: &Node| n.role == Role::Button && label_starts(n, "Network & internet");
+    let mut button = wait_for_node(&device, Duration::from_secs(5), is_network)
+        .await
+        .expect("a Button labeled Network & internet");
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let again = wait_for_node(&device, Duration::from_secs(1), is_network)
+            .await
+            .expect("a Button labeled Network & internet");
+        if again.bounds == button.bounds {
+            break;
+        }
+        button = again;
+    }
     device
         .gesture(tap_at(button.bounds.center()))
         .await
         .unwrap();
 
-    let airplane = wait_for_node(&device, Duration::from_secs(2), |n| {
+    // The screen opened 2 to 3 s after the tap on a cold-started Settings (API 37 emulator, software GPU).
+    let airplane = wait_for_node(&device, Duration::from_secs(6), |n| {
         label_starts(n, "Airplane mode")
     })
     .await;
     assert!(
         airplane.is_some(),
-        "the Network & internet screen did not open"
+        "the Network & internet screen did not open after a tap at {:?}: {:?}",
+        button.bounds.center(),
+        nodes(&device)
+            .await
+            .iter()
+            .map(|n| (n.label.clone(), n.bounds.y))
+            .collect::<Vec<_>>()
     );
     let screen = nodes(&device).await;
     assert!(
@@ -165,7 +184,8 @@ async fn text_clipboard_keys_buttons_apps_and_events() {
     let adb = support::adb();
     let mut events = device.events();
     testbed::open_tab(&adb, &serial, "text").await;
-    let field = wait_for_node(&device, Duration::from_secs(3), |n| {
+    // The install before the test stops the testbed; its cold start took 2.5 to 2.9 s on the API 37 emulator.
+    let field = wait_for_node(&device, COLD_START, |n| {
         n.id.as_deref().is_some_and(|i| i.ends_with(":id/plain"))
     })
     .await
