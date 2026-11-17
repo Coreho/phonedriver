@@ -5,7 +5,7 @@ use phonedriver_core::element::{Actions, Element, Ref, Role};
 use phonedriver_core::error::{Category, Direction, Error};
 use phonedriver_core::geometry::{Point, Rect};
 use phonedriver_core::refs::RefTable;
-use phonedriver_core::render::{Rendered, TextMatch};
+use phonedriver_core::render::{Rendered, TextMatch, shown_value};
 use phonedriver_core::similar::{SUGGEST_WITHIN, normalized_distance};
 
 use crate::wire::{PointJson, Target};
@@ -125,8 +125,8 @@ impl Session {
         Some(reply)
     }
 
-    /// `resolve` for a search (`scroll --until`, `wait`): a text may sit anywhere in a long sentence, and when it is
-    /// on screen more than once the first one ends the search. With `within`, only that element and what is inside it
+    /// `resolve` for a search (`scroll --until`, `wait`): a text may sit anywhere in a long sentence or in what a
+    /// field holds (never a password field's), and when it is on screen more than once the first one ends the search. With `within`, only that element and what is inside it
     /// count: a scroll looks in what it scrolls, not at a toolbar that slides back over it (Chrome's address bar, whose
     /// hint is "Search Google or type URL").
     pub fn seek(
@@ -152,6 +152,21 @@ impl Session {
         let mut refs = matches(Some(EXTRA_WORDS));
         if refs.is_empty() && sentences {
             refs = matches(None);
+        }
+        if refs.is_empty() {
+            let q = normalize(text);
+            refs = now
+                .elements
+                .iter()
+                .filter(|e| role.is_none_or(|r| e.role == r))
+                .filter(|e| {
+                    shown_value(e).is_some_and(|v| {
+                        let v = normalize(&v);
+                        v == q || (sentences && holds_as_words(&v, &q, None))
+                    })
+                })
+                .map(|e| e.r#ref)
+                .collect();
         }
         let holder = within.and_then(|r| now.index_of(r));
         let inside = |i: usize| {
@@ -618,6 +633,28 @@ mod tests {
         Session::default()
             .seek(&text(target), &now, None, true)
             .map(|r| r.line.unwrap_or_default())
+    }
+
+    #[test]
+    fn a_search_finds_text_typed_into_a_field_but_never_a_password() {
+        let json = r#"{"windows":[{"id":1,"type":"application","bounds":[0,0,400,800]}],"nodes":[
+            {"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,400,800],"f":"vVe"},
+            {"p":0,"w":1,"cls":"android.widget.EditText","text":"hello from CI","hint":"plain","b":[0,100,400,160],"f":"vVeE","a":["tap","set_text"]},
+            {"p":0,"w":1,"cls":"android.widget.EditText","text":"hunter2","hint":"password","b":[0,200,400,260],"f":"vVeEP","a":["tap","set_text"]}]}"#;
+        let tree = RawTree::from_android_json(json, Scale { density: 1.0 }).unwrap();
+        let nodes = prune(&tree);
+        let refs = RefTable::default().assign(&tree, &nodes);
+        let now = Rendered::build(nodes, &refs, Header::default());
+        let seek = |t: &str| Session::default().seek(&text(t), &now, None, true);
+        let line = seek("hello from CI").map(|r| r.line.unwrap_or_default());
+        assert!(
+            line.as_deref()
+                .is_ok_and(|l| l.contains("textbox \"hello from CI\"")),
+            "{line:?} in {}",
+            now.text(&Default::default()).unwrap()
+        );
+        assert!(seek("from CI").is_ok());
+        assert!(seek("hunter2").is_err());
     }
 
     #[test]

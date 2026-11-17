@@ -3020,3 +3020,9 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Proof on the mini: see D91's Evidence (`no xcodegen on PATH`, runner built and answering; attachments `158 -> 158` with the new build, one new movie per 30 s session with the old).
 - Test: `the_project_builds_every_source_file_the_binary_carries`.
 
+## 2026-11-17: a wait finds text typed into a field
+
+- Found by the Action's first Android run (f59fe87, run 43993422629): `testbeds/android/runs/text.steps` stopped at `wait "hello from CI"` (`timed out after 5067 ms`) while the screen it printed had `@e52 textbox "hello from CI" focused`. A text target matched labels and hints; a field's text is its value.
+- Changed: `Session::seek` (used by `wait` and `scroll --until`), when no label or hint matches, matches what `shown_value` shows, which masks password fields. Taps still match labels and hints only, so a typed value cannot make a tap ambiguous.
+- Test first, seen failing (`Err(NotFound { query: "hello from CI", ... }) in @e1 textbox "hello from CI"`): `a_search_finds_text_typed_into_a_field_but_never_a_password`. After: session tests 19 pass, `--test daemon wait` 28 pass.
+
