@@ -327,6 +327,10 @@ pub trait Device: Send + Sync {
     async fn tree(&self) -> Result<RawTree>;
     /// `None` when the device has no frame stream and settle polls screenshots.
     fn frames(&self) -> Option<watch::Receiver<FrameRef>>;
+    /// Whether `frames()` follows the screen as it is drawn, so a change made during an input shows when it happens.
+    fn frames_follow(&self) -> bool {
+        self.info().capabilities.contains(Capabilities::FRAMES)
+    }
     async fn screenshot(&self, q: Quality) -> Result<Image>;
     fn events(&self) -> broadcast::Receiver<DeviceEvent>;
     async fn gesture(&self, g: Gesture) -> Result<()>;

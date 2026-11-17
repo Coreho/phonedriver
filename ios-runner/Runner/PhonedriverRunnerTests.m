@@ -84,6 +84,9 @@ static NSDictionary *PUPerform(NSDictionary *request, NSError **error)
     if ([op isEqualToString:@"gesture"]) {
         return PUGesture(request[@"pointers"], error) ? @{} : nil;
     }
+    if ([op isEqualToString:@"banner"]) {
+        return @{@"covered": @(PUBannerAt(CGPointMake([request[@"x"] doubleValue], [request[@"y"] doubleValue])))};
+    }
     if ([op isEqualToString:@"screenshot"]) {
         NSString *format = request[@"format"] ?: @"jpeg";
         NSNumber *quality = request[@"quality"] ?: @80;

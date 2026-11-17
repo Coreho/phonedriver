@@ -184,6 +184,7 @@ pub fn spawn(
         sessions: HashMap::new(),
         base: Instant::now(),
         recent: None,
+        during: Vec::new(),
         change_seen: false,
         unobserved: None,
         cold_until: None,
@@ -317,6 +318,9 @@ struct Actor {
     base: Instant,
     /// The latest input that would have delayed a settle, or the moment the device connected: quiet counts from there, so a snapshot of an already quiet screen does not wait.
     recent: Option<(Duration, Input)>,
+    /// What the screen did while the last action's input was being delivered (see `watching`), for the settle that
+    /// observes that action.
+    during: Vec<(Duration, Input)>,
     change_seen: bool,
     /// When an action was last delivered without waiting for its effects.
     unobserved: Option<Duration>,
@@ -434,7 +438,10 @@ impl Actor {
                 cfg.expect_change = window;
                 (cfg, t)
             }
-            _ => (cfg, now),
+            _ => {
+                self.during.clear();
+                (cfg, now)
+            }
         }
     }
 
@@ -1408,6 +1415,7 @@ impl Actor {
     }
 
     fn begin_action(&mut self) -> Duration {
+        self.during.clear();
         if let Some(l) = &mut self.live {
             l.frames.borrow_and_update();
             while let Ok(event) = l.events.try_recv() {
@@ -1417,6 +1425,25 @@ impl Actor {
             }
         }
         self.now()
+    }
+
+    /// Awaits an input while following the screen, so a change it makes before it returns counts from when it showed.
+    /// XCTest confirms typed text about 220 ms after the app shows it (iPhone 17 Simulator, iOS 26.5), and the settle
+    /// that followed first saw the change then and waited out its quiet window again.
+    async fn watching<T>(&mut self, input: impl std::future::Future<Output = T>) -> T {
+        let mut input = std::pin::pin!(input);
+        loop {
+            tokio::select! {
+                biased;
+                out = &mut input => return out,
+                sig = next_signal(&mut self.live) => {
+                    let at = self.now();
+                    if let Some(seen) = self.absorb(sig, at) {
+                        self.during.push((at, seen));
+                    }
+                }
+            }
+        }
     }
 
     async fn settle(&mut self, cfg: Config, started: Duration) -> State {
@@ -1437,6 +1464,9 @@ impl Actor {
             && (cfg.expect_change.is_none() || t >= started)
         {
             det.feed(input, t);
+        }
+        for (t, input) in std::mem::take(&mut self.during) {
+            det.feed(input, t.max(started));
         }
         if std::mem::take(&mut self.change_seen) {
             det.feed(Input::WindowChanged, started.max(self.now()));
@@ -2143,8 +2173,8 @@ impl Actor {
                     .await?;
                 let started = self.begin_action();
                 let t = Instant::now();
-                let sent = device
-                    .gesture(gesture::tap(at, count.unwrap_or(1), long))
+                let sent = self
+                    .watching(device.gesture(gesture::tap(at, count.unwrap_or(1), long)))
                     .await;
                 self.lap("input", t);
                 sent?;
@@ -2238,7 +2268,7 @@ impl Actor {
                     None => gesture::swipe(screen, direction, distance, fast),
                 };
                 let started = self.begin_action();
-                device.gesture(g).await?;
+                self.watching(device.gesture(g)).await?;
                 let from_text = line
                     .map(|l| format!(" from {}", short(&l)))
                     .unwrap_or_default();
@@ -2255,7 +2285,8 @@ impl Actor {
                 let a = self.resolve_target(s, &from).await?;
                 let b = self.resolve_target(s, &to).await?;
                 let started = self.begin_action();
-                device.gesture(gesture::press_drag(a.at, b.at)).await?;
+                self.watching(device.gesture(gesture::press_drag(a.at, b.at)))
+                    .await?;
                 let label = |r: &Resolved| {
                     r.line.as_deref().map_or_else(
                         || format!("{},{}", r.at.x.round(), r.at.y.round()),
@@ -2316,7 +2347,7 @@ impl Actor {
                         .collect(),
                 };
                 let started = self.begin_action();
-                device.gesture(g).await?;
+                self.watching(device.gesture(g)).await?;
                 let summary = format!("gestured with {} fingers", fingers.len());
                 self.finish(s, p.settle, cfg, started, summary, None, None)
                     .await
@@ -2498,7 +2529,7 @@ impl Actor {
             }
             Action::Press { key } => {
                 let started = self.begin_action();
-                let via = press(&*device, &key).await?;
+                let via = self.watching(press(&*device, &key)).await?;
                 let summary = match via {
                     Some(how) => format!("pressed {key} via {how}"),
                     None => format!("pressed {key}"),
@@ -2736,7 +2767,7 @@ impl Actor {
                 };
                 if !(replace && text.is_empty()) {
                     let t = Instant::now();
-                    let typed = device.text(input).await;
+                    let typed = self.watching(device.text(input)).await;
                     self.lap("text", t);
                     typed.map_err(|e| withhold(e, secure))?;
                 }
@@ -2761,7 +2792,7 @@ impl Actor {
                         .await?;
                 }
                 if submit {
-                    device.key(Key::Enter).await?;
+                    self.watching(device.key(Key::Enter)).await?;
                 }
                 let what = match &field {
                     Some(f) => format!("into @{}", f.r#ref),
@@ -3159,12 +3190,11 @@ impl Actor {
             return Ok(delivered(s, summary, via));
         }
         self.unobserved = None;
-        let polled = !self
-            .device()?
-            .info()
-            .capabilities
-            .contains(Capabilities::FRAMES);
-        let started = if polled { self.now() } else { started };
+        let started = if self.device()?.frames_follow() {
+            started
+        } else {
+            self.now()
+        };
         let t = Instant::now();
         let (st, probe) = self.settle_probing(cfg, started, true).await;
         self.lap("settle", t);

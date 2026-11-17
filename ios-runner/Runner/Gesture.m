@@ -65,6 +65,11 @@ static BOOL PUBannerCovers(CGPoint p)
     return shown && CGRectContainsPoint(shown.frame, p);
 }
 
+BOOL PUBannerAt(CGPoint point)
+{
+    return PUBannerCovers(point);
+}
+
 static BOOL PUClearOfBanner(NSArray *pointers, NSError **error)
 {
     for (id pointer in pointers) {

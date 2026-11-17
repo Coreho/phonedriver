@@ -28,6 +28,7 @@ use idevice::services::installation_proxy::InstallationProxyClient;
 
 use crate::map;
 use crate::runner::{Client, Runner};
+use crate::simio::{Frames, Seen, SimIo};
 use crate::simulator::{
     Simulator, privacy_service, shell_args, simctl, simctl_shell, simctl_with_input,
 };
@@ -58,7 +59,8 @@ const APP_START_WAIT: Duration = Duration::from_secs(5);
 const APP_START_RETRY: Duration = Duration::from_millis(100);
 /// Characters per second for paste mode. A synthesized Cmd+V does not paste text another app put on the
 /// pasteboard (observed on the iOS 26.5 Simulator), so paste types through the runner's text input at a speed
-/// that still entered 102 mixed characters exactly in 267 ms; keys mode types at the runner's default 60.
+/// that still entered 102 mixed characters exactly in 267 ms; keys mode types at the runner's default 60. Not through
+/// the Simulator's HID keys: those lost shift and took smart punctuation where the runner's text was exact (D93).
 const PASTE_SPEED: u32 = 5000;
 
 enum Host {
@@ -80,6 +82,7 @@ pub struct IosDevice {
     events: broadcast::Sender<DeviceEvent>,
     poller: JoinHandle<()>,
     recording: tokio::sync::Mutex<Option<SimRecording>>,
+    simio: Option<tokio::sync::Mutex<SimIo>>,
 }
 
 /// `xcrun simctl io <udid> recordVideo` while it runs. It finishes its file when it is interrupted, not when it
@@ -107,6 +110,8 @@ struct Activity {
     inputs: AtomicUsize,
     /// The lock state in the runner's last hello or screenshot reply.
     locked: AtomicBool,
+    /// While simio follows the Simulator's screen buffer and lock state, the poller leaves the runner alone.
+    followed: AtomicBool,
 }
 
 /// While an input runs, settle polls wait: a poll between the requests of one input (the tree read and the tap of
@@ -174,12 +179,28 @@ impl IosDevice {
     /// Starts or reuses the runner on `sim` (task 5.4) and starts settle polling. `home` holds the runner build.
     pub async fn connect(sim: &Simulator, home: &Path) -> Result<IosDevice> {
         let runner = Runner::start(&sim.udid, home).await?;
+        let simio = match SimIo::start(home, &sim.udid).await {
+            Ok(io) => Some(io),
+            Err(e) => {
+                eprintln!("touches on {} go through XCTest: {e}", sim.udid);
+                None
+            }
+        };
+        let frames = match Frames::start(home, &sim.udid, POLL_SCALE).await {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("the screen of {} is polled through XCTest: {e}", sim.udid);
+                None
+            }
+        };
         IosDevice::with_runner(
             Host::Simulator,
             format!("sim:{}", sim.udid),
             &sim.udid,
             &sim.name,
             runner,
+            simio,
+            frames,
         )
     }
 
@@ -201,7 +222,7 @@ impl IosDevice {
             Link::Usb { .. } => Host::Cable(provider),
             Link::Network { .. } => Host::Network,
         };
-        IosDevice::with_runner(host, id, &device.udid, model, runner)
+        IosDevice::with_runner(host, id, &device.udid, model, runner, None, None)
     }
 
     fn with_runner(
@@ -210,6 +231,8 @@ impl IosDevice {
         udid: &str,
         model: &str,
         runner: Runner,
+        simio: Option<SimIo>,
+        frames: Option<Frames>,
     ) -> Result<IosDevice> {
         let runner = Arc::new(runner);
         let hello = runner.hello.clone();
@@ -225,7 +248,16 @@ impl IosDevice {
             kick: Notify::new(),
             inputs: AtomicUsize::new(0),
             locked: AtomicBool::new(hello.locked),
+            followed: AtomicBool::new(frames.is_some()),
         });
+        if let Some(frames) = frames {
+            tokio::spawn(follow(
+                frames,
+                store.clone(),
+                activity.clone(),
+                events.clone(),
+            ));
+        }
         let poller = tokio::spawn(poll(
             runner.clone(),
             store.clone(),
@@ -250,6 +282,7 @@ impl IosDevice {
             events,
             poller,
             recording: tokio::sync::Mutex::new(None),
+            simio: simio.map(tokio::sync::Mutex::new),
         })
     }
 
@@ -290,6 +323,22 @@ impl IosDevice {
     async fn input(&self, op: Op, req: Value) -> Result<Value> {
         let _busy = Busy::new(&self.activity);
         self.client().request(op, req).await
+    }
+
+    /// Whether a notification banner covers where the path starts, or the runner could not say. The runner waits for
+    /// one to leave before its own gestures; a touch through the HID port would land on it.
+    async fn banner_covers(&self, path: &[phonedriver_core::device::TimedPoint]) -> bool {
+        let Some(p) = path.first().filter(|p| p.at.y <= map::BANNER_ZONE) else {
+            return false;
+        };
+        let reply = self
+            .client()
+            .request(
+                Op::Gesture,
+                json!({"op": "banner", "x": p.at.x, "y": p.at.y}),
+            )
+            .await;
+        !matches!(reply, Ok(r) if r["covered"] == false)
     }
 
     async fn snapshot(&self, max_depth: u32) -> Result<Value> {
@@ -353,7 +402,36 @@ impl Drop for IosDevice {
     }
 }
 
+/// Feeds the frame store with simio's pictures of the Simulator's screen buffer, and announces its lock state,
+/// until the helper stops.
+async fn follow(
+    mut frames: Frames,
+    store: Arc<FrameStore>,
+    activity: Arc<Activity>,
+    events: broadcast::Sender<DeviceEvent>,
+) {
+    while let Some(seen) = frames.next().await {
+        match seen {
+            Seen::Picture(l) => {
+                let chroma = (l.width.div_ceil(2) * l.height.div_ceil(2)) as usize;
+                let frame =
+                    Frame::from_i420(l.width, l.height, l.y, vec![128; chroma], vec![128; chroma]);
+                if store.publish(frame).changed_area_pt2 > ACTIVE_CHANGE_PT2 {
+                    activity.touch();
+                }
+            }
+            Seen::Locked(locked) => {
+                if activity.locked.swap(locked, Ordering::Relaxed) != locked {
+                    let _ = events.send(DeviceEvent::Locked(locked));
+                }
+            }
+        }
+    }
+    activity.followed.store(false, Ordering::SeqCst);
+}
+
 /// Feeds the frame store with small luma screenshots: back to back while the screen is busy, slowly when idle.
+/// While simio follows the screen, it only keeps the screen awake.
 async fn poll(
     runner: Arc<Runner>,
     store: Arc<FrameStore>,
@@ -378,6 +456,10 @@ async fn poll(
         ) {
             nudged = Instant::now();
             let _ = runner.client.request(Op::Key, json!({"op": "awake"})).await;
+        }
+        if activity.followed.load(Ordering::SeqCst) {
+            tokio::time::sleep(IDLE_POLL).await;
+            continue;
         }
         if !activity.active() {
             tokio::select! {
@@ -485,6 +567,11 @@ impl Device for IosDevice {
 
     fn current_screen(&self) -> Option<Size> {
         Some(self.screen())
+    }
+
+    /// While simio follows the Simulator's screen; the runner's polled screenshots fall behind it.
+    fn frames_follow(&self) -> bool {
+        self.activity.followed.load(Ordering::Relaxed)
     }
 
     fn frames(&self) -> Option<watch::Receiver<FrameRef>> {
@@ -618,6 +705,13 @@ impl Device for IosDevice {
     }
 
     async fn gesture(&self, g: Gesture) -> Result<()> {
+        if let (Some(simio), [path]) = (&self.simio, g.fingers.as_slice())
+            && map::hid_reaches(path, self.screen())
+            && !self.banner_covers(path).await
+        {
+            let _busy = Busy::new(&self.activity);
+            return simio.lock().await.touch(path).await;
+        }
         self.input(Op::Gesture, map::gesture_request(&g)).await?;
         Ok(())
     }

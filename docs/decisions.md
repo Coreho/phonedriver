@@ -1341,3 +1341,34 @@ Evidence, a debug build on the Mac mini, 2026-11-17. API 37 emulator: after the 
 
 **Limits.** That the location reached apps was not checked: `dumpsys location` showed `last location=null` with no app asking for one. The console answers only to the token of the user who started the emulator.
 
+
+## D93. On the iOS Simulator, one finger's touches and the settle's frames go through simio
+
+**Choice.** A helper, simio (`ios-runner/SimIO/simio.m`), compiled with Xcode's clang on first use and kept under `~/.phonedriver/simio/<source hash>`, holds the Simulator's own HID port and screen buffer through CoreSimulator and SimulatorKit, as idb does.
+- A path with one finger in an upright app goes to `SimDeviceLegacyHIDClient` as Indigo digitizer messages. Several fingers, a turned app, a physical device and a path that starts in the top 200 points under a notification banner (the runner's new `banner` op says whether one covers the point, and a failed answer counts as covered) stay with the runner. Edge swipes go through HID too.
+- The helper also prints the main display's luma each time its `IOSurface` seed changes, at most every 16 ms, and SpringBoard's lock state. The device publishes the luma into its `FrameStore` and stops polling runner screenshots for settle while it does. `Device::frames_follow` is true for it, so the settle counts from the request; the device does not claim `FRAMES`, which would make `scroll --until` fling, and the runner cannot play a fling.
+- While any input is in flight the actor reads the frame channel (`Actor::watching`), and the detector gets each change at the moment it showed.
+- A request that names a Simulator the last `simctl` listing holds is answered from a listing up to 30 s old while a new one is taken in the background.
+- A batch's trace adds up the phases of its steps; it printed the last step's only.
+
+If the helper cannot build or start, the device works as before: touches through the runner, settle on polled screenshots.
+
+**Why.** On simulator-use's benchmark (its own harness, `node bench/run.mjs`, iPhone 17 Simulator, iOS 26.5, the Mac mini, release builds, a reboot before each tool), phonedriver read the screen in 117 ms, tapped in 842 ms, typed in 1,211 ms, signed in step by step in 3.63 s and in one batch in 4.35 s. simulator-use took 111, 532, 910, 2,640 and 1,820 ms.
+- A tap through the runner is 330 ms of XCTest event synthesis before the settle starts; through the HID port the testbed logs it within a few milliseconds.
+- Polled screenshots cost 75 ms each and share the runner with the input, so a change was seen late.
+- XCTest confirms typed text about 220 ms after the app draws it, and the frame channel keeps only the newest frame; the type's settle first read the change when the input returned and waited its quiet window again from there.
+- Every other call waited 110 ms for `simctl list`, because the 2 s reuse ran out between calls.
+
+**Rejected.**
+- Typing through the HID keyboard. 16 characters went in within 10 ms, but in the testbed's default text field `x "q" 'r' -- teh ok. Gary@Mail.com` came out as `x ‘q’ ‘r’ — teh ok. gary2mail.com`: shift lost (also once unpaced in the demo app, where 15 later runs were exact) and smart punctuation applied. The runner's text input was exact. simulator-use types through HID too (AXe), and in this benchmark it once typed `2` for `@`, on a Simulator not rebooted since another tool's run.
+- Declaring `FRAMES` for the Simulator: it also changes `launch`'s wait and makes scrolls fling, and a fling through the runner (a turned app) moves nothing.
+- Keeping edge swipes on the runner: the rule was written for an observed failure that turned out to fail through the runner too (below).
+
+**Evidence.**
+- `a_tap_through_the_hid_port_returns_in_under_150_ms_and_lands` (`crates/ios/tests/device_live.rs`): the testbed logs `b9` and the call returns under 150 ms.
+- `paste_keeps_quotes_dashes_and_capitals_in_a_field_with_smart_punctuation` passes through the runner; the same string through HID keys gave the line above.
+- `text_the_screen_shows_before_the_device_confirms_it_settles_from_when_it_showed` (`--test daemon`, a fake whose text draws at 40 ms and returns at 220 ms): 370 ms before `watching`, 320 ms after. `a_batch_trace_adds_up_the_phases_of_its_steps`: the trace said `settle: 450` for a 1,400 ms batch of two settles before, at least 600 after. `a_listing_is_kept_two_seconds_and_answers_for_a_simulator_it_holds_while_a_new_one_is_taken_until_thirty`.
+- Live on the mini: `device_live` 18 of 21 and `e2e_ios` 9 of 9, twice. The three that fail fail the same way without this change: two need `simctl pbcopy`, which exits 139 on that Mac even by hand, and `back_without_a_back_button_swipes_from_the_left_edge` fails at `ca9a5b3` (the 0.1.5 version commit, runner and Rust as they were) as through HID.
+- The benchmark again, same setup: read 28 ms, tap 310, type 843, sign-in step by step 1.76 s, in one batch 1.75 s, at 59, 20, 13, 173 and 177 tokens. The type's remaining settle is the keyboard rising after the focus tap from a fresh launch; inside the sign-in a type settles in 90 ms.
+
+**Limits.** SimulatorKit and CoreSimulator are private. simio was run with Xcode 27 only (it also looks for SimulatorKit where Xcode 16 kept it), and an Xcode that renames what it uses leaves the device on the runner. The helper reads the display at 0.25 pixels per point, enough for settle and nothing else; `screenshot` still asks the runner. Why the testbed's web view stopped going back from an edge swipe is open. Android was not rerun after `watching`: win-pc's adb server hung (other sessions' disk load).

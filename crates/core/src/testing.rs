@@ -1,6 +1,7 @@
 //! A scripted `Device` for daemon tests.
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, watch};
@@ -11,7 +12,7 @@ use crate::device::{
     ShellReply, ShellRequest, TextInput, Url, WebPage,
 };
 use crate::error::{Error, Op};
-use crate::geometry::Size;
+use crate::geometry::{Rect, Size};
 use crate::raw::RawTree;
 use crate::settings::{SettingOp, SettingReply, SettingsIndex};
 
@@ -65,6 +66,8 @@ pub struct FakeDevice {
     settings: Mutex<Option<FakeSettings>>,
     logs: Mutex<Option<LogReply>>,
     recorder: Mutex<Option<Option<std::path::PathBuf>>>,
+    text_shows: Mutex<Option<(Duration, Duration)>>,
+    follows: bool,
 }
 
 type FakeSettings = (std::sync::Arc<SettingsIndex>, Vec<(String, String)>);
@@ -115,6 +118,8 @@ impl FakeDevice {
             settings: Mutex::new(None),
             logs: Mutex::new(None),
             recorder: Mutex::new(None),
+            text_shows: Mutex::new(None),
+            follows: false,
         }
     }
 
@@ -147,6 +152,19 @@ impl FakeDevice {
     }
 
     /// After a `gesture` call for which `f` returns trees, `tree()` returns those in order, then keeps the last.
+    /// Frames that follow the screen without the `FRAMES` capability, as simio's on the iOS Simulator.
+    pub fn following_frames(mut self) -> FakeDevice {
+        self.info.capabilities -= Capabilities::FRAMES;
+        self.follows = true;
+        self
+    }
+
+    /// `text()` draws a frame `shown` after it starts and returns at `confirmed`, as the iOS runner confirms text
+    /// after the app has drawn it.
+    pub fn text_shows_before_it_returns(&self, shown: Duration, confirmed: Duration) {
+        *lock(&self.text_shows) = Some((shown, confirmed));
+    }
+
     pub fn on_gesture(&self, f: impl Fn(&Gesture) -> Option<Vec<RawTree>> + Send + Sync + 'static) {
         *lock(&self.on_gesture) = Some(Box::new(f));
     }
@@ -327,6 +345,10 @@ impl Device for FakeDevice {
         self.events.subscribe()
     }
 
+    fn frames_follow(&self) -> bool {
+        self.follows || self.info.capabilities.contains(Capabilities::FRAMES)
+    }
+
     async fn gesture(&self, g: Gesture) -> Result<()> {
         {
             let mut screen = lock(&self.screen);
@@ -359,6 +381,21 @@ impl Device for FakeDevice {
         }
         if let Some(trees) = lock(&self.on_text).as_ref().and_then(|f| f(&t)) {
             *lock(&self.trees) = trees.into_iter().rev().collect();
+        }
+        let shows = *lock(&self.text_shows);
+        if let Some((shown, confirmed)) = shows {
+            tokio::time::sleep(shown).await;
+            self.push_frame(FrameRef {
+                seq: u64::MAX,
+                changed_area_pt2: 10_000.0,
+                changed_box: Some(Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 100.0,
+                    h: 100.0,
+                }),
+            });
+            tokio::time::sleep(confirmed.saturating_sub(shown)).await;
         }
         self.record(Call::Text(t))
     }

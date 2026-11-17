@@ -398,6 +398,27 @@ fn back_without_a_back_button_swipes_from_the_left_edge() {
 
 #[test]
 #[ignore]
+fn a_tap_through_the_hid_port_returns_in_under_150_ms_and_lands() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "taps");
+    let at = center_of(&tree(&d), "taps.b9");
+    let started = std::time::Instant::now();
+    tap(&d, at);
+    let took = started.elapsed();
+    let log = testbed::wait_for(&udid, "tap", |e| ev(e, "tap").is_some());
+    assert_eq!(
+        log.iter().filter_map(|e| ev(e, "tap")).next().unwrap()["id"],
+        "b9"
+    );
+    assert!(
+        took < Duration::from_millis(150),
+        "the tap took {took:?}; through XCTest it takes about 330 ms"
+    );
+}
+
+#[test]
+#[ignore]
 fn polled_frames_report_a_screen_change_after_a_tap() {
     let d = device();
     testbed::launch(&udid(), "taps");
@@ -492,4 +513,19 @@ fn a_tap_lands_in_an_upright_app_on_a_device_turned_on_its_side() {
     let taps: Vec<&Value> = log.iter().filter_map(|e| ev(e, "tap")).collect();
     assert_eq!(taps.len(), 1);
     assert_eq!(taps[0]["id"], "b17");
+}
+
+#[test]
+#[ignore]
+fn paste_keeps_quotes_dashes_and_capitals_in_a_field_with_smart_punctuation() {
+    let d = device();
+    let udid = udid();
+    testbed::launch(&udid, "text");
+    tap_id(&d, "text.plain");
+    std::thread::sleep(Duration::from_millis(500));
+    let text = "x \"q\" 'r' -- teh ok. Gary@Mail.com";
+    RT.block_on(d.text(TextInput::Paste(text.into()))).unwrap();
+    testbed::wait_for(&udid, "plain text", |e| {
+        e["field"] == "plain" && e["value"] == text
+    });
 }

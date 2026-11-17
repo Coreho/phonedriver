@@ -265,6 +265,17 @@ fn for_xctest(path: &[TimedPoint]) -> Vec<Value> {
     out
 }
 
+/// The runner waits for a notification banner to leave before a gesture that starts this near the top
+/// (`PUBannerZone` in Gesture.m); a touch through the Simulator's HID port there first asks the runner whether one
+/// covers its point.
+pub const BANNER_ZONE: f32 = 200.0;
+
+/// Whether a finger's path can go through the Simulator's HID port (decision D93): its points are the display's
+/// portrait points, which are the app's while the app stands upright.
+pub fn hid_reaches(path: &[TimedPoint], screen: Size) -> bool {
+    !path.is_empty() && screen.w < screen.h
+}
+
 pub fn gesture_request(g: &Gesture) -> Value {
     let pointers: Vec<Value> = g
         .fingers
@@ -490,6 +501,22 @@ pub fn devicectl_apps(json: &Value) -> Vec<App> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hid_takes_an_upright_screen_and_leaves_a_turned_one_to_the_runner() {
+        let at = |x, y| {
+            vec![TimedPoint {
+                at: Point { x, y },
+                t_ms: 0,
+            }]
+        };
+        let portrait = Size { w: 402.0, h: 874.0 };
+        let landscape = Size { w: 874.0, h: 402.0 };
+        assert!(hid_reaches(&at(201.0, 350.0), portrait));
+        assert!(hid_reaches(&back_swipe(portrait).fingers[0], portrait));
+        assert!(!hid_reaches(&at(201.0, 350.0), landscape));
+        assert!(!hid_reaches(&[], portrait));
+    }
 
     #[test]
     fn devicectl_apps_are_sorted_by_id_and_an_app_that_cannot_be_removed_is_a_system_app() {

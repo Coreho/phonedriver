@@ -552,6 +552,35 @@ async fn a_settled_tap_leaves_its_phases_in_the_trace() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_batch_trace_adds_up_the_phases_of_its_steps() {
+    let (source, fake) = FakeSource::with(vec![
+        tree(&["One", "Two", "Three"]),
+        tree(&["One", "Two", "Three!"]),
+        tree(&["One", "Two", "Three!!"]),
+    ]);
+    let (d, home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        fake.push_frame(big_frame(1));
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        fake.push_frame(big_frame(2));
+    });
+    let tap = json!({"kind": "tap", "target": {"point": {"x": 10.0, "y": 10.0}}});
+    let r = ok(&d, "default", "batch", json!({"steps": [tap, tap]})).await;
+    assert!(r["settle_ms"].as_u64().unwrap() < 600, "{r}");
+    let line = trace_text(home.path())
+        .lines()
+        .find(|l| l.contains("\"method\":\"batch\""))
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        .unwrap();
+    assert!(
+        line["phases"]["settle"].as_f64().unwrap() >= 600.0,
+        "{line}"
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn act_returns_a_diff_after_the_tree_changes_and_the_screen_goes_quiet() {
     let (source, fake) = FakeSource::with(vec![
         tree(&["One", "Two", "Three"]),
@@ -903,6 +932,29 @@ fn trace_text(home: &Path) -> String {
         all += &std::fs::read_to_string(entry.unwrap().path()).unwrap();
     }
     all
+}
+
+#[tokio::test(start_paused = true)]
+async fn text_the_screen_shows_before_the_device_confirms_it_settles_from_when_it_showed() {
+    let (source, fake) = FakeSource::of(
+        FakeDevice::new(vec![
+            field_tree("", false),
+            field_tree("", false),
+            field_tree("hello", false),
+        ])
+        .following_frames(),
+    );
+    fake.text_shows_before_it_returns(Duration::from_millis(40), Duration::from_millis(220));
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let t = tokio::time::Instant::now();
+    let r = ok(&d, "default", "act", type_params("hello", false)).await;
+    let took = t.elapsed();
+    assert_eq!(r["verified"], true, "{r}");
+    assert!(
+        took < Duration::from_millis(350),
+        "the reply came {took:?} after the call: {r}"
+    );
 }
 
 #[tokio::test(start_paused = true)]
