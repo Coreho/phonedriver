@@ -359,6 +359,26 @@ $ phonedriver replay run.steps --from 4
 
 Text typed with `--secret` is never in the file; a replay stops at that step for you to type it. Other typed text is in the file. In MCP, `replay` takes `file`, `from` and `save: true`. Decision D60.
 
+#### Replaying runs in GitHub Actions
+
+The repository is also a GitHub Action. It starts an Android emulator on a Linux runner or an iOS Simulator on a macOS runner, installs your app, replays each steps file, and fails the job at the first run that stops. Each run's reply goes in the job summary, and the reply, the screen and the app's logs of a run that stopped go in an artifact, with a video of every run when `record` is `true`:
+
+```yaml
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./gradlew assembleDebug
+      - uses: hridaya423/phonedriver@v0.1.5
+        with:
+          app: app/build/outputs/apk/debug/app-debug.apk
+          runs: e2e/*.steps
+          record: true
+```
+
+Inputs: `runs` (paths or globs, one a line), `platform` (`android` or `ios`), `app`, `api-level` (default 35), `device` (a Simulator name; default the first iPhone), `record`, `version` (default `latest`), `binary` (a phonedriver already on the runner) and `artifact` (the artifact's name). Outputs: `passed` and `failed`. Write the steps files with `phonedriver save` after a session on your own machine; a step that typed a secret stops the replay there, so keep secrets out of runs meant for CI.
+
 ### Fingerprint and Face ID on an emulator or Simulator
 
 On an Android emulator, `phonedriver press fingerprint` touches the fingerprint sensor with the finger a test enrolls, and `phonedriver press wrong-fingerprint` with another. Enroll by opening fingerprint setup in Settings and pressing `fingerprint` until it says the fingerprint was added; after that the same key passes a fingerprint prompt or unlocks the emulator, and `wrong-fingerprint` fails it. When phonedriver is on another machine than the emulator (adb through `ADB_SERVER_SOCKET`), copy the file `.emulator_console_auth_token` from the home folder of whoever started the emulator into your home folder here: the emulator's console asks for it. A physical phone answers that its sensor takes its owner's finger. Decisions D63 and D68.

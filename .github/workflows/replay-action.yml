@@ -1,0 +1,56 @@
+name: replay action
+on:
+  push:
+    paths: [action.yml, .github/workflows/replay-action.yml, "testbeds/**"]
+  pull_request:
+    paths: [action.yml, .github/workflows/replay-action.yml, "testbeds/**"]
+  workflow_dispatch:
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - name: Build phonedriver and the Android testbed
+        run: |
+          bash android-agent/build.sh
+          PHONEDRIVER_AGENT_JAR="$GITHUB_WORKSPACE/android-agent/build/phonedriver-agent.jar" cargo build --release --locked -p phonedriver
+          (cd testbeds/android && ./gradlew --no-daemon -q assembleDebug)
+      - uses: ./
+        with:
+          binary: target/release/phonedriver
+          app: testbeds/android/app/build/outputs/apk/debug/app-debug.apk
+          runs: testbeds/android/runs/*.steps
+          record: true
+          artifact: replay-android
+      - name: A run that misses stops and fails the step
+        id: missed
+        continue-on-error: true
+        uses: ./
+        with:
+          binary: target/release/phonedriver
+          runs: testbeds/android/runs/missing/*.steps
+          artifact: replay-android-missed
+      - name: Check that the missed run was reported
+        env:
+          FAILED: ${{ steps.missed.outputs.failed }}
+          OUTCOME: ${{ steps.missed.outcome }}
+        run: |
+          echo "failed=$FAILED outcome=$OUTCOME"
+          [ "$FAILED" = 1 ] && [ "$OUTCOME" = failure ]
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo build --release --locked -p phonedriver
+      - uses: ./
+        with:
+          platform: ios
+          binary: target/release/phonedriver
+          runs: testbeds/ios/runs/*.steps
+          artifact: replay-ios

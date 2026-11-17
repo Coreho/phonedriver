@@ -1,0 +1,2 @@
+{"changed":true,"method":"act","params":{"action":{"app":"phonedriver testbed","grant":[],"kind":"launch","restart":true}},"summary":"restarted phonedriver testbed"}
+{"changed":true,"method":"act","params":{"action":{"count":null,"kind":"tap","long":null,"target":{"role":null,"text":"No such button"}}},"summary":"tapped \"No such button\""}

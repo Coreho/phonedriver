@@ -9,6 +9,7 @@ Not released yet.
 - **`phonedriver init`** adds phonedriver to the agents installed on this machine (Claude Code, Codex, Cursor, VS Code and Gemini CLI) and then runs the doctor checks.
 - **`phonedriver boot <name>`** starts an iOS Simulator or an Android virtual device that is off and waits until it has booted. With nothing connected, the error names what can be started.
 - **Saved runs**: `phonedriver save run.steps` writes what the session did, and `phonedriver replay run.steps` does it again with no model. It stops at the first step that fails and shows the screen.
+- **A GitHub Action**: `uses: hridaya423/phonedriver@v0.1.5` starts an Android emulator or an iOS Simulator, installs your app and replays saved runs on every commit. Each run is a row in the job summary, and its reply, the screen where it stopped and a video go in an artifact.
 - **`phonedriver page`** prints the web page in front as text, whole, without scrolling. On Android, it works in Chrome and in the web views of debug builds.
 - **`phonedriver record start` and `record stop`** save an MP4 of the screen on Android and on the iOS Simulator, with a file of the actions done during it.
 - **Settings by key on Android 17**: `phonedriver setting find`, `get` and `set` change a setting without opening its screen.

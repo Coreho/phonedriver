@@ -4,7 +4,7 @@ seo: How to have Claude Code test an Android or iOS app on a device
 nav: Test your app
 description: Install a build on an emulator, the iOS Simulator or a phone, and ask Claude Code or Codex to use the app and report bugs with steps. What was measured, and notes for React Native, Expo and Flutter.
 meta: Install a build on an emulator, simulator or phone and ask Claude Code or Codex to use your app and report bugs with steps. What was measured and what was not.
-updated: 2026-11-14
+updated: 2026-11-17
 date: 2026-11-14
 ---
 
@@ -65,6 +65,16 @@ phonedriver shell "cmd uimode night yes"        # Android
 phonedriver shell "simctl ui appearance dark"   # iOS Simulator
 ```
 
+## Keep the run as a test
+
+When the agent has walked a flow that works, `phonedriver save signup.steps` writes what it did, one step a line, and `phonedriver replay signup.steps` does it again with no model in a few seconds. A replay stops at the first step that fails and shows the screen, so the agent (or you) can fix that one step and go on. The same files replay on every commit with [the GitHub Action](/docs/replay-in-ci/).
+
+While the agent works, `phonedriver record start` and `record stop` save a video of the screen with a list of the actions and when each began, and `phonedriver compare before.png after.png` says in text what changed between two screenshots.
+
+## Permissions, crashes and the screen
+
+`phonedriver apps grant <app> camera` and `apps revoke <app> location` change a permission without opening the app. On Android an action during which the app crashed says so in its reply, with the exception and the line that threw it, and `phonedriver logs` prints the app's last lines. `press landscape` and `press portrait` turn the screen, and on an emulator or a Simulator `press fingerprint` and `press wrong-fingerprint` answer a fingerprint or Face ID prompt.
+
 ## Run it with nobody watching
 
 The benchmarks ran headless: `claude -p` against an emulator started with `-no-window` (the flags are on [the emulator page](/docs/android-emulator/)). In a headless run nobody can answer the [approval prompt](/docs/approval-guard/), so a tap on Pay or Place order is declined and nothing is tapped.
@@ -89,7 +99,7 @@ I have not tested an app built with React Native, Expo or Flutter. phonedriver d
 - WebViews and custom-drawn views can have an empty accessibility tree. The agent then works from OCR and screenshots.
 - A tap on the iOS Simulator takes 357 ms, so a long flow on iOS is slower than on Android.
 - Screens that block screenshots come out black in a screenshot, though their text can still be read.
-- phonedriver does not record or replay test scripts. For a fixed suite that must run the same way on every commit, a scripted tool such as Appium is the usual choice ([phonedriver vs Appium](/compare/appium/)).
+- A saved run is the steps one agent took, found again by their text. It is not a suite your team writes and reviews as code; for that, on a device farm, Appium is the usual choice ([phonedriver vs Appium](/compare/appium/)).
 
 ## Questions
 

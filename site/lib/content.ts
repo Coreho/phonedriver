@@ -14,6 +14,7 @@ export const DOCS = [
   "ios-simulator",
   "iphone",
   "test-a-mobile-app",
+  "replay-in-ci",
   "approval-guard",
   "no-telemetry",
   "shell",
