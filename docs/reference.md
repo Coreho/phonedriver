@@ -359,6 +359,24 @@ $ phonedriver replay run.steps --from 4
 
 Text typed with `--secret` is never in the file; a replay stops at that step for you to type it. Other typed text is in the file. In MCP, `replay` takes `file`, `from` and `save: true`. Decision D60.
 
+`--screens <dir>` checks what each step left on the screen. The first replay keeps a screenshot after every step in the folder (`01.png`, `02.png`, ...); later replays compare each step's screen with its screenshot, as `compare` does, and stop at the first step whose text changed:
+
+```
+$ phonedriver replay settings.steps --screens screens/settings
+replayed 5 steps in 10.5 s
+...
+kept 5 screens in screens/settings; a replay with --screens screens/settings compares each step's screen with them
+$ phonedriver replay settings.steps --screens screens/settings
+error: step 5 of 5 (wait "Name") failed: its screen is not the one in screens/settings/05.png
+changed: 2 regions, 35.7% of the screen
+~ "General" → "About" at 201,85
++ "Name" at 59,161
+...
+hint: If the new screen is right, delete screens/settings/05.png and replay again to keep it.
+```
+
+Pixels that changed with no text in them (a pressed row, a scroll bar) do not stop a replay; the step's line says how many regions changed. The status bar's clock is left out. A screenshot of another size stops the replay, so keep the screens on the device type the replays run on. Text is read with the recognition of section 9, so on Linux it needs Tesseract. Decision D89.
+
 #### Replaying runs in GitHub Actions
 
 The repository is also a GitHub Action. It starts an Android emulator on a Linux runner or an iOS Simulator on a macOS runner, installs your app, replays each steps file, and fails the job at the first run that stops. Each run's reply goes in the job summary, and the reply, the screen and the app's logs of a run that stopped go in an artifact, with a video of every run when `record` is `true`:
@@ -377,7 +395,7 @@ jobs:
           record: true
 ```
 
-Inputs: `runs` (paths or globs, one a line), `platform` (`android` or `ios`), `app`, `api-level` (default 35), `device` (a Simulator name; default the first iPhone), `record`, `version` (default `latest`), `binary` (a phonedriver already on the runner) and `artifact` (the artifact's name). Outputs: `passed` and `failed`. Write the steps files with `phonedriver save` after a session on your own machine; a step that typed a secret stops the replay there, so keep secrets out of runs meant for CI.
+Inputs: `runs` (paths or globs, one a line), `platform` (`android` or `ios`), `app`, `api-level` (default 35), `device` (a Simulator name; default the first iPhone), `record`, `screens` (a folder with a subfolder of kept screens for each run, named as its steps file; a run with no subfolder keeps its screens in the artifact under `screens/`), `version` (default `latest`), `binary` (a phonedriver already on the runner) and `artifact` (the artifact's name). Outputs: `passed` and `failed`. Write the steps files with `phonedriver save` after a session on your own machine; a step that typed a secret stops the replay there, so keep secrets out of runs meant for CI.
 
 ### Fingerprint and Face ID on an emulator or Simulator
 

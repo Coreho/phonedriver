@@ -23,6 +23,9 @@ inputs:
   record:
     description: "`true` records a video of every run."
     default: "false"
+  screens:
+    description: A folder of screenshots kept by `phonedriver replay --screens`, with a subfolder for each run named as its steps file. Each step's screen is compared with its screenshot, and a run stops at the first whose text changed. A run with no subfolder keeps its screens in the artifact, under `screens/`, to commit.
+    default: ""
   version:
     description: The phonedriver release to install, such as `0.1.5`, or `latest`.
     default: latest
@@ -97,11 +100,25 @@ runs:
         image="system-images;android-$API;google_apis;x86_64"
         "$tools/sdkmanager" emulator platform-tools "$image" >/dev/null
         echo no | "$tools/avdmanager" create avd -n phonedriver -k "$image" -d pixel_6 --force >/dev/null
+        log="$RUNNER_TEMP/emulator.log"
         nohup "$ANDROID_HOME/emulator/emulator" -avd phonedriver -port 5554 -no-window -no-audio -no-boot-anim \
-          -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          -no-snapshot -gpu swiftshader_indirect > "$log" 2>&1 &
+        emulator=$!
         adb="$ANDROID_HOME/platform-tools/adb"
-        timeout 600 "$adb" -s emulator-5554 wait-for-device
-        timeout 600 bash -c "until [ \"\$('$adb' -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')\" = 1 ]; do sleep 2; done"
+        for _ in $(seq 300); do
+          if ! kill -0 "$emulator" 2> /dev/null; then
+            echo "::error::the emulator stopped before it booted; its log:"
+            tail -40 "$log"
+            exit 1
+          fi
+          [ "$("$adb" -s emulator-5554 shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ] && break
+          sleep 2
+        done
+        if [ "$("$adb" -s emulator-5554 shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" != 1 ]; then
+          echo "::error::the emulator did not boot in 10 minutes; its log:"
+          tail -40 "$log"
+          exit 1
+        fi
         echo "PHONEDRIVER_DEVICE=android:emulator-5554" >> "$GITHUB_ENV"
 
     - name: Boot an iOS Simulator
@@ -132,11 +149,16 @@ runs:
       env:
         RUNS: ${{ inputs.runs }}
         RECORD: ${{ inputs.record }}
+        SCREENS: ${{ inputs.screens }}
       run: |
-        set -uo pipefail
-        shopt -s globstar nullglob
+        set +e -uo pipefail
+        shopt -s nullglob
+        shopt -s globstar 2> /dev/null
         out="$RUNNER_TEMP/phonedriver-runs"
         mkdir -p "$out"
+        if [ -n "$SCREENS" ] && [ "$RUNNER_OS" = Linux ] && ! command -v tesseract > /dev/null; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr > /dev/null
+        fi
         echo "dir=$out" >> "$GITHUB_OUTPUT"
         passed=0 failed=0 files=()
         while IFS= read -r pattern; do
@@ -154,10 +176,16 @@ runs:
         } >> "$GITHUB_STEP_SUMMARY"
         for f in "${files[@]}"; do
           name=$(basename "$f" .steps)
+          args=()
+          if [ -n "$SCREENS" ]; then
+            kept="$SCREENS/$name"
+            [ -d "$kept" ] || kept="$out/screens/$name"
+            args=(--screens "$kept")
+          fi
           [ "$RECORD" = true ] && phonedriver record start -o "$out/$name.mp4" > /dev/null
-          if phonedriver replay "$f" > "$out/$name.txt" 2>&1; then
+          if phonedriver replay "$f" ${args[@]+"${args[@]}"} > "$out/$name.txt" 2>&1; then
             passed=$((passed + 1))
-            result="replayed: $(head -1 "$out/$name.txt")"
+            result=$(head -1 "$out/$name.txt")
           else
             failed=$((failed + 1))
             result="stopped: $(grep -m1 '^error:' "$out/$name.txt" | sed 's/^error: //')"

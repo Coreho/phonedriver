@@ -424,6 +424,10 @@ pub(crate) enum Verb {
         /// Start at this step (1 is the first), after doing the one before it yourself.
         #[arg(long, default_value_t = 1)]
         from: usize,
+        /// Compare the screen after each step with the screenshot this folder keeps for it, and stop at the first
+        /// whose text changed. A step with no screenshot there keeps its own. The status bar's clock is left out.
+        #[arg(long, value_name = "DIR")]
+        screens: Option<PathBuf>,
     },
     /// Record the screen to an MP4 file (Android and the iOS Simulator): `record start`, the actions to show, then `record stop`, which
     /// prints the file and, beside it, a `.steps.jsonl` file of the actions done meanwhile with their times.
@@ -1125,7 +1129,11 @@ pub(crate) async fn execute_with(
                 r["over"] == true,
             ))
         }
-        Verb::Replay { file, from } => {
+        Verb::Replay {
+            file,
+            from,
+            screens,
+        } => {
             let text = std::fs::read_to_string(&file)
                 .map_err(|e| Failure::Local(format!("cannot read {}: {e}", file.display())))?;
             let steps = text
@@ -1146,6 +1154,7 @@ pub(crate) async fn execute_with(
                 file: file.display().to_string(),
                 steps,
                 from,
+                screens,
             };
             run.play(client, &act, &with, g.json).await
         }
@@ -1830,6 +1839,15 @@ pub(crate) struct Replay {
     pub file: String,
     pub steps: Vec<Value>,
     pub from: usize,
+    pub screens: Option<PathBuf>,
+}
+
+/// The screen after a replayed step against the screenshot kept for it.
+enum Screen {
+    Kept,
+    Same,
+    /// Pixels changed in this many regions and no text did.
+    Silent(usize),
 }
 
 impl Replay {
@@ -1871,6 +1889,14 @@ impl Replay {
                 };
                 format!("{kind}{what}{typed}{into}{on}")
             }
+            "wait" => {
+                let c = &params["condition"];
+                match (target(&c["appears"]), target(&c["gone"])) {
+                    (appears, _) if !appears.is_empty() => format!("wait{appears}"),
+                    (_, gone) if !gone.is_empty() => format!("wait gone:{}", gone.trim_start()),
+                    _ => "wait settled".into(),
+                }
+            }
             "shell" => format!("shell {}", params["command"].as_str().unwrap_or_default()),
             method => format!("{method} {params}"),
         }
@@ -1894,6 +1920,7 @@ impl Replay {
         }
         let started = std::time::Instant::now();
         let mut done = Vec::new();
+        let (mut kept, mut same) = (0u64, 0u64);
         for (i, step) in self.steps.iter().enumerate().skip(self.from - 1) {
             let outcome = match (step["manual"].as_str(), step["method"].as_str()) {
                 (Some(what), _) => Err(refused(what)),
@@ -1913,23 +1940,48 @@ impl Replay {
                 )),
                 other => other,
             };
-            match outcome {
-                Ok(r) => done.push(format!(
+            let mut line = match outcome {
+                Ok(r) => format!(
                     "{}. {}",
                     i + 1,
                     r["summary"]
                         .as_str()
                         .map_or_else(|| Replay::describe(step), str::to_string)
-                )),
+                ),
                 Err(failure) => {
-                    return Err(self.stopped(client, with, i + 1, &done, failure).await);
+                    return Err(self
+                        .stopped(client, with, i + 1, &done, failure, None)
+                        .await);
+                }
+            };
+            if let Some(dir) = &self.screens {
+                match screen(client, with, dir, i + 1).await {
+                    Ok(Screen::Kept) => kept += 1,
+                    Ok(Screen::Same) => same += 1,
+                    Ok(Screen::Silent(n)) => {
+                        same += 1;
+                        line.push_str(&format!(
+                            " · screen: {} changed, no text",
+                            plural(n as u64, "region")
+                        ));
+                    }
+                    Err((failure, hint)) => {
+                        return Err(self
+                            .stopped(client, with, i + 1, &done, failure, hint)
+                            .await);
+                    }
                 }
             }
+            done.push(line);
         }
         let ran = done.len() as u64;
         let ms = started.elapsed().as_millis() as u64;
         if json {
-            return Ok(json!({"ok": true, "steps": ran, "ms": ms}).to_string());
+            let mut out = json!({"ok": true, "steps": ran, "ms": ms});
+            if self.screens.is_some() {
+                out["screens"] = json!({"same": same, "kept": kept});
+            }
+            return Ok(out.to_string());
         }
         let mut out = format!(
             "replayed {} in {:.1} s\n{}",
@@ -1937,6 +1989,21 @@ impl Replay {
             ms as f64 / 1000.0,
             done.join("\n")
         );
+        if let Some(dir) = &self.screens {
+            let dir = dir.display();
+            out.push('\n');
+            out.push_str(&match (same, kept) {
+                (0, k) => format!(
+                    "kept {} in {dir}; a replay with --screens {dir} compares each step's screen with them",
+                    plural(k, "screen")
+                ),
+                (s, 0) => format!("{} matched those in {dir}", plural(s, "screen")),
+                (s, k) => format!(
+                    "{} matched those in {dir}, and {k} new kept there",
+                    plural(s, "screen")
+                ),
+            });
+        }
         if let Some(screen) = screen_now(client, with).await {
             out.push_str("\nscreen now:\n");
             out.push_str(&screen);
@@ -1952,6 +2019,7 @@ impl Replay {
         n: usize,
         done: &[String],
         failure: Failure,
+        hint: Option<String>,
     ) -> Failure {
         let total = self.steps.len();
         let step = Replay::describe(&self.steps[n - 1]);
@@ -1971,15 +2039,17 @@ impl Replay {
             text.push_str("\nscreen now:\n");
             text.push_str(&screen);
         }
-        let hint = if n < total {
-            format!(
-                "Do step {n} yourself, then replay the same file from step {} for the {} left.",
-                n + 1,
-                plural((total - n) as u64, "step")
-            )
-        } else {
-            format!("Do step {n} yourself; it is the last one.")
-        };
+        let hint = hint.unwrap_or_else(|| {
+            if n < total {
+                format!(
+                    "Do step {n} yourself, then replay the same file from step {} for the {} left.",
+                    n + 1,
+                    plural((total - n) as u64, "step")
+                )
+            } else {
+                format!("Do step {n} yourself; it is the last one.")
+            }
+        });
         error.message = text;
         if let Some(data) = error.data.as_object_mut() {
             data.insert("hint".into(), json!(hint));
@@ -1987,6 +2057,64 @@ impl Replay {
         }
         Failure::Rpc(error)
     }
+}
+
+/// Compares the screen after step `n` with the screenshot `dir` keeps for it, or keeps it there when there is none.
+/// A failure comes with the hint for it.
+async fn screen(
+    client: &mut Client,
+    with: &(dyn Fn(Value) -> Value + Sync),
+    dir: &std::path::Path,
+    n: usize,
+) -> Result<Screen, (Failure, Option<String>)> {
+    let result = client
+        .call("screenshot", with(json!({"marks": false, "inline": true})))
+        .await
+        .map_err(|f| (f, None))?;
+    let shot: ScreenshotResult = decode(&result).map_err(|f| (f, None))?;
+    let now = base64::engine::general_purpose::STANDARD
+        .decode(shot.data_b64.unwrap_or_default())
+        .map_err(|e| {
+            (
+                Failure::Local(format!("the daemon sent bad image data: {e}")),
+                None,
+            )
+        })?;
+    let path = dir.join(format!("{n:02}.png"));
+    let local = |m: String| (refused(&m), None);
+    let kept = match std::fs::read(&path) {
+        Ok(kept) => kept,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::create_dir_all(dir)
+                .and_then(|()| std::fs::write(&path, &now))
+                .map_err(|e| local(format!("cannot keep {}: {e}", path.display())))?;
+            return Ok(Screen::Kept);
+        }
+        Err(e) => return Err(local(format!("cannot read {}: {e}", path.display()))),
+    };
+    let report = crate::compare::compare(&kept, &now).map_err(|e| {
+        local(format!(
+            "its screen cannot be compared with {}: {e}",
+            path.display()
+        ))
+    })?;
+    if report.regions.is_empty() {
+        return Ok(Screen::Same);
+    }
+    if report.text.is_empty() && report.unread.is_none() {
+        return Ok(Screen::Silent(report.regions.len()));
+    }
+    Err((
+        refused(&format!(
+            "its screen is not the one in {}\n{}",
+            path.display(),
+            crate::compare::render(&report)
+        )),
+        Some(format!(
+            "If the new screen is right, delete {} and replay again to keep it.",
+            path.display()
+        )),
+    ))
 }
 
 fn refused(detail: &str) -> Failure {
@@ -2325,6 +2453,25 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_wait_step_is_described_as_the_command_that_waits() {
+        let wait =
+            |c: Value| Replay::describe(&json!({"method": "wait", "params": {"condition": c}}));
+        assert_eq!(
+            wait(json!({"appears": {"text": "Name", "role": null}})),
+            "wait \"Name\""
+        );
+        assert_eq!(
+            wait(json!({"gone": {"text": "Loading", "role": null}})),
+            "wait gone:\"Loading\""
+        );
+        assert_eq!(
+            wait(json!({"appears": {"id": "com.example:id/ok"}})),
+            "wait com.example:id/ok"
+        );
+        assert_eq!(wait(json!({"settled": true})), "wait settled");
+    }
 
     fn tap(autonomous: bool) -> Verb {
         Verb::Tap {

@@ -24,7 +24,15 @@ jobs:
           app: testbeds/android/app/build/outputs/apk/debug/app-debug.apk
           runs: testbeds/android/runs/*.steps
           record: true
+          screens: testbeds/android/screens
           artifact: replay-android
+      - name: A second replay compares each step's screen with the one the first kept
+        uses: ./
+        with:
+          binary: target/release/phonedriver
+          runs: testbeds/android/runs/taps.steps
+          screens: ${{ runner.temp }}/phonedriver-runs/screens
+          artifact: replay-android-screens
       - name: A run that misses stops and fails the step
         id: missed
         continue-on-error: true

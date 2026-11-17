@@ -10,6 +10,7 @@ Not released yet.
 - **`phonedriver boot <name>`** starts an iOS Simulator or an Android virtual device that is off and waits until it has booted. With nothing connected, the error names what can be started.
 - **Saved runs**: `phonedriver save run.steps` writes what the session did, and `phonedriver replay run.steps` does it again with no model. It stops at the first step that fails and shows the screen.
 - **A GitHub Action**: `uses: hridaya423/phonedriver@v0.1.5` starts an Android emulator or an iOS Simulator, installs your app and replays saved runs on every commit. Each run is a row in the job summary, and its reply, the screen where it stopped and a video go in an artifact.
+- **Screen checks in a replay**: `replay run.steps --screens screens/run` keeps a screenshot after each step the first time, and later stops at the first step whose screen shows different text, with the text that changed (`~ "General" → "About"`). The Action takes the folder as `screens`.
 - **`phonedriver page`** prints the web page in front as text, whole, without scrolling. On Android, it works in Chrome and in the web views of debug builds.
 - **`phonedriver record start` and `record stop`** save an MP4 of the screen on Android and on the iOS Simulator, with a file of the actions done during it.
 - **Settings by key on Android 17**: `phonedriver setting find`, `get` and `set` change a setting without opening its screen.
@@ -19,7 +20,7 @@ Not released yet.
 - **An Android phone in use stays awake**: while phonedriver has used a phone in the last 10 minutes it resets the phone's screen timeout every 10 seconds, on the phone's own screen and with `PHONEDRIVER_DISPLAY=hidden`, so the phone no longer locks while an agent thinks. `phonedriver release` stops it. Tested on a HONOR X8.
 - **Fingerprint and Face ID**: `press fingerprint` and `press wrong-fingerprint` on an Android emulator and on an iOS Simulator.
 - **`press landscape` and `press portrait`** turn the screen.
-- **`phonedriver compare a.png b.png`** says in text what changed between two screenshots, in 0.3 to 1.2 s on a Mac.
+- **`phonedriver compare a.png b.png`** says in text what changed between two screenshots, in 0.3 to 1.2 s on a Mac. The status bar's clock is left out.
 - **Screens with no element list** are read from the screenshot on Windows hosts too, and on Linux hosts with Tesseract installed (the `tesseract-ocr` package), not only on a Mac.
 - **Reading a screenshot on a Mac starts at once**: the first read in a process used to wait 21 to 31 s while macOS built the model for Vision's Accurate level, and on some Macs that level failed after 12 to 17 s every time. phonedriver now reads at Vision's Fast level, which needs no such model: about 20 ms a screen on an M4 Pro.
 - **An iPhone's signature renews itself**: when the runner's signing has run out (7 days with a free Apple ID), the next command signs it again and installs it. `doctor` shows when it runs out.

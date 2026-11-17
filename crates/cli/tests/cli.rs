@@ -522,3 +522,65 @@ async fn json_output_keeps_the_device_line_in_every_reply() {
         );
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn replay_with_screens_keeps_each_steps_screen_then_compares_with_it() {
+    let (home, socket) = fake_daemon(vec![fakes::tree(&["One", "Two"])]).await;
+    let steps = home.path().join("run.steps");
+    let tap = |text: &str| json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": text}}}});
+    std::fs::write(&steps, format!("{}\n{}\n", tap("One"), tap("Two"))).unwrap();
+    let shots = home.path().join("shots");
+    let (file, dir) = (steps.to_str().unwrap(), shots.to_str().unwrap());
+    let replay = ["replay", file, "--screens", dir];
+
+    let first = cli(&home, &socket, &replay).await;
+    assert!(
+        first.contains(&format!(
+            "\nkept 2 screens in {dir}; a replay with --screens {dir} compares each step's screen with them\n"
+        )),
+        "{first}"
+    );
+    for n in ["01.png", "02.png"] {
+        assert_eq!(std::fs::read(shots.join(n)).unwrap(), fakes::PNG, "{n}");
+    }
+
+    let again = cli(&home, &socket, &replay).await;
+    assert!(
+        again.contains(&format!("\n2 screens matched those in {dir}\n")),
+        "{again}"
+    );
+
+    std::fs::remove_file(shots.join("01.png")).unwrap();
+    let mut wide = Vec::new();
+    let mut encoder = png::Encoder::new(&mut wide, 2, 1);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&[0, 0])
+        .unwrap();
+    std::fs::write(shots.join("02.png"), wide).unwrap();
+    let mut c = Command::cargo_bin("phonedriver").unwrap();
+    c.env("PHONEDRIVER_HOME", home.path())
+        .env("PHONEDRIVER_SOCKET", &socket)
+        .env_remove("PHONEDRIVER_SESSION")
+        .env_remove("PHONEDRIVER_DEVICE")
+        .args(replay);
+    let out = tokio::task::spawn_blocking(move || c.assert().failure().get_output().clone())
+        .await
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    let png2 = shots.join("02.png");
+    assert!(
+        err.contains(&format!(
+            "step 2 of 2 (tap \"Two\") failed: its screen cannot be compared with {}: the pictures are 2x1 and 1x1",
+            png2.display()
+        )),
+        "{err}"
+    );
+    assert!(err.contains("\n1. tapped @e1 \"One\""), "{err}");
+    assert!(
+        shots.join("01.png").exists(),
+        "step 1 kept its screen again"
+    );
+}

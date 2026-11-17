@@ -158,6 +158,41 @@ fn letters(text: &str) -> String {
     text.chars().filter(|c| c.is_alphanumeric()).collect()
 }
 
+/// A time as a status bar shows it (`9:41`, `21:05`, `9:41 PM`), with any icon read beside it.
+fn clock(text: &str) -> bool {
+    let t = text.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+    let t = ["AM", "PM", "am", "pm"]
+        .iter()
+        .find_map(|s| t.strip_suffix(s))
+        .unwrap_or(t)
+        .trim_end();
+    t.split_once(':').is_some_and(|(h, m)| {
+        (1..=2).contains(&h.len())
+            && m.len() == 2
+            && h.chars().chain(m.chars()).all(|c| c.is_ascii_digit())
+    })
+}
+
+/// Leaves out a status bar clock that moved (a time read in the top tenth of a picture `height` pixels high) and the
+/// regions it was the only text change in: two screenshots of one screen taken a minute apart differ there.
+pub fn without_clock(mut report: Report, height: f32) -> Report {
+    let ticked = |c: &TextChange| {
+        let at = at(c);
+        at.y + at.h / 2.0 < height / 10.0
+            && match c {
+                TextChange::Changed { from, to, .. } => clock(from) && clock(to),
+                TextChange::Added { text, .. } | TextChange::Removed { text, .. } => clock(text),
+            }
+    };
+    let (clocks, text): (Vec<_>, Vec<_>) = report.text.into_iter().partition(ticked);
+    report.regions.retain(|r| {
+        let r = std::slice::from_ref(r);
+        !clocks.iter().any(|c| touches(at(c), r)) || text.iter().any(|c| touches(at(c), r))
+    });
+    report.text = text;
+    report
+}
+
 fn at(change: &TextChange) -> Rect {
     match change {
         TextChange::Changed { at, .. }
@@ -238,7 +273,10 @@ pub fn compare(before_png: &[u8], after_png: &[u8]) -> Result<Report, String> {
     };
     let read = |png: &[u8]| -> Result<Vec<TextBox>, Error> { crate::ocr::recognize(png, screen) };
     match (read(before_png), read(after_png)) {
-        (Ok(b), Ok(a)) => report.text = text_changes(&b, &a, &report.regions),
+        (Ok(b), Ok(a)) => {
+            report.text = text_changes(&b, &a, &report.regions);
+            report = without_clock(report, screen.h);
+        }
         (Err(e), _) | (_, Err(e)) => report.unread = Some(e.to_string()),
     }
     Ok(report)
@@ -425,6 +463,57 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn a_status_bar_clock_that_moved_is_left_out_and_a_time_lower_down_is_not() {
+        let bar = rect(16.0, 16.0, 120.0, 40.0);
+        let lower = rect(0.0, 400.0, 400.0, 80.0);
+        let report = Report {
+            regions: vec![bar, lower],
+            share: 0.05,
+            text: vec![
+                TextChange::Changed {
+                    from: "9:41".into(),
+                    to: "9:42 •".into(),
+                    at: rect(24.0, 24.0, 60.0, 16.0),
+                },
+                TextChange::Changed {
+                    from: "10:30".into(),
+                    to: "10:31".into(),
+                    at: rect(20.0, 420.0, 60.0, 16.0),
+                },
+            ],
+            unread: None,
+        };
+        let left = without_clock(report, 800.0);
+        assert_eq!(left.regions, vec![lower]);
+        assert_eq!(left.text.len(), 1);
+        assert!(matches!(&left.text[0], TextChange::Changed { from, .. } if from == "10:30"));
+
+        let ticked = Report {
+            regions: vec![bar],
+            text: vec![TextChange::Added {
+                text: "12:05 PM".into(),
+                at: rect(24.0, 24.0, 60.0, 16.0),
+            }],
+            ..Report::default()
+        };
+        assert_eq!(render(&without_clock(ticked, 800.0)), "same");
+
+        let words = Report {
+            regions: vec![bar],
+            text: vec![TextChange::Changed {
+                from: "Wi-Fi".into(),
+                to: "Wi-Fi 2".into(),
+                at: rect(24.0, 24.0, 60.0, 16.0),
+            }],
+            ..Report::default()
+        };
+        assert_eq!(without_clock(words.clone(), 800.0), words);
+        for not_a_time in ["9:4", "123:45", "9:41:30", "ab:cd", "9.41"] {
+            assert!(!clock(not_a_time), "{not_a_time}");
+        }
     }
 
     #[test]

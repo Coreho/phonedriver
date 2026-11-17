@@ -1262,6 +1262,7 @@ impl Mcp {
             Verb::Replay {
                 file,
                 from: a.from.map_or(1, |n| n as usize),
+                screens: None,
             }
         };
         self.run(a.device, verb, None).await

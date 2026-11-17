@@ -38,6 +38,28 @@ hint: Do step 6 yourself, then replay the same file from step 7 for the 3 steps 
 
 Text typed with `--secret` is never written to the file, so a replay stops at that step. Keep real passwords out of runs meant for CI and type test values in plain text.
 
+## Check what each screen shows
+
+A replay checks that the taps land and the waited-for text shows. `--screens` also checks what each step left on the screen:
+
+```console
+$ phonedriver replay settings.steps --screens screens/settings
+replayed 5 steps in 10.5 s
+kept 5 screens in screens/settings; a replay with --screens screens/settings compares each step's screen with them
+```
+
+The first replay keeps a screenshot after each step. Later replays compare each step's screen with its screenshot and stop at the first step whose text changed, with the text that changed:
+
+```
+error: step 5 of 5 (wait "Name") failed: its screen is not the one in screens/settings/05.png
+changed: 2 regions, 35.7% of the screen
+~ "General" → "About" at 201,85
++ "Name" at 59,161
+hint: If the new screen is right, delete screens/settings/05.png and replay again to keep it.
+```
+
+Pixels that change with no text in them, such as a pressed row or a scroll bar, do not stop a replay, and the status bar's clock is left out. Keep the screens on the device type CI runs, since a screenshot of another size stops the replay.
+
 ## Run the files in GitHub Actions
 
 The phonedriver repository is also an Action. It starts an Android emulator on a Linux runner or an iOS Simulator on a macOS runner, installs your build, replays each file and fails the job at the first run that stops:
@@ -70,6 +92,7 @@ Each run's result is a row in the job summary. The reply of every run, and the s
 | `api-level` | `35` | The Android system image |
 | `device` | first iPhone | The Simulator to boot |
 | `record` | `false` | `true` keeps a video of every run |
+| `screens` | | A folder of kept screens, a subfolder for each run named as its steps file. A run with no subfolder keeps its screens in the artifact, under `screens/`, for you to commit |
 | `version` | `latest` | The phonedriver release to install |
 | `artifact` | `phonedriver-<job>` | The artifact's name |
 
@@ -77,6 +100,7 @@ The outputs `passed` and `failed` count the runs.
 
 ## Limits
 
+- Text that changes on its own, such as free space, a date or the keyboard's suggestions, stops a replay with `--screens`. Use it on flows whose screens stay the same from one replay to the next.
 - A replay finds each element again by its text. A run saved on one language or screen size can miss on another; save the run on the device size and language CI uses.
 - The Action runs the Android emulator only on Linux runners, which have hardware acceleration; GitHub's macOS runners cannot run it.
 - A step that waited on something outside the app (an email, a push notification) has nothing to wait on in CI.
