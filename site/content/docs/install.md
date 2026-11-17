@@ -10,7 +10,15 @@ phonedriver is one binary: the CLI, the daemon and the MCP server. The Android a
 
 > The current release is phonedriver 0.1.5, on npm, Homebrew and GitHub Releases. You only need to build from source if you want to change it.
 
-## Easiest: ask your agent
+## One command
+
+```sh
+npx -y phonedriver init
+```
+
+That adds phonedriver to every agent it finds on your machine (Claude Code, Codex, Cursor, VS Code, Gemini CLI), then checks adb, your devices and Xcode and says what to fix. An agent that already has it is left alone, and `--dry-run` shows what it would do. Use this or a plugin, not both, or the tools are listed twice.
+
+## Or ask your agent
 
 Paste this into Claude Code, Codex, Cursor or any agent that can run commands. It checks your machine, adds the MCP server to itself and tells you what to plug in.
 

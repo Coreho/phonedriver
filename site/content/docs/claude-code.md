@@ -3,7 +3,7 @@ title: How to use phonedriver with Claude Code
 seo: How to let Claude Code control an Android phone or iPhone
 nav: Claude Code
 description: Add phonedriver to Claude Code as an MCP server with one command, point it at a device and ask it to operate a phone in plain language.
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 To let Claude Code control an Android phone or an iPhone, add phonedriver as an MCP server with `claude mcp add phonedriver -- npx -y phonedriver mcp`, connect a device and ask in plain language. Claude Code is the client phonedriver is tested against: the benchmarks on this site run `claude -p` with Claude Sonnet 5.5.
@@ -61,7 +61,7 @@ Fourteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swi
 
 ## When Claude Code asks you something
 
-A tap on a button that spends money or cannot be undone (`Place order`, `Pay`, `Delete account`) is held until you answer. Claude Code shows the question with the app, the button and the amounts on screen. See [the approval guard](/docs/approval-guard/). In headless `claude -p` nobody can answer, so the tap is declined.
+A tap on a button that spends money or cannot be undone (`Place order`, `Pay`, `Delete account`) is held until you answer. Claude Code shows the question with the app, the button and the amounts on screen. See [the approval guard](/docs/approval-guard/). In headless `claude -p` nobody can answer, so nothing is tapped.
 
 ## Secrets
 
@@ -83,7 +83,7 @@ The first turn of a one-word `claude -p` costs 5,606 tokens with phonedriver's 1
 
 ### Does it work in a headless claude -p run?
 
-Yes. The benchmarks on this site ran that way. Nobody can answer an approval prompt in a headless run, so a tap on Pay or Place order is declined and nothing is tapped.
+Yes. The benchmarks on this site ran that way. Nobody can answer an approval prompt in a headless run, so a tap on Pay or Place order gets no answer and nothing is tapped.
 
 ## Next
 

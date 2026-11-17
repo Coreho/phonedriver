@@ -96,7 +96,7 @@ export const FAQ_MORE = [
   ],
   [
     "What does it not do well yet?",
-    "A bare tap misses its 15 ms budget. An iOS tap takes 357 ms on the Simulator and 454 to 534 ms on devices. WebViews and custom views can have an empty accessibility tree, where it falls back to OCR. The real-phone jobs benchmark ran two or three passes per job on one tablet emulator, so its medians describe what happened and are not rates. One Android phone model, a HONOR X8, has been tested."
+    "A bare tap misses its 15 ms budget. An iOS tap takes 454 to 534 ms on devices; on the Simulator, since 0.1.5, a tap with its reply takes 316 ms. WebViews and custom views can have an empty accessibility tree, where it falls back to OCR. The real-phone jobs benchmark ran two or three passes per job on one tablet emulator, so its medians describe what happened and are not rates. One Android phone model, a HONOR X8, has been tested."
   ]
 ] as [string, string][];
 
@@ -126,7 +126,7 @@ export const FAQ_EXTRA = [
   ],
   [
     "Can it run with nobody watching?",
-    "Yes, and the benchmarks on this site ran that way: `claude -p` against an emulator started with `-no-window`. In a headless run nobody can answer the approval prompt, so a tap on Pay or Place order is declined and nothing is tapped. For unattended runs, use an emulator or a spare phone."
+    "Yes, and the benchmarks on this site ran that way: `claude -p` against an emulator started with `-no-window`. In a headless run nobody can answer the approval prompt, so a tap on Pay or Place order gets no answer and nothing is tapped. For unattended runs, use an emulator or a spare phone."
   ],
   [
     "Does it work with VS Code, Gemini CLI, Zed or Cline?",
