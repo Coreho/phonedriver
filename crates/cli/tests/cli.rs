@@ -584,3 +584,19 @@ async fn replay_with_screens_keeps_each_steps_screen_then_compares_with_it() {
         "step 1 kept its screen again"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn snapshot_audit_adds_the_screens_accessibility_problems() {
+    let (home, socket) = fake_daemon(vec![fakes::tree(&["One", ""])]).await;
+    let out = cli(&home, &socket, &["snapshot", "--audit"]).await;
+    assert!(
+        out.ends_with("\naudit: 1 finding\n@e2 button: no name a screen reader can say\n"),
+        "{out}"
+    );
+    let (home, socket) = fake_daemon(vec![fakes::tree(&["One"])]).await;
+    let out = cli(&home, &socket, &["snapshot", "--audit"]).await;
+    assert!(
+        out.ends_with("\naudit: no unnamed controls or small tap targets\n"),
+        "{out}"
+    );
+}

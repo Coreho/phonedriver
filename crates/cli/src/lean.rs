@@ -8,7 +8,14 @@ use serde_json::{Map, Value};
 const HIDDEN: &[(&str, &[&str])] = &[
     (
         "snapshot",
-        &["diff", "interactive", "within", "max_lines", "pixels"],
+        &[
+            "diff",
+            "interactive",
+            "within",
+            "max_lines",
+            "pixels",
+            "audit",
+        ],
     ),
     ("tap", &["role", "count", "autonomous"]),
     ("type", &["mode", "append", "autonomous"]),

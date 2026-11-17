@@ -75,6 +75,18 @@ While the agent works, `phonedriver record start` and `record stop` save a video
 
 `phonedriver apps grant <app> camera` and `apps revoke <app> location` change a permission without opening the app. On Android an action during which the app crashed says so in its reply, with the exception and the line that threw it, and `phonedriver logs` prints the app's last lines. `press landscape` and `press portrait` turn the screen, and on an emulator or a Simulator `press fingerprint` and `press wrong-fingerprint` answer a fingerprint or Face ID prompt.
 
+## Accessibility
+
+`phonedriver snapshot --audit` lists what a screen reader or a thumb would trip on: controls with no name a screen reader can say, and tap targets under 44 by 44 points on iOS or 48 by 48 on Android. Ask the agent to audit every screen it passes and you get a list per screen, with the refs to look at:
+
+```
+audit: 2 findings
+@e15 searchbox "Search": 336x38pt, under 44x44pt
+@e16 button "Dictate": 17x22pt, under 44x44pt
+```
+
+It reads the element list only, so it does not check colour contrast or text that is cut short.
+
 ## Run it with nobody watching
 
 The benchmarks ran headless: `claude -p` against an emulator started with `-no-window` (the flags are on [the emulator page](/docs/android-emulator/)). In a headless run nobody can answer the [approval prompt](/docs/approval-guard/), so a tap on Pay or Place order is declined and nothing is tapped.

@@ -182,6 +182,8 @@ struct SnapshotArgs {
     max_lines: Option<u32>,
     /// Read the pixels with OCR and add text the tree lacks (automatic when the tree is empty).
     pixels: Option<bool>,
+    /// Add accessibility problems: unnamed controls, small tap targets.
+    audit: Option<bool>,
     find: Option<String>,
     /// The web page in front as text, whole, no scrolling (Chrome; web views of debug builds). `find` keeps matching lines.
     page: Option<bool>,
@@ -1316,7 +1318,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "The screen as lines like `@e4 button \"Save\"`; refs name elements for other tools. `find` lists matching lines (`A|B` for either). `under-keyboard` = hidden by the keyboard.",
+        description = "The screen as lines like `@e4 button \"Save\"`; refs name elements for other tools. `find` lists matching lines (`A|B` for either). `under-keyboard` = hidden by the keyboard. `audit` adds accessibility problems.",
         annotations(
             title = "Read the screen",
             read_only_hint = true,
@@ -1342,6 +1344,7 @@ impl Mcp {
             within: a.within,
             max_lines: a.max_lines.map(|n| n as usize),
             pixels: a.pixels.unwrap_or(false),
+            audit: a.audit.unwrap_or(false),
             save_fixture: None,
             fixture_dir: None,
         };

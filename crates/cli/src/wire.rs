@@ -312,6 +312,8 @@ pub struct SnapshotParams {
     #[serde(default)]
     pub pixels: bool,
     pub timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub audit: bool,
 }
 
 #[derive(Debug, Deserialize)]

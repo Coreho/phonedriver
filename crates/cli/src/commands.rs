@@ -227,6 +227,10 @@ pub(crate) enum Verb {
         /// Read the screen's pixels with OCR and add the text the tree lacks. Done automatically when the tree is empty or a web view has no children.
         #[arg(long)]
         pixels: bool,
+        /// Add the screen's accessibility problems: controls with no name a screen reader can say, and tap targets
+        /// under 44x44pt on iOS or 48x48 on Android.
+        #[arg(long)]
+        audit: bool,
         /// Save the device's own tree and a screenshot as a test fixture.
         #[arg(long)]
         save_fixture: Option<String>,
@@ -960,11 +964,12 @@ pub(crate) async fn execute_with(
             within,
             max_lines,
             pixels,
+            audit,
             save_fixture,
             fixture_dir,
         } => {
             let mut p = json!({
-                "diff": diff, "interactive": interactive, "max_lines": max_lines, "pixels": pixels,
+                "diff": diff, "interactive": interactive, "max_lines": max_lines, "pixels": pixels, "audit": audit,
                 "no_settle": g.no_settle, "elements": g.json, "capture": save_fixture.is_some(),
             });
             if let Some(w) = within {

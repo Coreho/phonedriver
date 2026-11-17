@@ -1,6 +1,7 @@
 //! Pure domain logic for phonedriver: geometry, elements, refs, rendering, diff, settle, errors.
 
 pub mod alert;
+pub mod audit;
 pub mod device;
 pub mod diff;
 pub mod element;

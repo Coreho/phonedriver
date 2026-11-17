@@ -1291,3 +1291,17 @@ D85 rejected two of these cuts, because each took away something an agent uses. 
 
 **Reopen if.** Users need to leave a region out (a `--mask` with points from `compare`'s report), or text that changes on its own makes most failures noise.
 
+## D90. `snapshot --audit` lists accessibility problems from the element list
+
+**Choice.** `snapshot --audit` (MCP: `snapshot` with `audit: true`, hidden from the lean schema and named in the tool's description) appends `audit: N findings` and a line for each problem, at most 20 (`crates/core/src/audit.rs`). Two checks. A control, meaning an element that can be tapped or typed into or has a control's role (button, switch, checkbox, radio, slider, field, tab, menu item), with no label, no hint and no text inside it: `@e1 button: no name a screen reader can say`. A tap target under 44 by 44 points on iOS (Apple's Human Interface Guidelines) or 48 by 48 on Android (the Material and Android accessibility guidelines): `@e3 button "Close": 24x24pt, under 48x48pt`; a target that touches the screen's edge or the edge of a scrollable element around it is not measured, since only part of it may be on screen, and neither is a link. With no problem the line is `audit: no unnamed controls or small tap targets`.
+
+**Why.** An agent that walks an app for a developer can check each screen it passes, and the element list it already reads holds what the two most common findings of Apple's Accessibility Inspector and Google's Accessibility Scanner need. The European Accessibility Act has applied to many consumer apps (shopping, banking, travel) since June 2025.
+
+**Rejected.** Colour contrast and cut-off text: they need the pixels and OCR, and a misread would be reported as a finding. Two controls with the same name: a list's rows each have a "Delete", which is right, and the tree does not say which repeat is a mistake. A tool of its own: it would cost every agent the tokens of its description on every turn.
+
+**Evidence.** `audit::tests::a_control_with_nothing_to_say_and_a_small_target_are_found_and_the_rest_is_not` (an unnamed image button, a 24 by 24 close button, an unnamed field found; a named row, a field with a hint and a row cut off by its list not found) fails with the cut-off rule turned off (`"@e8 button \"Last row\": 360x10pt, under 48x48pt"` appears); `an_iphone_asks_for_44_points`; `--test cli snapshot_audit_adds_the_screens_accessibility_problems` through the binary and a fake daemon. The MCP tool-list budget test passes. Live on the iPhone 17 Simulator (iOS 26.5): Settings, 2 findings (the search field, 38 points high, and its Dictate button, 17 by 22); Maps, 7 (among them the More button at 27 by 27 and the profile button at 42 by 42); Calendar and Photos, none.
+
+**Limits.** The size is the element's frame; a control whose touch area is larger than its frame (Android's `TouchDelegate`, an iOS hit-test override) is reported though a finger reaches it. A control whose name comes only from an image the screen reader recognises is reported as unnamed. Elements hidden from the accessibility tree are not seen at all, which is itself a problem the audit cannot report.
+
+**Reopen if.** Developers ask for contrast or duplicate-name checks, or a finding proves wrong on a common control.
+

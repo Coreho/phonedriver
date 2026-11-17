@@ -2998,3 +2998,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - After: `before 84, after 84`, and `runner/E02FE8A6-....dd` is 204 KB. The 67 folders older than 30 minutes were the mini's own leftovers from tests and were deleted (979 MB free after).
 - Docs: architecture's Simulator lifecycle paragraph, CHANGELOG.
 
+## 2026-11-17: `snapshot --audit` (D90)
+
+- Planned as K3 of the overnight list: accessibility findings from the tree, no screenshot, no new MCP tool.
+- Added `crates/core/src/audit.rs`: controls with no label, hint or text inside, and tap targets under 44x44pt (iOS) or 48x48 (Android), not measuring targets cut off by the screen or a scrollable parent, or links. `snapshot --audit` and MCP `audit: true` (hidden in the lean schema, named in the description) append `audit: N findings` and up to 20 lines.
+- Tests: `audit::tests` (2), with the cut-off rule turned off on the mini's copy the first fails with `"@e8 button \"Last row\": 360x10pt, under 48x48pt"` added; `--test cli snapshot_audit_adds_the_screens_accessibility_problems`; `--test mcp tool_list` and `lean` pass. Core 225, iOS 73, Android 70 unit tests pass; workspace clippy clean.
+- Live, iPhone 17 Simulator, debug build on the mini: Settings `audit: 2 findings` (`@e15 searchbox "Search": 336x38pt, under 44x44pt`, `@e16 button "Dictate": 17x22pt, under 44x44pt`); Maps 7 (`@e35 button "More": 27x27pt`, `@e26 button "profile": 42x42pt`, ...); Calendar and Photos `audit: no unnamed controls or small tap targets`.
+- Also: the reference still said `compare` reports the status bar's clock; it now says a time in the top tenth is left out (D89).
+

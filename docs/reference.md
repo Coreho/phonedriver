@@ -301,7 +301,21 @@ same
 
 That is a switch that moved and moved back. Where text differs, the reply has a line for each text that changed (`~ "Will turn on when Bedtime starts" → "Will never turn off automatically" at 132,545`), appeared (`+ "General" at 203,86`) or went (`- "Settings" at 84,143`), with the point to tap. At most twelve lines, then `and 14 more`. With one file the screen now is compared with it; with two files nothing is asked of a device. `--image out.png` also writes the later picture with the regions boxed. Over MCP, `screenshot` with `compare: true` compares the screen with the last screenshot that call returned for the same device and sends no image.
 
-The text is read from the pictures by the same recognition as above, so it can misread small or stylized type, and a status bar's clock or signal that changed is reported like any other text. Both pictures must be the same size; take them without `--native` so that the points can be tapped. Decision D76.
+The text is read from the pictures by the same recognition as above, so it can misread small or stylized type. A time in the top tenth of the picture that changed (the status bar's clock) is left out; other status bar text that changed is reported like any other. Both pictures must be the same size; take them without `--native` so that the points can be tapped. Decisions D76 and D89.
+
+### Accessibility problems on a screen
+
+`snapshot --audit` adds the screen's accessibility problems after its lines:
+
+```console
+$ phonedriver snapshot --audit
+...
+audit: 2 findings
+@e15 searchbox "Search": 336x38pt, under 44x44pt
+@e16 button "Dictate": 17x22pt, under 44x44pt
+```
+
+Two checks, from the element list alone: a control (a button, field, switch, tab or anything that can be tapped or typed into) with no label, hint or text inside it, which a screen reader has nothing to say for (`@e1 button: no name a screen reader can say`); and a tap target smaller than 44 by 44 points on iOS or 48 by 48 on Android, the size Apple's and Google's guidelines ask for. A target cut off by the screen's edge or by the list around it, and a link, are not measured. At most 20 lines, then `and 3 more`. Over MCP, `snapshot` takes `audit: true`. Decision D90.
 
 ### Reading a web page
 

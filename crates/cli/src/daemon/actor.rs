@@ -54,6 +54,7 @@ pub const LEASE_TTL: Duration = Duration::from_secs(600);
 pub const TERMINAL_HOLD: Duration = Duration::from_secs(30);
 const TICK: Duration = Duration::from_millis(5);
 const SETTING_LINES: usize = 12;
+const AUDIT_LINES: usize = 20;
 const LOGS_SINCE_S: u64 = 60;
 /// Added to an action's own time when its crash log is read, for the action's preparation before the clock started.
 const CRASH_MARGIN: Duration = Duration::from_secs(2);
@@ -1564,6 +1565,10 @@ impl Actor {
                 rendered.text(&filters).map_err(|r| stale(r, s))?,
             )
         };
+        let mut text = text;
+        if p.audit {
+            text.1.push_str(&audited(&rendered));
+        }
         let capture = if p.capture {
             device.capture_tree().await?
         } else {
@@ -3992,6 +3997,23 @@ fn mode_name(m: TypeMode) -> &'static str {
         TypeMode::Set => "set",
         TypeMode::Keys => "keys",
     }
+}
+
+/// `snapshot --audit`'s lines: how many problems the screen has and the first `AUDIT_LINES` of them (decision D90).
+fn audited(r: &Rendered) -> String {
+    let found = phonedriver_core::audit::audit(r);
+    if found.is_empty() {
+        return "\naudit: no unnamed controls or small tap targets".into();
+    }
+    let mut out = format!("\naudit: {}", plural(found.len() as u64, "finding"));
+    for line in found.iter().take(AUDIT_LINES) {
+        out.push('\n');
+        out.push_str(line);
+    }
+    if found.len() > AUDIT_LINES {
+        out.push_str(&format!("\nand {} more", found.len() - AUDIT_LINES));
+    }
+    out
 }
 
 fn settle_line(st: State) -> SettleLine {
