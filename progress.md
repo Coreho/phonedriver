@@ -2971,3 +2971,10 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - The replay step dry-run on the mini (the step's script pulled out of `action.yml`, GitHub's output and summary files faked, the Simulator, `record: true`), one run that works and one that taps a row that is not there: exit 0, outputs `passed=1` and `failed=1`, the summary table `replayed: replayed 5 steps in 11.2 s` and `stopped: step 2 of 2 (tap "No such row") failed: no element matches "No such row"`, and the folder held `ok.txt`, `ok.mp4`, `miss.txt`, `miss.mp4`, `miss.png` (looked at: Settings' main list, where the run stopped) and `miss.logs.txt`.
 - `testbeds/android/runs/text.steps` was written by hand in the format `save` writes (win-pc's emulator was offline); the workflow is its first run.
 - Docs: a "Replay in CI" page on the site, a section in the reference, the test-your-app page (save, replay, record, compare, permissions, crashes, turning the screen; its limit that said phonedriver does not replay is gone) and the Appium comparison.
+
+## 2026-11-17: a wait that finds its text says nothing about settling
+
+- Seen while recording the Action's iOS run: `wait About` answered `ok "About" appeared after 1 tree read · still animating after 123ms, read as it is now`. A wait returns when its text shows and never settles, and the time it took came back as `settle_ms`, which the reply prints as an unfinished settle.
+- Changed: `wait_for` returns `settle_ms: 0`; the protocol's `wait` row says so.
+- Test first, seen failing (`left: Number(250)`, `right: 0`): `a_wait_that_finds_its_text_reports_no_settle`. `cargo test -p phonedriver --lib --test daemon --test mcp --test replay --test record`: 113, 180, 48, 6 and 5 passed.
+- On the Simulator: `ok "About" appeared after 1 tree read`, with no settle part.

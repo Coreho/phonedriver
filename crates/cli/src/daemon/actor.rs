@@ -3585,7 +3585,7 @@ impl Actor {
                     verified: None,
                     unverified: None,
                     settled: false,
-                    settle_ms: started.elapsed().as_millis() as u32,
+                    settle_ms: 0,
                     changed: true,
                     woke: false,
                     unlocked: false,

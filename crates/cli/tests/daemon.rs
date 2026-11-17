@@ -1897,6 +1897,29 @@ async fn wait_settled_right_after_an_unobserved_action_waits_for_its_first_chang
     );
 }
 
+/// Seen on the iOS 26.5 Simulator: `wait About` answered `"About" appeared after 1 tree read · still animating after
+/// 123ms, read as it is now`. A wait returns when its text shows and has no settle to report.
+#[tokio::test(start_paused = true)]
+async fn a_wait_that_finds_its_text_reports_no_settle() {
+    let (source, fake) = FakeSource::with(vec![tree(&["Zero"])]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        fake.set_tree(tree(&["One"]));
+        fake.push_frame(big_frame(1));
+    });
+    let r = ok(
+        &d,
+        "default",
+        "wait",
+        json!({"condition": {"appears": {"text": "One", "role": null}}}),
+    )
+    .await;
+    assert_eq!(r["summary"], "\"One\" appeared after 2 tree reads", "{r}");
+    assert_eq!(r["settle_ms"], 0, "{r}");
+}
+
 #[tokio::test(start_paused = true)]
 async fn an_unobserved_action_is_forgotten_after_the_first_change_window() {
     let (source, _) = FakeSource::with(vec![tree(&["One"])]);
