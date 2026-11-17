@@ -1,0 +1,456 @@
+{
+ "instructions": "Operate an Android or iOS device. System settings: `setting` first; `shell` where it is unsupported. App UI: `launch` takes an app name (no `devices` or `apps` first), then `snapshot` once and act on its @refs; each action returns what changed. A path of taps you can predict goes in one `tap` with `then`. Send calls one at a time on the shared screen. If an error needs the user to act on the device, say so and go on when they are done. Passwords, payments, sending and deleting need the user's word for this task.",
+ "tools": [
+  {
+   "name": "apps",
+   "description": "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`).",
+   "inputSchema": {
+    "properties": {
+     "action": {
+      "type": "string"
+     },
+     "app": {
+      "type": "string"
+     },
+     "permissions": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Apps",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "batch",
+   "description": "Run steps in order, one diff back; stops at the first failure. A step is {\"tool\":\"tap\",\"target\":\"@e3\"}: tap, type, swipe, scroll, press, launch or wait.",
+   "inputSchema": {
+    "properties": {
+     "steps": {
+      "type": "array"
+     }
+    },
+    "required": [
+     "steps"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Run steps",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "clipboard",
+   "description": "Read the clipboard, or `set` it.",
+   "inputSchema": {
+    "properties": {
+     "set": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Clipboard",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "devices",
+   "description": "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold. `boot` starts a simulator or emulator that is off.",
+   "inputSchema": {
+    "properties": {
+     "boot": {
+      "description": "Start a simulator or emulator that is off, by name.",
+      "type": "string"
+     },
+     "release": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "List devices",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "launch",
+   "description": "Open an app (any part of its name, or its id) or a `url` (with `app`, opened in that app); returns the screen it shows, which is where the app was left unless `restart`. `grant` pre-allows permissions (`camera`, `notifications`).",
+   "inputSchema": {
+    "properties": {
+     "app": {
+      "type": "string"
+     },
+     "grant": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "restart": {
+      "type": "boolean"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Open an app",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "logs",
+   "description": "An app's last log lines and its last crash (Android). `app` defaults to the one in front; `grep` keeps lines with these words (`a|b`).",
+   "inputSchema": {
+    "properties": {
+     "app": {
+      "type": "string"
+     },
+     "grep": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Read an app's logs",
+    "readOnlyHint": true,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "press",
+   "description": "Press home, back, recents, notifications, lock, volume-up, volume-down, enter or hide-keyboard. `landscape` and `portrait` turn the screen. On an emulator or Simulator, fingerprint or wrong-fingerprint answers a fingerprint or Face ID prompt.",
+   "inputSchema": {
+    "properties": {
+     "key": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "key"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Press a key",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "replay",
+   "description": "Run a saved steps file again in one call; it stops at the first step that fails and shows the screen. `save: true` writes the file from this session's actions: do it when a task that worked will be asked again.",
+   "inputSchema": {
+    "properties": {
+     "file": {
+      "type": "string"
+     },
+     "from": {
+      "description": "Start at this step.",
+      "type": "integer"
+     },
+     "save": {
+      "description": "Write the file instead of running it.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "file"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Replay saved steps",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "screenshot",
+   "description": "Image of the screen, for what the snapshot lacks (canvas, map, photo). `marks` boxes tappable elements with their @ref. `compare` replies with what changed since your last screenshot, as text. `record` saves a video of the screen instead, with the actions done meanwhile.",
+   "inputSchema": {
+    "properties": {
+     "compare": {
+      "description": "Reply with what changed since your last screenshot, as text and no image.",
+      "type": "boolean"
+     },
+     "marks": {
+      "type": "boolean"
+     },
+     "record": {
+      "description": "`start`, later `stop` (Android, iOS Simulator).",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Screenshot",
+    "readOnlyHint": true,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "scroll",
+   "description": "Scroll toward more content, or until the text or @ref in `until` shows.",
+   "inputSchema": {
+    "properties": {
+     "direction": {
+      "description": "up, down, left or right.",
+      "type": "string"
+     },
+     "until": {
+      "description": "A text, `A|B` for either, or an @ref.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "direction"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Scroll",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "setting",
+   "description": "System settings by key, with no screens to tap (Android 17+; elsewhere it answers unsupported: use `shell`). `find` lists keys and accepted values (`dark theme|media volume` for several); `values` {key: value} writes; `key` reads one; `open` shows the `screen` with that key.",
+   "inputSchema": {
+    "properties": {
+     "find": {
+      "type": "string"
+     },
+     "key": {
+      "type": "string"
+     },
+     "open": {
+      "type": "string"
+     },
+     "value": {
+      "type": "string"
+     },
+     "values": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Read or change a setting",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "shell",
+   "description": "Run a device shell command: exit code, output, screen change. For intents, keys and state, and for settings where `setting` is unsupported: `am start -a android.intent.action.VIEW -d <url>`, `input keyevent 3`, `cmd uimode night yes`. Simulator: `simctl ui appearance dark`. A physical iPhone has no shell.",
+   "inputSchema": {
+    "properties": {
+     "command": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "command"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Run a shell command",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "snapshot",
+   "description": "The screen as lines like `@e4 button \"Save\"`; refs name elements for other tools. `find` lists matching lines (`A|B` for either). `under-keyboard` = hidden by the keyboard. `audit` adds accessibility problems.",
+   "inputSchema": {
+    "properties": {
+     "find": {
+      "type": "string"
+     },
+     "page": {
+      "description": "The web page in front as text, whole, no scrolling (Chrome; web views of debug builds). `find` keeps matching lines.",
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Read the screen",
+    "readOnlyHint": true,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "swipe",
+   "description": "A finger gesture: flip pages, dismiss. `to` drags `from` to a target; `pinch` (in, out) zooms. Use `scroll` for lists.",
+   "inputSchema": {
+    "properties": {
+     "direction": {
+      "description": "up, down, left or right.",
+      "type": "string"
+     },
+     "from": {
+      "description": "Start; default the screen's center.",
+      "type": "string"
+     },
+     "pinch": {
+      "type": "string"
+     },
+     "to": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Swipe",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "tap",
+   "description": "Tap by @ref, text or x,y point (from a screenshot). `long` holds the press that many ms (context menus). The reply is the new screen: read it, and call tools one at a time (they share one screen).",
+   "inputSchema": {
+    "properties": {
+     "long": {
+      "type": "integer"
+     },
+     "target": {
+      "description": "@ref, `x,y` or text.",
+      "type": "string"
+     },
+     "then": {
+      "description": "Texts to tap next on the screens that follow, in order (a menu path in one call); stops at the first one missing.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "target"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Tap",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "type",
+   "description": "Put text in a field (replaces its content) and report what it shows; empty text clears. `secret` for any password or code.",
+   "inputSchema": {
+    "properties": {
+     "into": {
+      "description": "@ref, `x,y` or text; default the focused field.",
+      "type": "string"
+     },
+     "secret": {
+      "type": "boolean"
+     },
+     "submit": {
+      "description": "Then press enter.",
+      "type": "boolean"
+     },
+     "text": {
+      "type": "string"
+     },
+     "then": {
+      "description": "Texts to tap after typing, in order (pick a suggestion).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Type text",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   }
+  },
+  {
+   "name": "wait",
+   "description": "Wait for `settled`, a text (`A|B` for either) or @ref to appear, or `gone:<text>`.",
+   "inputSchema": {
+    "properties": {
+     "condition": {
+      "type": "string"
+     },
+     "timeout_ms": {
+      "description": "Default 5000.",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "condition"
+    ],
+    "type": "object"
+   },
+   "annotations": {
+    "title": "Wait",
+    "readOnlyHint": true,
+    "openWorldHint": true
+   }
+  }
+ ]
+}

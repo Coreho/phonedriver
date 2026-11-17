@@ -4,7 +4,7 @@ export const DISAMBIGUATION = "The MCP server and CLI at github.com/hridaya423/p
 
 export const HOME_DESC = "phonedriver lets Claude Code, Codex, Cursor or any MCP client use an Android phone or an iPhone. It reads the screen as text and asks you before it pays.";
 
-export const LLMS_NOTE = "phonedriver is a free, open-source (AGPL-3.0) CLI and MCP server. It runs on macOS, Linux and Windows and controls Android emulators and phones, the iOS Simulator and iPhones. It sends no telemetry. Numbers below come from benchmarks on an Android 17 emulator and a HONOR X8 phone; each page links its method and raw data.";
+export const LLMS_NOTE = "phonedriver is a free, open-source (AGPL-3.0) CLI and MCP server. It runs on macOS, Linux and Windows and controls Android emulators and phones, the iOS Simulator and iPhones. It sends no telemetry. Numbers below come from benchmarks on an Android 17 emulator, a HONOR X8 phone and the iOS Simulator; each page links its method and raw data.";
 
 export const FAQ = [
   [

@@ -1,0 +1,495 @@
+{
+ "generatedAt": "2026-11-17T20:03:09.688Z",
+ "tokenMethod": "characters / 4 (no ANTHROPIC_API_KEY was set)",
+ "imageRule": "width * height / 750 after scaling to at most 2576 px on the long edge and about 4784 tokens",
+ "tools": [
+  {
+   "tool": "phonedriver",
+   "label": null,
+   "condition": {
+    "deviceHubAsked": false,
+    "deviceHubRunning": false,
+    "simulator": "headless (simctl boot, no Device Hub)"
+   },
+   "name": "phonedriver",
+   "mac": null,
+   "interface": "mcp",
+   "version": "phonedriver 0.1.5",
+   "fatal": null,
+   "notes": [],
+   "toolList": {
+    "count": 17,
+    "definitionsTokens": 1719,
+    "instructionsTokens": 130,
+    "totalTokens": 1849,
+    "startToListMs": 14.8
+   },
+   "cold": {
+    "setupMs": 4953.2,
+    "setupOk": true,
+    "setupError": null,
+    "firstReadMs": 112.3,
+    "firstReadOk": true,
+    "firstReadError": null
+   },
+   "read": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 28.7,
+    "p90Ms": 29.2,
+    "minMs": 28,
+    "maxMs": 32.2,
+    "medianTokens": 59,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 236,
+    "errors": {}
+   },
+   "tap": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 316,
+    "p90Ms": 330.3,
+    "minMs": 285.6,
+    "maxMs": 375,
+    "medianTokens": 20,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 80,
+    "reportsChange": 20,
+    "returnsImage": 0,
+    "errors": {}
+   },
+   "type": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 847.8,
+    "p90Ms": 859.7,
+    "minMs": 502.7,
+    "maxMs": 884.8,
+    "medianTokens": 13,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 52,
+    "errors": {}
+   },
+   "flow": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 1754.7,
+    "p90Ms": 1804.8,
+    "minMs": 1734.9,
+    "maxMs": 1835.6,
+    "medianTokens": 173,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 5,
+    "medianChars": 690,
+    "errors": {}
+   },
+   "flowBatch": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 1785,
+    "p90Ms": 2080.1,
+    "minMs": 1716.9,
+    "maxMs": 2272.4,
+    "medianTokens": 177,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 3,
+    "medianChars": 703,
+    "errors": {}
+   },
+   "environment": {
+    "date": "2026-11-17T19:47:00.490Z",
+    "macos": "27.0.1 (26A434)",
+    "hardware": {
+     "model": "Mac16,10",
+     "cpu": "Apple M4",
+     "cores": 10,
+     "memoryGB": 16
+    },
+    "xcode": "Xcode 27.0, Build version 27A266a",
+    "node": "v25.6.0",
+    "simulator": {
+     "udid": "A72FF9D4-E299-44EF-9AD9-805919E77C02",
+     "name": "Bench iPhone 17",
+     "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+     "runtime": "iOS 26.5 (23F73)"
+    }
+   },
+   "startedAt": "2026-11-17T19:46:24.962Z",
+   "finishedAt": "2026-11-17T19:49:39.090Z"
+  },
+  {
+   "tool": "simulator-use",
+   "label": null,
+   "condition": {
+    "deviceHubAsked": false,
+    "deviceHubRunning": false,
+    "simulator": "headless (simctl boot, no Device Hub)"
+   },
+   "name": "simulator-use",
+   "mac": null,
+   "interface": "mcp",
+   "version": "0.17.0",
+   "fatal": null,
+   "notes": [],
+   "toolList": {
+    "count": 12,
+    "definitionsTokens": 2075,
+    "instructionsTokens": 368,
+    "totalTokens": 2443,
+    "startToListMs": 108.1
+   },
+   "cold": {
+    "setupMs": 80.6,
+    "setupOk": true,
+    "setupError": null,
+    "firstReadMs": 2227.5,
+    "firstReadOk": true,
+    "firstReadError": null
+   },
+   "read": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 45.2,
+    "p90Ms": 51.7,
+    "minMs": 44.2,
+    "maxMs": 133.3,
+    "medianTokens": 71,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 283,
+    "errors": {}
+   },
+   "tap": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 435.3,
+    "p90Ms": 453.2,
+    "minMs": 383.6,
+    "maxMs": 472.6,
+    "medianTokens": 17,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 65,
+    "reportsChange": 20,
+    "returnsImage": 0,
+    "errors": {}
+   },
+   "type": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 577.9,
+    "p90Ms": 609.3,
+    "minMs": 546.4,
+    "maxMs": 863.3,
+    "medianTokens": 14,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 55,
+    "errors": {}
+   },
+   "flow": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 1779.6,
+    "p90Ms": 1847.1,
+    "minMs": 1707.2,
+    "maxMs": 2059.8,
+    "medianTokens": 192,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 5,
+    "medianChars": 757,
+    "errors": {}
+   },
+   "flowBatch": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 1347,
+    "p90Ms": 1599.4,
+    "minMs": 1298.2,
+    "maxMs": 1628.9,
+    "medianTokens": 177,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 3,
+    "medianChars": 704,
+    "errors": {}
+   },
+   "environment": {
+    "date": "2026-11-17T19:50:14.605Z",
+    "macos": "27.0.1 (26A434)",
+    "hardware": {
+     "model": "Mac16,10",
+     "cpu": "Apple M4",
+     "cores": 10,
+     "memoryGB": 16
+    },
+    "xcode": "Xcode 27.0, Build version 27A266a",
+    "node": "v25.6.0",
+    "simulator": {
+     "udid": "A72FF9D4-E299-44EF-9AD9-805919E77C02",
+     "name": "Bench iPhone 17",
+     "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+     "runtime": "iOS 26.5 (23F73)"
+    }
+   },
+   "startedAt": "2026-11-17T19:49:39.198Z",
+   "finishedAt": "2026-11-17T19:52:45.626Z"
+  },
+  {
+   "tool": "argent",
+   "label": null,
+   "condition": {
+    "deviceHubAsked": false,
+    "deviceHubRunning": false,
+    "simulator": "headless (simctl boot, no Device Hub)"
+   },
+   "name": "Argent",
+   "mac": null,
+   "interface": "mcp",
+   "version": "0.33.0",
+   "fatal": null,
+   "notes": [],
+   "toolList": {
+    "count": 71,
+    "definitionsTokens": 36598,
+    "instructionsTokens": 228,
+    "totalTokens": 36826,
+    "startToListMs": 385.6
+   },
+   "cold": {
+    "setupMs": 15951.5,
+    "setupOk": true,
+    "setupError": null,
+    "firstReadMs": 230.3,
+    "firstReadOk": true,
+    "firstReadError": null
+   },
+   "read": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 185,
+    "p90Ms": 190.7,
+    "minMs": 176.6,
+    "maxMs": 243.3,
+    "medianTokens": 622,
+    "medianImageTokens": 265,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 1425,
+    "errors": {}
+   },
+   "tap": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 655.6,
+    "p90Ms": 661.8,
+    "minMs": 612.6,
+    "maxMs": 1245.1,
+    "medianTokens": 627,
+    "medianImageTokens": 265,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 1447,
+    "reportsChange": 20,
+    "returnsImage": 20,
+    "errors": {}
+   },
+   "type": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 2714.7,
+    "p90Ms": 2729.9,
+    "minMs": 2693.6,
+    "maxMs": 2784.5,
+    "medianTokens": 2173,
+    "medianImageTokens": 530,
+    "medianFileTokens": 0,
+    "callsPerOp": 2,
+    "medianChars": 6570,
+    "errors": {}
+   },
+   "flow": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 5329,
+    "p90Ms": 5583.3,
+    "minMs": 5292.3,
+    "maxMs": 5587.6,
+    "medianTokens": 7000,
+    "medianImageTokens": 1855,
+    "medianFileTokens": 0,
+    "callsPerOp": 7,
+    "medianChars": 20573,
+    "errors": {}
+   },
+   "flowBatch": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 4029.3,
+    "p90Ms": 4034.8,
+    "minMs": 3945.7,
+    "maxMs": 4083.1,
+    "medianTokens": 2902,
+    "medianImageTokens": 795,
+    "medianFileTokens": 0,
+    "callsPerOp": 3,
+    "medianChars": 8422,
+    "errors": {}
+   },
+   "environment": {
+    "date": "2026-11-17T19:58:25.389Z",
+    "macos": "27.0.1 (26A434)",
+    "hardware": {
+     "model": "Mac16,10",
+     "cpu": "Apple M4",
+     "cores": 10,
+     "memoryGB": 16
+    },
+    "xcode": "Xcode 27.0, Build version 27A266a",
+    "node": "v25.6.0",
+    "simulator": {
+     "udid": "A72FF9D4-E299-44EF-9AD9-805919E77C02",
+     "name": "Bench iPhone 17",
+     "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+     "runtime": "iOS 26.5 (23F73)"
+    }
+   },
+   "startedAt": "2026-11-17T19:57:49.740Z",
+   "finishedAt": "2026-11-17T20:02:51.857Z"
+  },
+  {
+   "tool": "agent-device",
+   "label": null,
+   "condition": {
+    "deviceHubAsked": false,
+    "deviceHubRunning": false,
+    "simulator": "headless (simctl boot, no Device Hub)"
+   },
+   "name": "agent-device",
+   "mac": null,
+   "interface": "mcp",
+   "version": "0.21.39",
+   "fatal": null,
+   "notes": [],
+   "toolList": {
+    "count": 63,
+    "definitionsTokens": 27434,
+    "instructionsTokens": 484,
+    "totalTokens": 27918,
+    "startToListMs": 128.7
+   },
+   "cold": {
+    "setupMs": 1389.8,
+    "setupOk": true,
+    "setupError": null,
+    "firstReadMs": 303.2,
+    "firstReadOk": true,
+    "firstReadError": null
+   },
+   "read": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 33.3,
+    "p90Ms": 41.1,
+    "minMs": 31.5,
+    "maxMs": 50,
+    "medianTokens": 125,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 498,
+    "errors": {}
+   },
+   "tap": {
+    "n": 20,
+    "ok": 20,
+    "medianMs": 872,
+    "p90Ms": 878.7,
+    "minMs": 831.6,
+    "maxMs": 10774.3,
+    "medianTokens": 38,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 152,
+    "reportsChange": 20,
+    "returnsImage": 0,
+    "errors": {}
+   },
+   "type": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 2434.1,
+    "p90Ms": 2443.7,
+    "minMs": 2404,
+    "maxMs": 2643.9,
+    "medianTokens": 47,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 1,
+    "medianChars": 186,
+    "errors": {}
+   },
+   "flow": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 5666.7,
+    "p90Ms": 5705.4,
+    "minMs": 5589.9,
+    "maxMs": 5714.1,
+    "medianTokens": 762,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 5,
+    "medianChars": 3039,
+    "errors": {}
+   },
+   "flowBatch": {
+    "n": 10,
+    "ok": 10,
+    "medianMs": 4780,
+    "p90Ms": 4786.4,
+    "minMs": 4732.8,
+    "maxMs": 4790.7,
+    "medianTokens": 546,
+    "medianImageTokens": 0,
+    "medianFileTokens": 0,
+    "callsPerOp": 3,
+    "medianChars": 2177,
+    "errors": {}
+   },
+   "environment": {
+    "date": "2026-11-17T19:53:21.725Z",
+    "macos": "27.0.1 (26A434)",
+    "hardware": {
+     "model": "Mac16,10",
+     "cpu": "Apple M4",
+     "cores": 10,
+     "memoryGB": 16
+    },
+    "xcode": "Xcode 27.0, Build version 27A266a",
+    "node": "v25.6.0",
+    "simulator": {
+     "udid": "A72FF9D4-E299-44EF-9AD9-805919E77C02",
+     "name": "Bench iPhone 17",
+     "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+     "runtime": "iOS 26.5 (23F73)"
+    }
+   },
+   "startedAt": "2026-11-17T19:52:45.706Z",
+   "finishedAt": "2026-11-17T19:57:49.629Z"
+  }
+ ]
+}

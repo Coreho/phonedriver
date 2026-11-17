@@ -47,7 +47,7 @@ export function llmsTxt() {
     "",
     "## Benchmarks",
     "",
-    `- [Benchmarks](${md("/benchmarks/")}): real phone jobs on 10 November 2026 (27 of 27 runs for phonedriver, 17 of 18 for mobile-mcp at 6.9 times the tokens, 14 of 18 for phone-harness); speed against adb and phone-harness with p50, p95 and confidence intervals`,
+    `- [Benchmarks](${md("/benchmarks/")}): real phone jobs on 10 November 2026 (27 of 27 runs for phonedriver, 17 of 18 for mobile-mcp at 6.9 times the tokens, 14 of 18 for phone-harness); speed against adb and phone-harness with p50, p95 and confidence intervals; the iOS Simulator against simulator-use, agent-device and Argent on simulator-use's own benchmark`,
     `- [Raw job runs](${SITE_URL}/benchmarks/data/jobs.json)`,
     `- [Raw speed samples](${SITE_URL}/benchmarks/data/speed-samples.csv)`,
     "",

@@ -9,6 +9,6 @@ export const generateStaticParams = () => Object.keys(DATA_FILES).map((file) => 
 
 export async function GET(_: Request, { params }: { params: Promise<{ file: string }> }) {
   const { file } = await params;
-  const type = file.endsWith(".csv") ? "text/csv" : "application/json";
+  const type = file.endsWith(".csv") ? "text/csv" : file.endsWith(".patch") ? "text/plain" : "application/json";
   return new Response(readFileSync(join(ROOT, DATA_FILES[file])), { headers: { "Content-Type": `${type}; charset=utf-8` } });
 }
