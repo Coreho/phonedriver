@@ -44,7 +44,7 @@ brew install hridaya423/tap/phonedriver
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/hridaya423/phonedriver/releases/latest/download/phonedriver-installer.ps1 | iex"
 ```
 
-The shell and PowerShell installers put `phonedriver` in `$CARGO_HOME/bin` (`~/.cargo/bin`) and add it to your `PATH`. The iOS Simulator runner needs no download: its sources are inside the binary, and the first command that needs it builds it on your Mac with Xcode and XcodeGen.
+The shell and PowerShell installers put `phonedriver` in `$CARGO_HOME/bin` (`~/.cargo/bin`) and add it to your `PATH`. The iOS Simulator runner needs no download: its sources are inside the binary, and the first command that needs it builds it on your Mac with Xcode.
 
 To build from source instead, use Rust 1.99 or later.
 
@@ -77,7 +77,6 @@ ok    adb server       0029 at 127.0.0.1:5037
 warn  android devices  none connected
       fix: Connect a phone with USB debugging on, or start an emulator; `adb devices` lists what adb sees.
 ok    xcode            Xcode 27.0, Build version 27A266a
-ok    xcodegen         /opt/homebrew/bin/xcodegen
 warn  simulators       none booted
       fix: `phonedriver boot` lists the ones that can be started; `phonedriver boot <name>` starts one.
 ok    daemon socket    /Users/you/.phonedriver/run/daemon.sock mode 600 in a directory of mode 700

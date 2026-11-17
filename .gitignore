@@ -14,7 +14,8 @@
 /testbeds/ios/build
 /testbeds/ios/Testbed.xcodeproj
 /testbeds/ios/Testbed/Info.plist
-/ios-runner/PhonedriverRunner.xcodeproj
+/ios-runner/PhonedriverRunner.xcodeproj/project.xcworkspace
+/ios-runner/PhonedriverRunner.xcodeproj/xcuserdata
 __pycache__
 /android-agent/private
 /packaging/npm/LICENSE

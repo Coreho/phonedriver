@@ -3013,3 +3013,10 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
   - iOS: `step 1 of 5 (launch Settings) failed: connection error: xcodegen is not installed; install it with brew install xcodegen`. The boot step now installs xcodegen when it is missing.
 - Each step's script, pulled out of `action.yml`, passes `bash -n`. The proof is the next CI run.
 
+## 2026-11-17: the iOS runner needs only Xcode and records no video (D91)
+
+- Seen in the Action's iOS job (`xcodegen is not installed`) and while freeing the mini's disk (the Simulator's testmanagerd `tmp/Attachments`: 1.2 GB, 154 QuickTime movies of runner sessions; the runner's `.xctestrun` said `PreferredScreenCaptureFormat` `screenRecording`).
+- Changed: `ios-runner/PhonedriverRunner.xcodeproj` (project and shared scheme, generated once with XcodeGen 2.46, `projectFormat: xcode15_0`, object version 60) replaces `project.yml` in the repository and in `SOURCES`; no `xcodegen generate` step; `doctor` has no xcodegen check (`e2e_ios` no longer expects one); the scheme's TestAction has `systemAttachmentLifetime = "keepNever"` and `preferredScreenCaptureFormat = "screenshots"`; the Action no longer installs xcodegen; `ios-runner/tests/test_runner.py` no longer generates; docs (install, iOS Simulator page, reference's doctor sample and install sentence, architecture).
+- Proof on the mini: see D91's Evidence (`no xcodegen on PATH`, runner built and answering; attachments `158 -> 158` with the new build, one new movie per 30 s session with the old).
+- Test: `the_project_builds_every_source_file_the_binary_carries`.
+

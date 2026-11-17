@@ -101,7 +101,7 @@ pub fn run(home: &Path, only: Option<&str>) -> bool {
     !checks.iter().any(|c| c.status == Status::Fail)
 }
 
-/// The Simulator tier: Xcode, xcodegen, booted simulators, the runner build, and each simulator's runner answering
+/// The Simulator tier: Xcode, booted simulators, the runner build, and each simulator's runner answering
 /// through the daemon. A runner serves one connection and a new one cancels the old, so probing its port directly
 /// would cut off a daemon that holds it; the daemon connects (which says `hello`) and takes one snapshot instead.
 pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
@@ -129,16 +129,6 @@ pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
             false
         }
     };
-    let xcodegen = phonedriver_ios::runner::find_tool("xcodegen");
-    match &xcodegen {
-        Some(path) => checks.push(Check::ok("xcodegen", path.display().to_string())),
-        None => checks.push(Check::bad(
-            Status::Fail,
-            "xcodegen",
-            "not found in PATH, /opt/homebrew/bin or /usr/local/bin",
-            "The runner's Xcode project is generated from its sources: `brew install xcodegen`.",
-        )),
-    }
     if !xcode_ok {
         return checks;
     }
@@ -176,7 +166,7 @@ pub async fn ios(home: &Path, only: Option<&str>) -> Vec<Check> {
             Vec::new()
         }
     };
-    if xcodegen.is_none() || sims.is_empty() {
+    if sims.is_empty() {
         return checks;
     }
     let started = Instant::now();

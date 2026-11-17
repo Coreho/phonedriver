@@ -94,7 +94,6 @@ def try_hello():
 
 def start_runner(udid):
     build = os.path.join(RUNNER_DIR, "build")
-    subprocess.run(["xcodegen", "generate", "--quiet"], cwd=RUNNER_DIR, check=True)
     subprocess.run(
         ["xcodebuild", "-project", "PhonedriverRunner.xcodeproj", "-scheme", "PhonedriverRunner",
          "-destination", f"id={udid}", "-derivedDataPath", build, "-quiet", "build-for-testing"],

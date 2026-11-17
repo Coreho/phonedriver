@@ -136,7 +136,6 @@ runs:
         DEVICE: ${{ inputs.device }}
       run: |
         set -euo pipefail
-        command -v xcodegen > /dev/null || brew install --quiet xcodegen
         name="$DEVICE"
         if [ -z "$name" ]; then
           name=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone[^(]*' | sed 's/ *$//')

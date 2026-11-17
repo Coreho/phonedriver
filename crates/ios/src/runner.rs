@@ -31,8 +31,14 @@ const MAX_FRAME: usize = 64 << 20;
 /// The runner's sources, built into the binary so the daemon can build the runner wherever it runs.
 pub const SOURCES: &[(&str, &str)] = &[
     (
-        "project.yml",
-        include_str!("../../../ios-runner/project.yml"),
+        "PhonedriverRunner.xcodeproj/project.pbxproj",
+        include_str!("../../../ios-runner/PhonedriverRunner.xcodeproj/project.pbxproj"),
+    ),
+    (
+        "PhonedriverRunner.xcodeproj/xcshareddata/xcschemes/PhonedriverRunner.xcscheme",
+        include_str!(
+            "../../../ios-runner/PhonedriverRunner.xcodeproj/xcshareddata/xcschemes/PhonedriverRunner.xcscheme"
+        ),
     ),
     (
         "PrivateHeaders/XCTestPrivate.h",
@@ -290,17 +296,6 @@ async fn build_signed(home: &Path, team: Option<&str>, register: Option<&str>) -
         std::fs::write(&file, text).map_err(io)?;
     }
     let log = dir.join("build.log");
-    let xcodegen = find_tool("xcodegen").ok_or_else(|| Error::Transport {
-        detail: "xcodegen is not installed; install it with `brew install xcodegen`".into(),
-    })?;
-    run_logged(
-        Command::new(xcodegen)
-            .args(["generate", "--quiet"])
-            .current_dir(&src),
-        &log,
-        "xcodegen generate",
-    )
-    .await?;
     let arch = if cfg!(target_arch = "aarch64") {
         "arm64"
     } else {
@@ -743,6 +738,23 @@ impl Runner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_project_builds_every_source_file_the_binary_carries() {
+        let (_, project) = SOURCES
+            .iter()
+            .find(|(path, _)| path.ends_with("project.pbxproj"))
+            .unwrap();
+        for (path, _) in SOURCES.iter().filter(|(p, _)| p.starts_with("Runner/")) {
+            let name = path.trim_start_matches("Runner/");
+            let listed = if name.ends_with(".m") {
+                format!("/* {name} in Sources */")
+            } else {
+                format!("path = {name};")
+            };
+            assert!(project.contains(&listed), "{path} is not in the project");
+        }
+    }
 
     #[test]
     fn an_unregistered_or_locked_device_in_the_log_is_a_user_action_and_a_clean_log_is_not() {

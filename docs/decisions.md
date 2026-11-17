@@ -1305,3 +1305,17 @@ D85 rejected two of these cuts, because each took away something an agent uses. 
 
 **Reopen if.** Developers ask for contrast or duplicate-name checks, or a finding proves wrong on a common control.
 
+## D91. The iOS runner's Xcode project ships with phonedriver, and its session records no video
+
+**Choice.** `ios-runner/PhonedriverRunner.xcodeproj` (the project file and the shared scheme, generated once by XcodeGen 2.46 with `projectFormat: xcode15_0`, so object version 60, which Xcode 15 and later open) is in the repository and in the binary's `SOURCES`; `project.yml` and the `xcodegen generate` step are gone, and so is `doctor`'s xcodegen check. The scheme's test action sets `systemAttachmentLifetime = "keepNever"` and `preferredScreenCaptureFormat = "screenshots"`, which the build writes into the `.xctestrun`. A unit test fails when a source file the binary carries is not in the project.
+
+**Why.** Every iOS user had to `brew install xcodegen` before the first command, and the GitHub Action's iOS job failed on a runner without it (`xcodegen is not installed`). Separately, Xcode records a video of every UI test session by default (`PreferredScreenCaptureFormat` was `screenRecording` in the runner's `.xctestrun`), and the runner is one test session as long as phonedriver uses the Simulator: the Simulator's testmanagerd folder on the Mac mini held 156 attachments, 154 of them QuickTime movies, up to 209 MB each, 1.2 GB in all, and the Mac encoded that video the whole time.
+
+**Rejected.** Keeping `project.yml` beside the generated project: two sources for one thing drift. Editing the `.xctestrun` after each build: the scheme already carries both settings into it. Generating the project in Rust: a project file is data, and this one changes when a source file is added.
+
+**Evidence.** On the Mac mini with `PATH=/usr/bin:/bin:/usr/sbin:/sbin` (`no xcodegen on PATH`) and a new home, the debug build built the runner (`28d4698bf27443ca`) and `doctor` showed `xcode`, `simulators`, `runner build ... up to date` and `runner ... answers` with no xcodegen line. The same runner built by `xcodebuild` from the edited scheme had `PreferredScreenCaptureFormat` `screenshots` and `SystemAttachmentLifetime` `keepNever` in its `.xctestrun`. 30 s sessions of the old and new builds, started with `xcodebuild test-without-building`: the old added a movie to the Simulator's attachments each time (`156 -> 157`, `157 -> 158`), the new none (`157 -> 157`, `158 -> 158`); a phonedriver session with the new build, `158 -> 158`. `the_project_builds_every_source_file_the_binary_carries` passes. CPU could not be compared: other sessions' processes on the mini moved more than the encoder.
+
+**Limits.** Adding a source file to the runner now means adding it to the project in Xcode; the unit test says which file is missing. Xcode 14 and older cannot open the project, and they cannot build the runner's iOS 17 target either. Movies that earlier versions left stay in each Simulator until it is erased.
+
+**Reopen if.** A runner change needs build settings that are easier to keep in a spec than in the project.
+

@@ -343,7 +343,7 @@ fn doctor_finds_xcode_the_simulator_and_a_runner_that_answers() {
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(out.status.success(), "{text}");
-    for name in ["xcode", "xcodegen", "simulators", "runner build"] {
+    for name in ["xcode", "simulators", "runner build"] {
         assert!(
             text.lines()
                 .any(|l| l.starts_with("ok") && l.contains(name)),
