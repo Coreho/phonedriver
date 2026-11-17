@@ -210,6 +210,13 @@ pub struct Observation {
 pub struct ActionResult {
     pub ok: bool,
     pub summary: String,
+    /// Where a tap landed, in points.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub at: Option<phonedriver_core::geometry::Point>,
+    /// The field a verified `type` went into and whether it replaced the field's text, for a batch's reply to leave
+    /// out what that step already said.
+    #[serde(skip)]
+    pub typed_into: Option<(phonedriver_core::element::Ref, bool)>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub via: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

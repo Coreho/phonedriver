@@ -271,7 +271,7 @@ The API 37 emulator lists 182 settings on 196 screens; 105 can be written. A wri
 On Android, `phonedriver logs` prints the last 40 log lines of the app in front (`logs <app>` for another, `--grep "error|warn"`, `--head 0` for all, `--since 300` to read five minutes back) and, first, its last crash. An action during which the app in front crashed carries the crash in its own reply:
 
 ```
-ok tapped @e6 "Busy" at 382,78 · settled in 837ms · new screen
+ok tapped @e6 "Busy" · new screen
 alert android: "phonedriver testbed keeps stopping"
 ...
 crashed: dev.phonedriver.testbed stopped during this action: android.app.RemoteServiceException$CrashedByAdbException: shell-induced crash at android.app.ActivityThread.throwRemoteServiceException(ActivityThread.java:2581)
@@ -336,7 +336,7 @@ the file holds one step a line: delete the line of a step that was a detour
 $ phonedriver replay run.steps
 replayed 7 steps in 18.1 s
 1. restarted Settings
-2. tapped @e4 "Network & internet" at 206,274
+2. tapped @e4 "Network & internet"
 ...
 screen now:
 ...
@@ -349,7 +349,7 @@ A replay stops at the first step that fails, or that changes nothing where it ch
 ```
 error: step 3 of 7 (tap "Intranet") failed: no element matches "Intranet"
 1. restarted Settings
-2. tapped @e4 "Network & internet" at 206,274
+2. tapped @e4 "Network & internet"
 screen now:
 ...
 hint: Do step 3 yourself, then replay the same file from step 4 for the 4 steps left.
@@ -371,7 +371,7 @@ On an iOS Simulator the same two keys answer Face ID (or Touch ID): `press finge
 
 ```console
 $ phonedriver press landscape
-ok pressed landscape · settled in 808ms · new screen
+ok pressed landscape · new screen
 device sim:E02FE8A6-5F1E-405E-A263-2E828218BE5F · iPhone 17 · iOS 26.5 · 874x402pt · landscape
 ```
 

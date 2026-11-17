@@ -338,13 +338,8 @@ async fn act_tap_resolves_the_ref_on_a_fresh_tree_and_taps_its_center_in_points(
     let (d, _home) = daemon(source);
     ok(&d, "default", "snapshot", json!({})).await;
     let r = ok(&d, "default", "act", tap_ref("e3")).await;
-    assert!(
-        r["summary"]
-            .as_str()
-            .unwrap()
-            .starts_with("tapped @e3 \"Three\" at 180,330"),
-        "{r}"
-    );
+    assert_eq!(r["summary"], "tapped @e3 \"Three\"", "{r}");
+    assert_eq!(r["at"], json!({"x": 180.0, "y": 330.0}), "{r}");
     let Call::Gesture(g) = fake.calls().pop().unwrap() else {
         panic!("no gesture")
     };
@@ -362,13 +357,8 @@ async fn act_on_a_ref_the_screen_no_longer_has_is_stale_with_the_closest_element
     let (d, _home) = daemon(source);
     ok(&d, "default", "snapshot", json!({})).await;
     let moved = ok(&d, "default", "act", tap_ref("e3")).await;
-    assert!(
-        moved["summary"]
-            .as_str()
-            .unwrap()
-            .contains("\"Three\" at 180,430"),
-        "{moved}"
-    );
+    assert_eq!(moved["summary"], "tapped @e3 \"Three\"", "{moved}");
+    assert_eq!(moved["at"], json!({"x": 180.0, "y": 430.0}), "{moved}");
     let e = err(&d, "default", "act", tap_ref("e3")).await;
     assert_eq!(e.code, -32006);
     assert!(e.data["hint"].as_str().unwrap().contains("snapshot"));
@@ -1262,7 +1252,9 @@ async fn secret_text_never_reaches_the_trace_the_reply_or_the_debug_output() {
     let r = ok(&d, "default", "act", type_params("hunter2", true)).await;
     assert_eq!(r["verified"], true);
     assert!(!r.to_string().contains("hunter2"), "{r}");
-    assert!(r["observation"]["text"].as_str().unwrap().contains("•••"));
+    let shown = ok(&d, "default", "snapshot", json!({})).await;
+    assert!(shown["text"].as_str().unwrap().contains("\"•••\""), "{shown}");
+    assert!(!shown.to_string().contains("hunter2"), "{shown}");
     assert_eq!(
         fake.calls()[1],
         Call::Text(phonedriver_core::device::TextInput::PasteSecret(
@@ -1526,6 +1518,8 @@ async fn typing_a_secret_into_a_password_field_is_verified_by_length() {
     ok(&d, "default", "snapshot", json!({})).await;
     let r = ok(&d, "default", "act", type_params("hunter2", true)).await;
     assert_eq!(r["verified"], true, "{r}");
+    assert_eq!(r["changed"], true, "{r}");
+    assert_eq!(r["observation"]["text"], "", "{r}");
     assert_eq!(
         fake.calls()[1],
         Call::Text(phonedriver_core::device::TextInput::PasteSecret(

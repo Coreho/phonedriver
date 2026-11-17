@@ -692,7 +692,7 @@ async fn a_shown_keyboard_marks_the_button_under_it_and_tapping_that_button_hide
     let rig = Rig::new().await;
     rig.tab("text").await;
     let before = rig.ok(&["snapshot"]);
-    assert!(before.contains("keyboard hidden"), "{before}");
+    assert!(!before.contains("keyboard shown"), "{before}");
     assert!(
         !before
             .lines()

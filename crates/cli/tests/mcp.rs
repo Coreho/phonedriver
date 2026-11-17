@@ -694,7 +694,7 @@ async fn a_batch_over_mcp_runs_the_steps_and_returns_one_numbered_reply() {
     let text = texts(&r).join("\n");
     assert!(text.starts_with("ok 3 steps"), "{text}");
     assert!(text.contains("\n1. tapped @e1"), "{text}");
-    assert!(text.contains("\n2. typed 2 chars"), "{text}");
+    assert!(text.contains("\n2. typed into @e1"), "{text}");
     assert!(text.contains("\n3. pressed enter"), "{text}");
 }
 
@@ -759,7 +759,7 @@ async fn typing_with_then_types_and_taps_the_texts_after_it() {
     assert_ne!(r.is_error, Some(true), "{r:?}");
     let text = texts(&r).join("\n");
     assert!(text.starts_with("ok 2 steps"), "{text}");
-    assert!(text.contains("\n1. typed 2 chars"), "{text}");
+    assert!(text.contains("\n1. typed into @e1"), "{text}");
     assert!(text.contains("\n2. tapped @e1"), "{text}");
 }
 
@@ -779,7 +779,7 @@ async fn a_secret_typed_as_a_batch_step_or_before_a_then_reaches_no_reply_and_no
     assert_ne!(r.is_error, Some(true), "{r:?}");
     let all = serde_json::to_string(&r).unwrap();
     assert!(!all.contains("hunter2"), "{all}");
-    assert!(all.contains("1. typed 7 chars into @e1"), "{all}");
+    assert!(all.contains("1. typed into @e1"), "{all}");
     let r = rig
         .call(
             "type",

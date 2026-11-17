@@ -1202,6 +1202,8 @@ These two were published on `main` as D70 and D71 while this branch had its own 
 
 **Rejected.** Dropping `under-keyboard` from the children of a covered group, and dropping the changed field's own line after a verified `type`: both save tokens on this benchmark and both take away something an agent uses on other screens. Letting the command line's `batch` carry a secret: its steps are arguments, and arguments show in `ps`.
 
+**Amended by D87** (2026-11-16): both rejected cuts were made in a narrower form, with what they took away put back another way.
+
 **Reopen if.** A label that repeats at one place under two different owners trades refs because of rule (1), or the full harness run puts phonedriver's sign-in above 250 tokens.
 
 ## D86. An Android phone in use stays awake, on its own screen and in hidden mode
@@ -1215,3 +1217,46 @@ These two were published on `main` as D70 and D71 while this branch had its own 
 **Evidence.** HONOR X8 (Android 13, PIN, screen timeout 30 s), nobody touching it, 2026-11-16. The live test `a_phone_in_use_has_its_screen_timeout_reset_every_ten_seconds` (the bare agent connected, one `state` request, then 12 s with no request) failed with the agent before this change (`lastUserActivityTime` 10812571 both times) and passed with it. Through the CLI, `launch Settings` on the hidden display and then no call for 60 s: at 15, 30, 45 and 60 s the phone was unlocked and awake and its last user activity 2 to 8 s old. The same on the phone's own screen. After `release` no user activity followed, and the phone slept and locked 30 s after the last nudge. A `press home` on the locked phone woke its screen to the keyguard and answered `The device is locked`; with the host still connected the screen went off by itself within 12 s, so nothing nudged a locked phone. Not run: an emulator (win-pc's belonged to another session), Android before 12 (the other `userActivity` signature), a 15 s timeout.
 
 **Cost.** As D56: a phone left with a session, or after one terminal command with no `release`, stays on and unlocked for up to 10 minutes after the last call. In hidden mode the owner's own screen stays lit as well, on whatever the owner left there.
+
+## D87. A reply says each thing once
+
+**Choice.** Eight cuts to what replies print, each a line or a word that repeated something the agent already had.
+(1) A header names the keyboard only when it is shown, and a settle time only when the screen did not settle (`not settled after Nms`). An action's first line no longer says how long it waited.
+(2) A diff says the keyboard's coming and going in one line: `keyboard shown over @e8 @e9`, naming the elements it now covers, or `keyboard hidden`. Before, it was a `+` line for the keyboard and a `~ … → under-keyboard` line for each element.
+(3) `under-keyboard` is printed on the outermost covered element only, and holds for the lines under it. A child the keyboard leaves uncovered inside a covered parent says `above-keyboard` (`Rendered::cover_word`).
+(4) The keyboard's own element has no line.
+(5) A container whose line would only name its role (`@e2 list`, the table iOS puts around a form) has no line, and its children print one level up (`Rendered::listed`).
+(6) After a verified `type`, the diff leaves out what the first line already says: the field taking focus, a secure field's `secure field changed`, and, after a replace, the field's new text (`core::diff::drop_echo`). A changed label, appended text and every other element stay.
+(7) A tap on a named element is summarised as `tapped @e3 "Three"`. The point it landed on moves to the reply's `at` field and to the recording's steps file.
+(8) A type into a field is summarised as `typed into @e4`. The character count is kept only for a type with no field.
+
+**Why.** After D85, simulator-use's sign-in still cost 254 tokens against its 194, and every extra token was a repeat.
+- A header said `keyboard hidden` on screens with no keyboard, and `settled in 212ms` on every read.
+- A reply that showed the keyboard come up listed each element it covered, and then the keyboard itself.
+- A verified type of `gary@example.com` said `typed 16 chars into @e3 · verified` and then `~ @e3 textbox (none) → "gary@example.com"`.
+- A secure field said `secure field changed` under a line that said it was typed and verified.
+- The form's `@e2 list` line took a line and indented five more.
+
+D85 rejected two of these cuts, because each took away something an agent uses. Both came back in a form that keeps it.
+- The children of a covered group are still known to be covered: the word holds for the lines under it, and an exception is said.
+- The changed field's line goes only when the first line has already said it: `verified` after a replace means the field holds exactly the text sent.
+
+**Measured.** Same Simulator, app and probe as D85 (`bench/simulator-use/probe.py`), Mac mini, 2026-11-17, debug build, medians of 20 reads, 20 taps, 10 types and 10 of each sign-in, every one checked by its text. The probe now also counts a type as shown when its reply says `verified`, since the reply no longer repeats the text.
+
+| Step | D85 | Now | simulator-use 0.15.1, its page |
+|---|---|---|---|
+| Read the screen | 69 tokens | 59 tokens | 72 tokens |
+| Tap, result shown | 28 tokens | 20 tokens | 17 tokens |
+| Type an email | 38 tokens | 13 tokens | 14 tokens |
+| Sign in, five calls | 254 tokens | 176 tokens | 194 tokens |
+| Sign in, batched | 247 tokens | 177 tokens | 179 tokens |
+| Tool list and instructions | 1,914 tokens | 1,914 tokens | 2,443 tokens |
+
+**Limits.**
+- The last column is still simulator-use's published numbers, not a run of that tool here (D85's limit).
+- A tap that changes one row costs 3 tokens more than theirs: its `~` line says the row's old text as well as the new.
+- Two runs of the sign-in can differ by a few tokens per call, depending on whether the keyboard was up when a reply was read.
+- A secure field's change is not said after a verified type. An unverified one is still said, with what the field shows.
+- `at` is in the JSON reply only. The command line prints it with `--json`.
+
+**Rejected.** Dropping a `~` line's old value (`~ @e7 cell "Invalid email or password"`): it would win the single tap, but the old value is what lets an agent see which of two similar rows changed without reading the screen again. Not printing the keyboard at all: an agent needs to know that part of the screen is covered.

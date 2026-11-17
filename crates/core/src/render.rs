@@ -159,6 +159,34 @@ impl Rendered {
         })
     }
 
+    /// What a line says about the keyboard: `under-keyboard` for an element it covers in a parent it does not, and
+    /// `above-keyboard` for one it does not cover in a parent it does. A child says only what its parent does not.
+    pub fn cover_word(&self, e: &Element) -> Option<&'static str> {
+        let parent = self
+            .index_of(e.r#ref)
+            .and_then(|i| self.parents[i])
+            .is_some_and(|p| self.under_keyboard(&self.elements[p]));
+        match (self.under_keyboard(e), parent) {
+            (true, false) => Some("under-keyboard"),
+            (false, true) => Some("above-keyboard"),
+            _ => None,
+        }
+    }
+
+    /// The element has a line of its own. The keyboard does not: the header says it is shown. Nor does a container
+    /// whose line would only name its role (iOS's table around a form that fits on the screen): its rows print in its
+    /// place, one level up (decision D87).
+    pub fn listed(&self, e: &Element) -> bool {
+        e.role != Role::Keyboard && !self.silent(e)
+    }
+
+    fn silent(&self, e: &Element) -> bool {
+        matches!(e.role, Role::List | Role::Other)
+            && !e.children.is_empty()
+            && e.actions.is_empty()
+            && self.line(e) == format!("@{} {}", e.r#ref, e.role.name())
+    }
+
     pub fn in_web_view(&self, r: Ref) -> bool {
         self.index_of(r).is_some_and(|i| {
             self.ancestors(i)
@@ -219,7 +247,10 @@ impl Rendered {
         let shown: Vec<bool> = (0..self.elements.len())
             .map(|i| {
                 let inside = root.is_none_or(|r| i == r || self.ancestors(i).any(|a| a == r));
-                inside && (!f.interactive || !self.elements[i].actions.is_empty())
+                let e = &self.elements[i];
+                inside
+                    && (Some(i) == root || self.listed(e))
+                    && (!f.interactive || !e.actions.is_empty())
             })
             .collect();
         let plan = if f.interactive {
@@ -259,6 +290,9 @@ impl Rendered {
                 out,
                 "\nhint: `phonedriver snapshot --within @{r}` prints @{r} whole"
             );
+        }
+        if out.starts_with('\n') {
+            out.remove(0);
         }
         Ok(out)
     }
@@ -380,18 +414,11 @@ impl Rendered {
                 None => format!("app {}", a.id),
             });
         }
-        parts.push(
-            if h.keyboard.is_some() {
-                "keyboard shown"
-            } else {
-                "keyboard hidden"
-            }
-            .into(),
-        );
-        match h.settle {
-            Some(s) if !s.settled => parts.push(format!("not settled after {}ms", s.ms)),
-            Some(s) if s.ms > 0 => parts.push(format!("settled in {}ms", s.ms)),
-            _ => {}
+        if h.keyboard.is_some() {
+            parts.push("keyboard shown".into());
+        }
+        if let Some(s) = h.settle.filter(|s| !s.settled) {
+            parts.push(format!("not settled after {}ms", s.ms));
         }
         if self.loading() {
             parts.push("loading".into());
@@ -399,7 +426,9 @@ impl Rendered {
         if h.secure_hidden {
             parts.push("secure content hidden".into());
         }
-        lines.push(parts.join(" · "));
+        if !parts.is_empty() {
+            lines.push(parts.join(" · "));
+        }
         for a in &h.alerts {
             lines.push(match &a.title {
                 Some(t) => format!("alert {}: {}", a.package, quote(t)),
@@ -436,8 +465,9 @@ impl Rendered {
             s.push(' ');
             s.push_str(w);
         }
-        if self.under_keyboard(e) {
-            s.push_str(" under-keyboard");
+        if let Some(w) = self.cover_word(e) {
+            s.push(' ');
+            s.push_str(w);
         }
         if e.source == Source::Ocr {
             s.push_str(" (ocr)");
@@ -975,19 +1005,34 @@ mod tests {
     }
 
     #[test]
-    fn a_screen_that_was_already_still_says_nothing_about_settling() {
+    fn the_header_names_a_settle_and_the_keyboard_only_when_they_are_news() {
         let line = |settled: bool, ms: u32| {
             let mut r = settings();
             r.header.settle = Some(SettleLine { settled, ms });
             let text = r.text(&Filters::default()).unwrap();
             text.lines().nth(1).unwrap().to_string()
         };
+        assert_eq!(line(true, 0), "app com.android.settings (Settings)");
+        assert_eq!(line(true, 12), "app com.android.settings (Settings)");
         assert_eq!(
-            line(true, 0),
-            "app com.android.settings (Settings) · keyboard hidden"
+            line(false, 40),
+            "app com.android.settings (Settings) · not settled after 40ms"
         );
-        assert!(line(true, 12).ends_with("keyboard hidden · settled in 12ms"));
-        assert!(line(false, 0).ends_with("keyboard hidden · not settled after 0ms"));
+        let mut r = settings();
+        r.header.keyboard = Some(Rect {
+            x: 0.0,
+            y: 600.0,
+            w: 412.0,
+            h: 315.0,
+        });
+        let text = r.text(&Filters::default()).unwrap();
+        assert!(
+            text.lines()
+                .nth(1)
+                .unwrap()
+                .ends_with("(Settings) · keyboard shown"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -999,7 +1044,7 @@ mod tests {
             text.lines()
                 .nth(1)
                 .unwrap()
-                .ends_with("settled in 212ms · secure content hidden"),
+                .ends_with("(Settings) · secure content hidden"),
             "{text}"
         );
         r.header.secure_hidden = false;
@@ -1165,7 +1210,7 @@ mod tests {
             .text(&Filters::default())
             .unwrap();
         assert!(
-            text.lines().nth(2).unwrap().starts_with(
+            text.lines().nth(1).unwrap().starts_with(
                 "alert com.google.android.permissioncontroller: \"Allow Camera to take pictures and record video?\""
             ),
             "{text}"

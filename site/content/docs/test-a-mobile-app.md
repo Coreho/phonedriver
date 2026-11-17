@@ -33,7 +33,7 @@ Run `phonedriver snapshot` on your app's main screen before you hand it to an ag
 
 ```screen
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden
+app com.android.settings (Settings)
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"

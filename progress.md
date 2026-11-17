@@ -2905,3 +2905,23 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Seen once, not explained: the first hidden `launch Settings` of that run answered `still animating after 6066ms, read as it is now`, where the run at 21:33 settled in 1384 ms.
 - On the mini: `cargo clippy -p phonedriver-android --tests -- -D warnings` prints nothing; `rustfmt --check` on the test file passes. CI on `ca9a5b3` passed on all three systems before this change.
 - Not run: an emulator (win-pc's emulator belongs to another session), Android before 12, a 15 s screen timeout.
+
+## 2026-11-17: a reply says each thing once (D87)
+
+- Asked: "how do we beat simulator use there then?" after D85 left simulator-use's sign-in at 254 tokens against its 194.
+- Changed:
+  - `core::render`: the header names the keyboard only when shown and a settle only when not settled; `Rendered::cover_word` (`under-keyboard` on the outermost covered element, `above-keyboard` for an uncovered child) and `Rendered::listed` (no line for the keyboard or for a container whose line would only name its role).
+  - `core::diff`: `Change::Keyboard`, rendered as `keyboard shown over @e…` or `keyboard hidden`, and `drop_echo` for a verified `type`.
+  - `cli`: `ActionResult.at` (where a tap landed), `typed_into`, the tap summary without the point, `typed into @eN`, no `settled in` on an action's first line.
+- New tests: `the_header_names_a_settle_and_the_keyboard_only_when_they_are_news`, `the_children_of_a_covered_group_take_its_under_keyboard_and_only_an_exception_is_said`, `a_verified_type_does_not_repeat_its_field_taking_focus_or_a_secure_field_changing`, `the_keyboard_s_own_element_is_not_listed_and_its_coming_and_going_is_one_line`, `a_container_whose_line_would_only_name_its_role_is_not_listed_and_its_rows_are_not_indented`. 17 render snapshots regenerated and read: each lost ` · keyboard hidden` or ` · settled in 212ms` from its header and nothing else.
+- On the mini: `cargo test -p phonedriver-core` all pass; `cargo test -p phonedriver --no-fail-fast` passes except `no_device_exits_4_with_the_message_then_the_hint` (the mini has three devices connected) and `a_frame_of_412_by_915_takes_under_120_ms_at_the_median` (D88's limit); `cargo clippy --workspace --all-targets -- -D warnings` prints nothing.
+- `python3 bench/simulator-use/probe.py target/debug/phonedriver <iPhone 17 Simulator> 10`, medians:
+  ```
+  tool list: 17 tools, definitions 1784 tokens, instructions 130 tokens, in all 1914
+  read the screen              median 0.15 s  tokens 59  ok 20 of 20  calls 1
+  tap (shows the result)       median 1.15 s  tokens 20  ok 20 of 20  calls 1
+  type (text shown)            median 2.18 s  tokens 13  ok 10 of 10  calls 1
+  sign in, step by step        median 5.66 s  tokens 176  ok 10 of 10  calls 5
+  sign in, batched             median 5.26 s  tokens 177  ok 10 of 10  calls 3
+  ```
+  One earlier run of the same tree had one step-by-step sign-in of 10 fail; the next two runs had none. Its text was not kept.

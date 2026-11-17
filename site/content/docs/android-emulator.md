@@ -45,7 +45,7 @@ phonedriver wait settled
 `snapshot` lists the screen as text, for example `@e3 button "Google" "Services & preferences"`. A tap returns the lines that changed instead of the whole screen:
 
 ```screen
-ok tapped @e10 "Dark theme" · settled in 410ms
+ok tapped @e10 "Dark theme"
 ~ @e10 switch "Dark theme" off → on
 ```
 

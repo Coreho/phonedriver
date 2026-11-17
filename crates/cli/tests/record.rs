@@ -116,8 +116,10 @@ async fn a_recording_keeps_the_actions_done_during_it_with_their_times() {
     let listed = steps(r["steps_path"].as_str().unwrap());
     assert_eq!(r["steps_path"], format!("{path}.steps.jsonl").as_str());
     assert_eq!(listed.len(), 2, "{listed:?}");
-    assert_eq!(listed[0]["summary"], "tapped @e1 \"One\" at 180,130");
-    assert_eq!(listed[1]["summary"], "tapped @e2 \"Two\" at 180,230");
+    assert_eq!(listed[0]["summary"], "tapped @e1 \"One\"");
+    assert_eq!(listed[0]["at"], json!({"x": 180.0, "y": 130.0}));
+    assert_eq!(listed[1]["summary"], "tapped @e2 \"Two\"");
+    assert_eq!(listed[1]["at"], json!({"x": 180.0, "y": 230.0}));
     let (first, second) = (
         listed[0]["t_ms"].as_u64().unwrap(),
         listed[1]["t_ms"].as_u64().unwrap(),

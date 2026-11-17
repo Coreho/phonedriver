@@ -86,7 +86,7 @@ token 是智能体用量上限所消耗的单位。我用 Claude Sonnet 5.5 和�
 
 ```console
 $ phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden
+app com.android.settings (Settings)
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"
@@ -100,7 +100,7 @@ app com.android.settings (Settings) · keyboard hidden
 
 ```console
 $ phonedriver tap @e24
-ok tapped @e24 "Dark theme" at 353,532 · settled in 2034ms
+ok tapped @e24 "Dark theme"
 ~ @e23 button "Dark theme" "Will turn on when Bedtime starts" → "Will never turn off automatically"
 ~ @e24 switch "Dark theme" off → on
 ```

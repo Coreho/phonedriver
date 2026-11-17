@@ -45,7 +45,7 @@ A screen arrives as a short numbered list, not a screenshot and not XML:
 
 ```console
 $ npx -y phonedriver snapshot
-app com.android.settings (Settings) · keyboard hidden
+app com.android.settings (Settings)
 @e1 button "Search Settings"
 @e2 group scrollable↓
   @e3 button "Google" "Services & preferences"
@@ -57,7 +57,7 @@ The model taps by number. phonedriver waits until the screen stops changing and 
 
 ```console
 $ npx -y phonedriver tap @e24
-ok tapped @e24 "Dark theme" · settled in 410ms
+ok tapped @e24 "Dark theme"
 ~ @e24 switch "Dark theme" off → on
 ```
 

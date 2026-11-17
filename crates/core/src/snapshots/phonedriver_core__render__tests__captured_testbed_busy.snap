@@ -1,10 +1,9 @@
 ---
 source: crates/core/src/render.rs
-assertion_line: 419
 expression: text
 ---
 device android:emulator-5554 · Pixel 9 · Android 17 · 360x800pt · portrait
-app com.android.settings (Settings) · keyboard hidden · settled in 212ms · loading
+app com.android.settings (Settings) · loading
 @e1 group scrollable
   @e2 button "Taps"
   @e3 button "Text"

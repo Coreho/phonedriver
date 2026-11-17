@@ -95,7 +95,7 @@ async fn the_journal_holds_each_action_that_worked_with_a_target_that_outlives_i
         json!({
             "method": "act",
             "params": {"action": {"kind": "tap", "target": {"text": "One", "role": "button"}, "count": null, "long": null}},
-            "summary": "tapped @e1 \"One\" at 180,130",
+            "summary": "tapped @e1 \"One\"",
             "changed": false,
         })
     );

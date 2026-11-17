@@ -12,7 +12,7 @@ use phonedriver_core::device::{
     FrameRef, Gesture, Key, LogRequest, Quality, ScreenState, ShellRequest, TextInput, TimedPoint,
     Url,
 };
-use phonedriver_core::diff::{Change, DiffOrFull, Field, diff};
+use phonedriver_core::diff::{Change, DiffOrFull, Field, diff, drop_echo};
 use phonedriver_core::element::{Actions, Element, ElementState, Ref, Role, Source};
 use phonedriver_core::error::{Category, Direction, Error, Op, ScrollEnd, UserAction};
 use phonedriver_core::geometry::{Point, Rect, Size};
@@ -214,10 +214,13 @@ impl Taping {
     }
 
     /// Adds an action that began at `at` to the steps file.
-    fn step(&mut self, at: Instant, summary: &str) {
+    fn step(&mut self, at: Instant, summary: &str, landed: Option<Point>) {
         use std::io::Write;
-        let line =
+        let mut line =
             json!({"t_ms": at.duration_since(self.began).as_millis() as u64, "summary": summary});
+        if let Some(p) = landed {
+            line["at"] = json!(p);
+        }
         let written = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -2003,7 +2006,7 @@ impl Actor {
         }
         let mut result = acted?;
         if let Some(taping) = &mut self.recording {
-            taping.step(began, &self.secrets.masked(&result.summary));
+            taping.step(began, &self.secrets.masked(&result.summary), result.at);
         }
         s.journal.push(kept.step(&result));
         result.woke = woke;
@@ -2128,14 +2131,10 @@ impl Actor {
                     _ => "tapped".to_string(),
                 };
                 let summary = match &element {
-                    Some(line) => format!(
-                        "{verb} {} at {},{}",
-                        short(line),
-                        at.x.round(),
-                        at.y.round()
-                    ),
+                    Some(line) => format!("{verb} {}", short(line)),
                     None => format!("{verb} at {},{}", at.x.round(), at.y.round()),
                 };
+                let landed = |r: ActionResult| ActionResult { at: Some(at), ..r };
                 let summary = if hid {
                     format!("hid the keyboard, then {summary}")
                 } else {
@@ -2161,10 +2160,10 @@ impl Actor {
                     && r.observation.kind == Kind::Diff
                     && r.observation.text.is_empty();
                 if !p.settle || !ripple_only {
-                    return Ok(r);
+                    return Ok(landed(r));
                 }
                 // MagicOS Settings draws the button's ripple, goes quiet for longer than the quiet window, and only
-                // then starts the next page (Honor X8: "settled in 331ms · no element changed", then the page).
+                // then starts the next page (Honor X8: the ripple and `no element changed`, then the page).
                 let again = self.now();
                 let late = Config {
                     expect_change: Some(LATE_PAGE_WAIT),
@@ -2184,9 +2183,11 @@ impl Actor {
                             still_changing,
                             elapsed: elapsed + Duration::from_millis(r.settle_ms.into()),
                         };
-                        self.report(s, st, probe, summary, None, None).await
+                        self.report(s, st, probe, summary, None, None)
+                            .await
+                            .map(landed)
                     }
-                    _ => Ok(r),
+                    _ => Ok(landed(r)),
                 }
             }
             Action::Swipe {
@@ -2729,23 +2730,17 @@ impl Actor {
                 if submit {
                     device.key(Key::Enter).await?;
                 }
-                let n = text.chars().count();
-                let label = field
-                    .as_ref()
-                    .map(|f| format!(" into @{}", f.r#ref))
-                    .unwrap_or_default();
+                let what = match &field {
+                    Some(f) => format!("into @{}", f.r#ref),
+                    None => plural(text.chars().count() as u64, "char"),
+                };
                 let unzoomed = if unzoom {
                     ", then zoomed the page back out"
                 } else {
                     ""
                 };
-                let summary = approved_summary(
-                    format!(
-                        "{brought}typed {}{label}{unzoomed}",
-                        plural(n as u64, "char")
-                    ),
-                    approved,
-                );
+                let summary =
+                    approved_summary(format!("{brought}typed {what}{unzoomed}"), approved);
                 let expect = if replace {
                     Expect::Exactly(text.clone())
                 } else {
@@ -3301,8 +3296,21 @@ impl Actor {
             Some(Verdict::Failed(u)) => Some(u),
             _ => None,
         };
+        let typed_into = verify
+            .as_ref()
+            .filter(|_| verified == Some(true))
+            .and_then(|v| {
+                let replaced = matches!(v.expect, Expect::Exactly(_));
+                v.view(&rendered).target.map(|r| (r, replaced))
+            });
+        let mut echoed = false;
         let (kind, text) = match s.diff_for_reply(&rendered) {
-            Some(DiffOrFull::Diff(changes)) => {
+            Some(DiffOrFull::Diff(mut changes)) => {
+                if let Some((field, replaced)) = typed_into {
+                    let before = changes.len();
+                    drop_echo(&mut changes, &rendered, field, replaced);
+                    echoed = changes.len() < before;
+                }
                 (Kind::Diff, DiffOrFull::Diff(changes).text(&rendered))
             }
             _ => (
@@ -3319,7 +3327,7 @@ impl Actor {
             }) => (settled, changed, elapsed.as_millis() as u32, still_changing),
             _ => (false, false, 0, None),
         };
-        let changed = changed_signal || kind == Kind::Full || !text.is_empty();
+        let changed = changed_signal || kind == Kind::Full || !text.is_empty() || echoed;
         let observation = Observation {
             header: rendered.header.clone(),
             text,
@@ -3336,6 +3344,8 @@ impl Actor {
         s.set_last(Some(rendered));
         self.lap("render", render);
         Ok(ActionResult {
+            at: None,
+            typed_into,
             unchanged_repeats: None,
             crashed: None,
             ok: true,
@@ -3360,6 +3370,7 @@ impl Actor {
         let mut failed = None;
         let mut unseen_ref = false;
         let mut last: Option<ActionResult> = None;
+        let mut typed_into = Vec::new();
         for (i, raw) in p.steps.iter().enumerate() {
             let step = Step::parse(raw).map_err(|_| unreachable_state())?;
             let result = match step {
@@ -3396,6 +3407,7 @@ impl Actor {
                         verified: r.verified,
                         unverified: r.unverified.clone(),
                     });
+                    typed_into.extend(r.typed_into);
                     last = Some(r);
                 }
                 Err(e @ Error::DeviceGone { .. }) => return Err(e),
@@ -3429,6 +3441,8 @@ impl Actor {
                 };
                 s.set_last(Some(rendered));
                 ActionResult {
+                    at: None,
+                    typed_into: None,
                     unchanged_repeats: None,
                     crashed: None,
                     ok: true,
@@ -3450,7 +3464,10 @@ impl Actor {
             result.observation.text = String::new();
         } else if let (Some(base), Some(now)) = (&baseline, &s.last) {
             match diff(base, now) {
-                DiffOrFull::Diff(changes) => {
+                DiffOrFull::Diff(mut changes) => {
+                    for (field, replaced) in typed_into {
+                        drop_echo(&mut changes, now, field, replaced);
+                    }
                     result.observation.kind = Kind::Diff;
                     result.observation.text = DiffOrFull::Diff(changes).text(now);
                 }
@@ -3538,6 +3555,8 @@ impl Actor {
                 };
                 s.set_last(Some(rendered));
                 return Ok(ActionResult {
+                    at: None,
+                    typed_into: None,
                     unchanged_repeats: None,
                     crashed: None,
                     ok: true,
@@ -3639,6 +3658,8 @@ impl Actor {
         };
         s.set_last(Some(rendered));
         Ok(ActionResult {
+            at: None,
+            typed_into: None,
             unchanged_repeats: None,
             crashed: None,
             ok: true,
@@ -3724,6 +3745,7 @@ fn moved_beyond(s: &Session, now: &Rendered, field: Option<Ref>) -> bool {
     changes.iter().any(|c| {
         let r = match c {
             Change::Uncovered => return true,
+            Change::Keyboard(_) => return false,
             Change::Added(r) | Change::Removed(r) => *r,
             Change::Changed {
                 field: Field::Covered,
@@ -3882,6 +3904,8 @@ fn scroll_container(now: &Rendered, direction: Direction) -> Option<&Element> {
 /// The reply to an input sent with `settle: false`: delivered, nothing observed.
 fn delivered(s: &Session, summary: String, via: Option<&'static str>) -> ActionResult {
     ActionResult {
+        at: None,
+        typed_into: None,
         unchanged_repeats: None,
         crashed: None,
         ok: true,

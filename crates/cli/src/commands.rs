@@ -1621,13 +1621,10 @@ fn show_batch(result: &Value, json: bool, sent: usize) -> Result<String, Failure
         head.push_str(&format!(" · not settled after {}ms", r.settle_ms));
     } else if !r.changed {
         head.push_str(&format!(" · no change after {}ms", r.settle_ms));
-    } else {
-        head.push_str(&format!(" · settled in {}ms", r.settle_ms));
-        if r.observation.kind == Kind::Full {
-            head.push_str(" · new screen");
-        } else if r.observation.text.is_empty() {
-            head.push_str(" · no element changed");
-        }
+    } else if r.observation.kind == Kind::Full {
+        head.push_str(" · new screen");
+    } else if r.observation.text.is_empty() {
+        head.push_str(" · no element changed");
     }
     let mut out = vec![head];
     out.extend(lines);
@@ -2174,13 +2171,10 @@ fn show_action(result: &Value, json: bool) -> Result<String, Failure> {
             }
         } else if !r.changed {
             head.push_str(&format!(" · no change after {}ms", r.settle_ms));
-        } else {
-            head.push_str(&format!(" · settled in {}ms", r.settle_ms));
-            if r.observation.kind == Kind::Full {
-                head.push_str(" · new screen");
-            } else if r.observation.text.is_empty() {
-                head.push_str(" · no element changed");
-            }
+        } else if r.observation.kind == Kind::Full {
+            head.push_str(" · new screen");
+        } else if r.observation.text.is_empty() && r.verified.is_none() {
+            head.push_str(" · no element changed");
         }
     }
     if r.woke {
@@ -2446,12 +2440,16 @@ mod tests {
     #[test]
     fn a_tap_that_redraws_without_changing_any_element_says_so() {
         let shown = show_action(&action(true, "diff", ""), false).unwrap();
-        assert_eq!(
-            shown,
-            "ok tapped @e1 · settled in 400ms · no element changed"
-        );
+        assert_eq!(shown, "ok tapped @e1 · no element changed");
         let shown = show_action(&action(true, "diff", "~ @e1 x → y"), false).unwrap();
         assert!(!shown.contains("no element changed"), "{shown}");
+        let mut typed = action(true, "diff", "");
+        typed["summary"] = json!("typed into @e4");
+        typed["verified"] = json!(true);
+        assert_eq!(
+            show_action(&typed, false).unwrap(),
+            "ok typed into @e4 · verified"
+        );
     }
 
     #[test]

@@ -65,6 +65,9 @@ def summary(name, runs, ok):
     ms = [sum(c["ms"] for c in r) for r in runs]
     tk = [tokens(r) for r in runs]
     print(f"{name:28} median {statistics.median(ms)/1000:.2f} s  tokens {statistics.median(tk):.0f}  ok {sum(ok)} of {len(ok)}  calls {len(runs[0])}")
+    for r, good in zip(runs, ok):
+        if not good:
+            print("  not ok:", " | ".join(c["text"].replace("\n", " / ") for c in r))
 
 
 m = Mcp()
@@ -91,7 +94,7 @@ types, ok = [], []
 for _ in range(RUNS):
     fresh(); m.call("snapshot", {"diff": False})
     c = m.call("type", {"text": EMAIL, "into": "Email"})
-    types.append([c]); ok.append(EMAIL in c["text"])
+    types.append([c]); ok.append(EMAIL in c["text"] or "· verified" in c["text"])
 summary("type (text shown)", types, ok)
 
 flows, ok = [], []

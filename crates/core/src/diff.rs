@@ -28,6 +28,8 @@ pub enum Change {
     Removed(Ref),
     /// The screen the agent was shown before the one it was last shown is on screen again.
     Uncovered,
+    /// The keyboard came up (`true`) or went away. Its own element is never listed: the header says it is shown.
+    Keyboard(bool),
     Changed {
         r#ref: Ref,
         field: Field,
@@ -55,8 +57,39 @@ fn words(e: &Element) -> String {
     }
 }
 
-fn covered(under: bool) -> String {
-    if under { "under-keyboard" } else { "(none)" }.into()
+fn covered(word: Option<&str>) -> String {
+    word.unwrap_or("(none)").into()
+}
+
+/// Leaves out what a verified `type` into `target` already says (decision D87): the field taking focus, a secure
+/// field's text changing, and, after a replace (`replaced`), its new text, which is the text the reply names. A new
+/// label stays: on iOS a field's name can change when it takes text.
+pub fn drop_echo(changes: &mut Vec<Change>, next: &Rendered, target: Ref, replaced: bool) {
+    let secure = next
+        .index_of(target)
+        .is_some_and(|i| is_secure(&next.elements[i]));
+    let words = |s: &str| -> Vec<String> {
+        s.split(' ')
+            .filter(|w| *w != "(none)" && *w != "focused")
+            .map(str::to_string)
+            .collect()
+    };
+    changes.retain(|c| match c {
+        Change::Changed {
+            r#ref,
+            field: Field::State,
+            from,
+            to,
+        } if *r#ref == target => {
+            !(to.split(' ').any(|w| w == "focused") && words(from) == words(to))
+        }
+        Change::Changed {
+            r#ref,
+            field: Field::Value,
+            ..
+        } if *r#ref == target => !secure && !replaced,
+        _ => true,
+    });
 }
 
 fn opt(s: Option<String>) -> String {
@@ -83,20 +116,34 @@ pub fn diff_below(prev: &Rendered, next: &Rendered, below: Option<&Rendered>) ->
 }
 
 pub fn diff(prev: &Rendered, next: &Rendered) -> DiffOrFull {
-    let before: HashMap<Ref, &Element> = prev.elements.iter().map(|e| (e.r#ref, e)).collect();
-    let after: HashMap<Ref, &Element> = next.elements.iter().map(|e| (e.r#ref, e)).collect();
+    let was = |e: &&Element| prev.listed(e);
+    let listed = |e: &&Element| next.listed(e);
+    let before: HashMap<Ref, &Element> = prev
+        .elements
+        .iter()
+        .filter(was)
+        .map(|e| (e.r#ref, e))
+        .collect();
+    let after: HashMap<Ref, &Element> = next
+        .elements
+        .iter()
+        .filter(listed)
+        .map(|e| (e.r#ref, e))
+        .collect();
     let removed: Vec<Ref> = prev
         .elements
         .iter()
+        .filter(was)
         .map(|e| e.r#ref)
         .filter(|r| !after.contains_key(r))
         .collect();
     let added = next
         .elements
         .iter()
+        .filter(listed)
         .filter(|e| !before.contains_key(&e.r#ref))
         .count();
-    let union = prev.elements.len() + added;
+    let union = before.len() + added;
     if union > 0 && (removed.len() + added) as f32 / union as f32 > NEW_SCREEN_SHARE {
         return DiffOrFull::Full;
     }
@@ -107,7 +154,7 @@ pub fn diff(prev: &Rendered, next: &Rendered) -> DiffOrFull {
         .iter()
         .any(|e| focused(e) && !before.get(&e.r#ref).is_some_and(|old| focused(old)));
     let mut changes: Vec<Change> = removed.into_iter().map(Change::Removed).collect();
-    for e in &next.elements {
+    for e in next.elements.iter().filter(listed) {
         let r = e.r#ref;
         let Some(old) = before.get(&r) else {
             changes.push(Change::Added(r));
@@ -134,8 +181,8 @@ pub fn diff(prev: &Rendered, next: &Rendered) -> DiffOrFull {
             (Field::State, was, words(e)),
             (
                 Field::Covered,
-                covered(prev.under_keyboard(old)),
-                covered(next.under_keyboard(e)),
+                covered(prev.cover_word(old)),
+                covered(next.cover_word(e)),
             ),
         ];
         for (field, from, to) in fields {
@@ -151,6 +198,10 @@ pub fn diff(prev: &Rendered, next: &Rendered) -> DiffOrFull {
     }
     let moved = moves(prev, next, &changes);
     changes.extend(moved);
+    let shown = next.header.keyboard.is_some();
+    if prev.header.keyboard.is_some() != shown {
+        changes.push(Change::Keyboard(shown));
+    }
     DiffOrFull::Diff(changes)
 }
 
@@ -276,6 +327,7 @@ impl DiffOrFull {
                     removing = true;
                     continue;
                 }
+                Change::Keyboard(_) => {}
                 Change::Uncovered => lines.push(
                     if changes.len() == 1 {
                         "the screen before the last one is back, unchanged"
@@ -343,13 +395,39 @@ impl DiffOrFull {
             }
             removing = false;
         }
+        let keyboard = changes.iter().find_map(|c| match c {
+            Change::Keyboard(shown) => Some(*shown),
+            _ => None,
+        });
+        let at = |refs: &[Ref]| {
+            refs.iter()
+                .map(|r| format!("@{r}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        match keyboard {
+            Some(false) => lines.push("keyboard hidden".into()),
+            Some(true) => {
+                let over = covering
+                    .iter()
+                    .find(|(f, t, _)| *f == "(none)" && *t == "under-keyboard")
+                    .map(|(_, _, refs)| refs.as_slice())
+                    .unwrap_or_default();
+                lines.push(if over.is_empty() {
+                    "keyboard shown".into()
+                } else {
+                    format!("keyboard shown over {}", at(over))
+                });
+            }
+            None => {}
+        }
         for (from, to, refs) in covering {
-            if next.header.keyboard.is_none() {
-                lines.push("keyboard hidden".into());
+            if keyboard == Some(false)
+                || (keyboard == Some(true) && from == "(none)" && to == "under-keyboard")
+            {
                 continue;
             }
-            let refs: Vec<String> = refs.iter().map(|r| format!("@{r}")).collect();
-            lines.push(format!("~ {} {from} → {to}", refs.join(" ")));
+            lines.push(format!("~ {} {from} → {to}", at(&refs)));
         }
         lines.join("\n")
     }
@@ -363,7 +441,7 @@ mod tests {
     use crate::prune::prune;
     use crate::raw::RawTree;
     use crate::refs::RefTable;
-    use crate::render::{Header, Rendered};
+    use crate::render::{Filters, Header, Rendered};
 
     fn screen(table: &mut RefTable, nodes: &[String]) -> Rendered {
         let json = format!(
@@ -735,8 +813,148 @@ mod tests {
         assert_eq!(gone.text(&clear), "keyboard hidden");
         assert_eq!(
             diff(&clear, &covered).text(&covered),
-            "~ @e1 @e2 @e3 @e4 @e5 @e6 @e7 @e8 @e9 @e10 @e11 @e12 (none) → under-keyboard"
+            "keyboard shown over @e1 @e2 @e3 @e4 @e5 @e6 @e7 @e8 @e9 @e10 @e11 @e12"
         );
+    }
+
+    #[test]
+    fn the_keyboard_s_own_element_is_not_listed_and_its_coming_and_going_is_one_line() {
+        let mut t = RefTable::default();
+        let with_ime = |t: &mut RefTable, nodes: &[String]| {
+            let json = format!(
+                r#"{{"windows":[{{"id":1,"type":"application","bounds":[0,0,400,2000]}},{{"id":2,"type":"input_method","bounds":[0,500,400,2000]}}],"nodes":[{}]}}"#,
+                nodes.join(",")
+            );
+            let tree = RawTree::from_android_json(&json, Scale { density: 1.0 }).unwrap();
+            let pruned = prune(&tree);
+            let refs = t.assign(&tree, &pruned);
+            with_keyboard(Rendered::build(pruned, &refs, Header::default()), true)
+        };
+        let mut nodes = buttons(&["A", "B"]);
+        let clear = with_keyboard(screen(&mut t, &nodes), false);
+        nodes.push(
+            r#"{"p":-1,"w":2,"cls":"android.inputmethodservice.KeyboardView","b":[0,500,400,2000],"n":"kb","f":"vVe"}"#
+                .into(),
+        );
+        let up = with_ime(&mut t, &nodes);
+        assert!(up.elements.iter().any(|e| e.role == Role::Keyboard));
+        let text = up.text(&Filters::default()).unwrap();
+        assert_eq!(
+            text,
+            "keyboard shown\n@e1 button \"A\" under-keyboard\n@e2 button \"B\" under-keyboard"
+        );
+        assert_eq!(diff(&clear, &up).text(&up), "keyboard shown over @e1 @e2");
+        assert_eq!(diff(&up, &clear).text(&clear), "keyboard hidden");
+    }
+
+    #[test]
+    fn the_children_of_a_covered_group_take_its_under_keyboard_and_only_an_exception_is_said() {
+        let mut t = RefTable::default();
+        let child = |id: &str, top: u32, bottom: u32| {
+            format!(
+                r#"{{"p":0,"w":1,"cls":"android.widget.Button","b":[0,{top},400,{bottom}],"n":"{id}","text":"{id}","f":"vVe","a":["tap"]}}"#
+            )
+        };
+        let nodes = [
+            r#"{"p":-1,"w":1,"cls":"android.view.ViewGroup","b":[0,490,400,700],"n":"bar","desc":"Tab Bar","f":"vVe"}"#
+                .to_string(),
+            child("Edge", 490, 500),
+            child("Items", 520, 620),
+        ];
+        let clear = with_keyboard(screen(&mut t, &nodes), false);
+        let covered = with_keyboard(screen(&mut t, &nodes), true);
+        let text = covered.text(&Filters::default()).unwrap();
+        assert!(
+            text.contains(
+                "@e1 group \"Tab Bar\" under-keyboard\n  @e2 button \"Edge\" above-keyboard\n  @e3 button \"Items\""
+            ),
+            "{text}"
+        );
+        assert_eq!(
+            diff(&clear, &covered).text(&covered),
+            "keyboard shown over @e1\n~ @e2 (none) → above-keyboard"
+        );
+        assert_eq!(diff(&covered, &clear).text(&clear), "keyboard hidden");
+    }
+
+    #[test]
+    fn a_verified_type_does_not_repeat_its_field_taking_focus_or_a_secure_field_changing() {
+        let mut t = RefTable::default();
+        let field = |id: &str, slot: usize, text: &str, f: &str| {
+            node(
+                slot,
+                id,
+                "android.widget.EditText",
+                &format!(r#""text":"{text}","f":"{f}","a":["tap","set_text"]"#),
+            )
+        };
+        let before = screen(
+            &mut t,
+            &[field("email", 1, "", "vVeE"), field("pw", 2, "", "vVeEP")],
+        );
+        let typed = screen(
+            &mut t,
+            &[
+                field("email", 1, "gary@example.com", "vVeEF"),
+                field("pw", 2, "", "vVeEP"),
+            ],
+        );
+        let DiffOrFull::Diff(mut changes) = diff(&before, &typed) else {
+            panic!("a new screen")
+        };
+        let appended = changes.clone();
+        drop_echo(&mut changes, &typed, Ref(1), true);
+        assert_eq!(DiffOrFull::Diff(changes).text(&typed), "");
+        let mut changes = appended;
+        drop_echo(&mut changes, &typed, Ref(1), false);
+        assert_eq!(
+            DiffOrFull::Diff(changes).text(&typed),
+            "~ @e1 textbox (none) → \"gary@example.com\""
+        );
+        let secret = screen(
+            &mut t,
+            &[
+                field("email", 1, "gary@example.com", "vVeE"),
+                field("pw", 2, "secret1", "vVeEPF"),
+            ],
+        );
+        let DiffOrFull::Diff(mut changes) = diff(&typed, &secret) else {
+            panic!("a new screen")
+        };
+        drop_echo(&mut changes, &secret, Ref(2), false);
+        assert_eq!(DiffOrFull::Diff(changes).text(&secret), "");
+    }
+
+    #[test]
+    fn a_container_whose_line_would_only_name_its_role_is_not_listed_and_its_rows_are_not_indented()
+    {
+        let mut t = RefTable::default();
+        let list = |actions: &str| {
+            format!(
+                r#"{{"p":-1,"w":1,"cls":"android.widget.ListView","b":[0,0,400,600],"n":"form","f":"vVeS"{actions}}}"#
+            )
+        };
+        let mut nodes = vec![list("")];
+        for (i, l) in ["A", "B"].iter().enumerate() {
+            nodes.push(format!(
+                r#"{{"p":0,"w":1,"cls":"android.widget.Button","b":[0,{},400,{}],"n":"{l}","text":"{l}","f":"vVe","a":["tap"]}}"#,
+                i * 60,
+                i * 60 + 50
+            ));
+        }
+        let quiet = screen(&mut t, &nodes);
+        assert_eq!(
+            quiet.text(&Filters::default()).unwrap(),
+            "@e2 button \"A\"\n@e3 button \"B\""
+        );
+        nodes[0] = list(r#","a":["scroll_fwd"]"#);
+        let loud = screen(&mut t, &nodes);
+        assert_eq!(
+            loud.text(&Filters::default()).unwrap(),
+            "@e1 list scrollable↓\n  @e2 button \"A\"\n  @e3 button \"B\""
+        );
+        assert_eq!(diff(&quiet, &loud).text(&loud), "+ @e1 list scrollable↓");
+        assert_eq!(diff(&loud, &quiet).text(&quiet), "- @e1");
     }
 
     const TEN: [&str; 10] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
