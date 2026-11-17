@@ -3006,3 +3006,10 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Live, iPhone 17 Simulator, debug build on the mini: Settings `audit: 2 findings` (`@e15 searchbox "Search": 336x38pt, under 44x44pt`, `@e16 button "Dictate": 17x22pt, under 44x44pt`); Maps 7 (`@e35 button "More": 27x27pt`, `@e26 button "profile": 42x42pt`, ...); Calendar and Photos `audit: no unnamed controls or small tap targets`.
 - Also: the reference still said `compare` reports the status bar's clock; it now says a time in the top tenth is left out (D89).
 
+## 2026-11-17: the Action's first CI runs, and what they needed
+
+- `56b2f64`'s replay-action run (43991733725) failed on both jobs, now with reasons in the log:
+  - Android: `Unknown AVD name [phonedriver]` and `HOME is defined but there is no file phonedriver.ini in $HOME/.android/avd`. The step now puts the AVD in `ANDROID_AVD_HOME=$RUNNER_TEMP/avd` (also in `GITHUB_ENV`), accepts the SDK licences, installs with `sdkmanager --install`, and stops with an error when avdmanager made no `.ini`.
+  - iOS: `step 1 of 5 (launch Settings) failed: connection error: xcodegen is not installed; install it with brew install xcodegen`. The boot step now installs xcodegen when it is missing.
+- Each step's script, pulled out of `action.yml`, passes `bash -n`. The proof is the next CI run.
+

@@ -98,8 +98,16 @@ runs:
         sudo udevadm trigger --name-match=kvm
         tools="$ANDROID_HOME/cmdline-tools/latest/bin"
         image="system-images;android-$API;google_apis;x86_64"
-        "$tools/sdkmanager" emulator platform-tools "$image" >/dev/null
-        echo no | "$tools/avdmanager" create avd -n phonedriver -k "$image" -d pixel_6 --force >/dev/null
+        export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
+        echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+        mkdir -p "$ANDROID_AVD_HOME"
+        yes 2> /dev/null | "$tools/sdkmanager" --licenses > /dev/null || true
+        "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
+        echo no | "$tools/avdmanager" create avd -n phonedriver -k "$image" -d pixel_6 --force > /dev/null
+        if [ ! -f "$ANDROID_AVD_HOME/phonedriver.ini" ]; then
+          echo "::error::avdmanager made no virtual device from $image"
+          exit 1
+        fi
         log="$RUNNER_TEMP/emulator.log"
         nohup "$ANDROID_HOME/emulator/emulator" -avd phonedriver -port 5554 -no-window -no-audio -no-boot-anim \
           -no-snapshot -gpu swiftshader_indirect > "$log" 2>&1 &
@@ -128,6 +136,7 @@ runs:
         DEVICE: ${{ inputs.device }}
       run: |
         set -euo pipefail
+        command -v xcodegen > /dev/null || brew install --quiet xcodegen
         name="$DEVICE"
         if [ -z "$name" ]; then
           name=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone[^(]*' | sed 's/ *$//')
