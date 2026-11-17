@@ -3082,3 +3082,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Asked by CI: the Action's iOS job (125e788) stopped at `launch Settings` with `timed out after 60000 ms waiting for the runner to answer on port 27753`. The runner log from the artifact: xcodebuild at 01:45:24, `listening` at 01:45:50, the first snapshot's `Descendants matching type Alert` from 2.81 s to 43.49 s, error at 01:46:36. The runner was built in about 3 minutes before that, after a 3.5-minute boot.
 - Changed: `testServe` counts SpringBoard's alerts once before it listens; `SIMULATOR_READY_WAIT` is 180 s (devices keep 60 s); the Action copies `daemon.log` into a stopped run's artifact.
 - On the mini (iPhone 17 Simulator just booted, load average near 100 from other work): two fresh starts answered in 10.9 s and 2.6 s; the log shows `Get number of matches for: Descendants matching type Alert` before `listening`. CI on a cold runner is the real test.
+
+## 2026-11-17: an Android reconnect waits for the agent to free its own lane (D73 amended)
+
+- Asked by CI: the Action's Android job (d5a8392) stopped at `type "hello from CI"` with `lane the phone's own screen of this device is already open from this daemon` and `the recording ended when the connection to the device did`; the artifact's screen shows the text typed.
+- Changed (`crates/android/src/agent.rs`): `Agent::start` asks again every 100 ms for up to 5 s when the agent says `lane in use: ...`.
+- Test: `a_lane_this_daemon_still_holds_is_waited_for_and_other_refusals_are_not`; the Android lib's 71 tests pass, clippy clean.
+- Live, API 37 emulator: 15 reconnects right after `daemon stop` before the change and 5 after all answered (the race needs a reconnect inside one daemon); `text.steps` replayed in 14.2 s.
+- Also: the mini's adb tunnel to win-pc had dropped with the LAN for a minute and was opened again.

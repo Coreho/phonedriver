@@ -29,6 +29,13 @@ const OWNER_GRACE_STEP: Duration = Duration::from_millis(500);
 const READY_TIMEOUT: Duration = Duration::from_secs(10);
 /// Creating the encoder and the virtual display at 2560x1600 took 5 to 8 s on the API 37 tablet emulator.
 const HIDDEN_HELLO_TIMEOUT: Duration = Duration::from_secs(20);
+/// The agent frees a lane when the thread of the connection that held it sees its socket close, which a thread busy
+/// with an action does only when the action ends. Observed on GitHub's Linux runner (2026-11-17): the video stream
+/// ended during a `type`, the daemon dropped the connection and asked for the phone's screen again at once, and the
+/// agent answered "lane in use". The agent belongs to one daemon (its owner file), so a held lane is this daemon's
+/// own dropped connection, and a reconnect waits for it to be freed.
+const LANE_FREE_WAIT: Duration = Duration::from_secs(5);
+const LANE_FREE_STEP: Duration = Duration::from_millis(100);
 const NO_HIDDEN_DISPLAY: &str =
     "a hidden display needs Android 13 (API 33) or newer, and the phone must allow it";
 const LOG_LINES: usize = 200;
@@ -476,6 +483,13 @@ async fn open_stream(
     Ok(stream)
 }
 
+/// True when the agent refused hello because a connection of this daemon still holds the lane.
+fn lane_held(reply: &Value) -> bool {
+    reply["error"]
+        .as_str()
+        .is_some_and(|e| e.starts_with("lane in use: "))
+}
+
 /// Why the agent answered hello with a refusal: a phone that cannot give a hidden display, a locked phone asked
 /// for one, a lane another connection holds, or a version that is not ours.
 fn refused_hello(reply: &Value) -> Error {
@@ -533,36 +547,43 @@ impl Agent {
             }
             first
         };
-        let asked = std::time::Instant::now();
-        let mut control = open_stream(
-            adb,
-            serial,
-            &launched,
-            b'C',
-            with(json!({"id": 0, "op": "hello", "version": VERSION, "token": launched.token})),
-        )
-        .await?;
         let no_hello = |e: Error| {
             let lines = launched.log.recent().join("\n");
             transport(format!("no hello from the agent ({e}); agent log: {lines}"))
         };
-        let reply = match display {
-            DisplayMode::Main => read_reply(&mut control, 0).await.map_err(no_hello)?,
-            DisplayMode::Hidden => {
-                tokio::time::timeout(HIDDEN_HELLO_TIMEOUT, read_reply(&mut control, 0))
-                    .await
-                    .map_err(|_| {
-                        transport(format!(
-                            "the agent did not open a hidden display within {} s",
-                            HIDDEN_HELLO_TIMEOUT.as_secs()
-                        ))
-                    })?
-                    .map_err(no_hello)?
+        let freeing = std::time::Instant::now();
+        let (control, reply, asked) = loop {
+            let asked = std::time::Instant::now();
+            let mut control = open_stream(
+                adb,
+                serial,
+                &launched,
+                b'C',
+                with(json!({"id": 0, "op": "hello", "version": VERSION, "token": launched.token})),
+            )
+            .await?;
+            let reply = match display {
+                DisplayMode::Main => read_reply(&mut control, 0).await.map_err(no_hello)?,
+                DisplayMode::Hidden => {
+                    tokio::time::timeout(HIDDEN_HELLO_TIMEOUT, read_reply(&mut control, 0))
+                        .await
+                        .map_err(|_| {
+                            transport(format!(
+                                "the agent did not open a hidden display within {} s",
+                                HIDDEN_HELLO_TIMEOUT.as_secs()
+                            ))
+                        })?
+                        .map_err(no_hello)?
+                }
+            };
+            if reply["ok"] == true {
+                break (control, reply, asked);
             }
+            if !lane_held(&reply) || freeing.elapsed() >= LANE_FREE_WAIT {
+                return Err(refused_hello(&reply));
+            }
+            tokio::time::sleep(LANE_FREE_STEP).await;
         };
-        if reply["ok"] != true {
-            return Err(refused_hello(&reply));
-        }
         let asked = asked.elapsed();
         let mut first = with(json!({"token": launched.token}));
         if let Some((bit_rate, fps, max_size)) = video_for(display, asked) {
@@ -597,6 +618,20 @@ mod tests {
         let mut wire = (small.len() as u32 | DEFLATED).to_be_bytes().to_vec();
         wire.extend(small);
         assert_eq!(read_frame(&mut wire.as_slice()).await.unwrap(), v);
+    }
+
+    #[test]
+    fn a_lane_this_daemon_still_holds_is_waited_for_and_other_refusals_are_not() {
+        let refused = |error: &str| json!({"id": 0, "ok": false, "error": error});
+        assert!(lane_held(&refused("lane in use: the phone's own screen")));
+        assert!(lane_held(&refused("lane in use: b")));
+        assert!(!lane_held(&refused("the phone is locked")));
+        assert!(!lane_held(&refused("hidden display: not supported")));
+        assert!(!lane_held(&json!({"id": 0, "ok": true})));
+        assert!(matches!(
+            refused_hello(&refused("lane in use: b")),
+            Error::Refused { detail } if detail == "lane b of this device is already open from this daemon"
+        ));
     }
 
     #[test]
