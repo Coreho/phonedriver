@@ -1,0 +1,4784 @@
+{
+ "tool": "phonedriver",
+ "label": null,
+ "name": "phonedriver",
+ "interface": "mcp",
+ "startedAt": "2026-11-17T19:46:24.962Z",
+ "counts": {
+  "reads": 20,
+  "taps": 20,
+  "types": 10,
+  "flows": 10
+ },
+ "notes": [],
+ "ops": [
+  {
+   "op": "setup",
+   "ok": true,
+   "error": null,
+   "wallMs": 4954.161208,
+   "ms": 4953.221208,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "launch",
+     "args": {
+      "app": "dev.simtap.demo"
+     },
+     "ms": 4953.221208,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok launched Demo · new screen\ndevice sim:A72FF9D4-E299-44EF-9AD9-805919E77C02 · Bench iPhone 17 · iOS 26.5 · 402x874pt · portrait\napp dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 366,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 92
+  },
+  {
+   "op": "warmup",
+   "ok": true,
+   "error": null,
+   "wallMs": 112.605375,
+   "ms": 112.295667,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 112.295667,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 0,
+   "ok": true,
+   "error": null,
+   "wallMs": 32.303625,
+   "ms": 32.165958,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 32.165958,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 1,
+   "ok": true,
+   "error": null,
+   "wallMs": 29.749417,
+   "ms": 29.624792,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 29.624792,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 2,
+   "ok": true,
+   "error": null,
+   "wallMs": 29.152375,
+   "ms": 29.060166,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 29.060166,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 3,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.183166,
+   "ms": 28.112,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.112,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 4,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.144625,
+   "ms": 28.056042,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.056042,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 5,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.38275,
+   "ms": 28.255917,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.255917,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 6,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.104125,
+   "ms": 28.029334,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.029334,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 7,
+   "ok": true,
+   "error": null,
+   "wallMs": 29.410667,
+   "ms": 29.168917,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 29.168917,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 8,
+   "ok": true,
+   "error": null,
+   "wallMs": 29.111834,
+   "ms": 28.9815,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.9815,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 9,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.738541,
+   "ms": 28.536459,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.536459,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 10,
+   "ok": true,
+   "error": null,
+   "wallMs": 29.200208,
+   "ms": 28.995042,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.995042,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 11,
+   "ok": true,
+   "error": null,
+   "wallMs": 29.165459,
+   "ms": 28.966458,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.966458,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 12,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.807541,
+   "ms": 28.680875,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.680875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 13,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.768416,
+   "ms": 28.58225,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.58225,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 14,
+   "ok": true,
+   "error": null,
+   "wallMs": 29.201125,
+   "ms": 29.086958,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 29.086958,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 15,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.640292,
+   "ms": 28.529458,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.529458,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 16,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.930333,
+   "ms": 28.732666,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.732666,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 17,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.97175,
+   "ms": 28.769792,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.769792,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 18,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.440208,
+   "ms": 28.302875,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.302875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "read",
+   "i": 19,
+   "ok": true,
+   "error": null,
+   "wallMs": 28.563084,
+   "ms": 28.365458,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 28.365458,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 59,
+   "verify": {
+    "sawSignIn": true,
+    "sawEmail": true
+   }
+  },
+  {
+   "op": "tap",
+   "i": 0,
+   "ok": true,
+   "error": null,
+   "wallMs": 347.095333,
+   "ms": 346.840875,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 346.840875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.023083,
+    "ms": 100.893625,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 100.893625,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 1,
+   "ok": true,
+   "error": null,
+   "wallMs": 317.71875,
+   "ms": 317.614375,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 317.614375,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 100.053916,
+    "ms": 99.947417,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 99.947417,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 2,
+   "ok": true,
+   "error": null,
+   "wallMs": 307.920709,
+   "ms": 307.812834,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 307.812834,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.287792,
+    "ms": 101.178083,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 101.178083,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 3,
+   "ok": true,
+   "error": null,
+   "wallMs": 320.586917,
+   "ms": 320.488458,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 320.488458,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 99.298209,
+    "ms": 99.189125,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 99.189125,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 4,
+   "ok": true,
+   "error": null,
+   "wallMs": 330.387375,
+   "ms": 330.277583,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 330.277583,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.938625,
+    "ms": 101.847833,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 101.847833,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 5,
+   "ok": true,
+   "error": null,
+   "wallMs": 285.6925,
+   "ms": 285.578709,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 285.578709,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 102.941292,
+    "ms": 102.832083,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 102.832083,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 6,
+   "ok": true,
+   "error": null,
+   "wallMs": 375.139333,
+   "ms": 374.961083,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 374.961083,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.137334,
+    "ms": 101.041667,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 101.041667,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 7,
+   "ok": true,
+   "error": null,
+   "wallMs": 290.352791,
+   "ms": 290.154666,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 290.154666,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 99.910125,
+    "ms": 99.792292,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 99.792292,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 8,
+   "ok": true,
+   "error": null,
+   "wallMs": 318.906708,
+   "ms": 318.808542,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 318.808542,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.083,
+    "ms": 100.986833,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 100.986833,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 9,
+   "ok": true,
+   "error": null,
+   "wallMs": 321.310041,
+   "ms": 321.124375,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 321.124375,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.714125,
+    "ms": 101.60725,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 101.60725,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 10,
+   "ok": true,
+   "error": null,
+   "wallMs": 312.845583,
+   "ms": 312.738291,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 312.738291,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 100.492666,
+    "ms": 100.374084,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 100.374084,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 11,
+   "ok": true,
+   "error": null,
+   "wallMs": 307.731917,
+   "ms": 307.6165,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 307.6165,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.264375,
+    "ms": 101.16875,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 101.16875,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 12,
+   "ok": true,
+   "error": null,
+   "wallMs": 301.989208,
+   "ms": 301.888541,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 301.888541,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 102.963375,
+    "ms": 102.853625,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 102.853625,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 13,
+   "ok": true,
+   "error": null,
+   "wallMs": 315.873666,
+   "ms": 315.70525,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 315.70525,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 102.495125,
+    "ms": 102.399875,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 102.399875,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 14,
+   "ok": true,
+   "error": null,
+   "wallMs": 308.301667,
+   "ms": 308.202125,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 308.202125,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 100.75225,
+    "ms": 100.6565,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 100.6565,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 15,
+   "ok": true,
+   "error": null,
+   "wallMs": 320.699833,
+   "ms": 320.600208,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 320.600208,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 104.831875,
+    "ms": 104.722917,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 104.722917,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 16,
+   "ok": true,
+   "error": null,
+   "wallMs": 315.815291,
+   "ms": 315.7005,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 315.7005,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 97.222542,
+    "ms": 97.110292,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 97.110292,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 17,
+   "ok": true,
+   "error": null,
+   "wallMs": 316.339042,
+   "ms": 316.244917,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 316.244917,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 99.317458,
+    "ms": 99.210709,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 99.210709,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 18,
+   "ok": true,
+   "error": null,
+   "wallMs": 316.859708,
+   "ms": 316.689875,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 316.689875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 100.768041,
+    "ms": 100.657459,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 100.657459,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "tap",
+   "i": 19,
+   "ok": true,
+   "error": null,
+   "wallMs": 290.729208,
+   "ms": 290.545625,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 290.545625,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Invalid email or password\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 20,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 102.667291,
+    "ms": 102.553209,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 102.553209,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "verify": {
+    "appSawTap": true,
+    "reportsChange": true,
+    "returnsImage": false
+   }
+  },
+  {
+   "op": "type",
+   "i": 0,
+   "ok": true,
+   "error": null,
+   "wallMs": 836.596708,
+   "ms": 836.276625,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 836.276625,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 279.644,
+    "ms": 279.538083,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 279.538083,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 44.325625,
+    "ms": 44.227292,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 44.227292,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 1,
+   "ok": true,
+   "error": null,
+   "wallMs": 809.687083,
+   "ms": 809.59875,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 809.59875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 100.279167,
+    "ms": 100.1755,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 100.1755,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 42.777,
+    "ms": 42.61075,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 42.61075,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 2,
+   "ok": true,
+   "error": null,
+   "wallMs": 833.337416,
+   "ms": 833.165917,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 833.165917,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 102.110208,
+    "ms": 102.015042,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 102.015042,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 39.413542,
+    "ms": 39.238209,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 39.238209,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 3,
+   "ok": true,
+   "error": null,
+   "wallMs": 847.048667,
+   "ms": 846.87725,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 846.87725,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 102.461459,
+    "ms": 102.312791,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 102.312791,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 39.844625,
+    "ms": 39.685041,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 39.685041,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 4,
+   "ok": true,
+   "error": null,
+   "wallMs": 884.941209,
+   "ms": 884.768917,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 884.768917,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 67.95925,
+    "ms": 67.880208,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 67.880208,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 39.281709,
+    "ms": 39.12575,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 39.12575,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 5,
+   "ok": true,
+   "error": null,
+   "wallMs": 502.829166,
+   "ms": 502.739125,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 502.739125,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 69.256792,
+    "ms": 69.175417,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 69.175417,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 398.835084,
+    "ms": 398.749583,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 398.749583,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 6,
+   "ok": true,
+   "error": null,
+   "wallMs": 848.805458,
+   "ms": 848.632125,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 848.632125,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 101.291541,
+    "ms": 101.180875,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 101.180875,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 39.818416,
+    "ms": 39.591833,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 39.591833,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 7,
+   "ok": true,
+   "error": null,
+   "wallMs": 849.414875,
+   "ms": 849.211958,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 849.211958,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 102.234541,
+    "ms": 102.054542,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 102.054542,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 39.500083,
+    "ms": 39.320959,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 39.320959,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 8,
+   "ok": true,
+   "error": null,
+   "wallMs": 859.842792,
+   "ms": 859.674208,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 859.674208,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 103.577417,
+    "ms": 103.481875,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 103.481875,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 39.612792,
+    "ms": 39.431166,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 39.431166,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "type",
+   "i": 9,
+   "ok": true,
+   "error": null,
+   "wallMs": 852.356833,
+   "ms": 852.14,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 852.14,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 13,
+   "prep": {
+    "op": "pre-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 100.450084,
+    "ms": 100.347125,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 100.347125,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 236,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 59,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": true
+    }
+   },
+   "post": {
+    "op": "post-read",
+    "ok": true,
+    "error": null,
+    "wallMs": 39.911583,
+    "ms": 39.747125,
+    "calls": [
+     {
+      "kind": "mcp",
+      "tool": "snapshot",
+      "args": {
+       "diff": false
+      },
+      "ms": 39.747125,
+      "isError": false,
+      "error": null,
+      "timedOut": false,
+      "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\" focused\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+      "chars": 287,
+      "images": [],
+      "other": [],
+      "structuredChars": 0
+     }
+    ],
+    "tokens": 72,
+    "verify": {
+     "sawSignIn": true,
+     "sawEmail": false
+    }
+   },
+   "verify": {
+    "fieldShowsText": true
+   }
+  },
+  {
+   "op": "flow",
+   "i": 0,
+   "ok": true,
+   "error": null,
+   "wallMs": 1836.696917,
+   "ms": 1835.6121249999999,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 102.107791,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 924.212459,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 444.175542,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 321.99575,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 43.120583,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 1,
+   "ok": true,
+   "error": null,
+   "wallMs": 1735.753334,
+   "ms": 1734.938125,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 74.479209,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 854.935083,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 431.292166,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 329.940167,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.2915,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 2,
+   "ok": true,
+   "error": null,
+   "wallMs": 1749.602333,
+   "ms": 1748.919499,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 107.180208,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 836.1515,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 429.664541,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 331.57025,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.353,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 3,
+   "ok": true,
+   "error": null,
+   "wallMs": 1747.432292,
+   "ms": 1746.61125,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 107.725,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 841.350792,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 422.972208,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 330.17425,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.389,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 4,
+   "ok": true,
+   "error": null,
+   "wallMs": 1740.160791,
+   "ms": 1739.4232499999998,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 103.64175,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 844.37675,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 413.094458,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 333.976583,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.333709,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 5,
+   "ok": true,
+   "error": null,
+   "wallMs": 1773.042042,
+   "ms": 1772.286375,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 74.777792,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 908.532625,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 424.659,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 319.839458,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.4775,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 6,
+   "ok": true,
+   "error": null,
+   "wallMs": 1760.04425,
+   "ms": 1759.2439579999998,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 107.561875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 852.794458,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 423.461208,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 330.836542,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.589875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 7,
+   "ok": true,
+   "error": null,
+   "wallMs": 1765.370667,
+   "ms": 1764.4812500000003,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 106.591291,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 855.679792,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 431.337125,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 326.6815,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.191542,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 8,
+   "ok": true,
+   "error": null,
+   "wallMs": 1805.4355,
+   "ms": 1804.778209,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 104.991166,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 891.673167,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 434.649084,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 329.991917,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 43.472875,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow",
+   "i": 9,
+   "ok": true,
+   "error": null,
+   "wallMs": 1750.897416,
+   "ms": 1750.067791,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 94.58225,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "gary@example.com",
+      "into": "Email"
+     },
+     "ms": 839.208375,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e3 · verified\nkeyboard shown over @e8",
+     "chars": 52,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "type",
+     "args": {
+      "text": "secret1",
+      "into": "Password",
+      "secret": true
+     },
+     "ms": 432.525166,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok typed into @e4 · verified",
+     "chars": 28,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "tap",
+     "args": {
+      "target": "Sign In",
+      "role": "button"
+     },
+     "ms": 338.326292,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"",
+     "chars": 80,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 45.425708,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 173,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 5
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 0,
+   "ok": true,
+   "error": null,
+   "wallMs": 1794.823167,
+   "ms": 1794.173417,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 112.0315,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1637.671333,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.470584,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 1,
+   "ok": true,
+   "error": null,
+   "wallMs": 1794.675,
+   "ms": 1794.297666,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 105.872541,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1644.497625,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 43.9275,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 2,
+   "ok": true,
+   "error": null,
+   "wallMs": 2080.555834,
+   "ms": 2080.061126,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 104.293417,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1932.218209,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown",
+     "chars": 164,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 43.5495,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 279,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 170,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 3,
+   "ok": true,
+   "error": null,
+   "wallMs": 1763.364625,
+   "ms": 1762.930042,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 105.496958,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1612.6455,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.787584,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 4,
+   "ok": true,
+   "error": null,
+   "wallMs": 1776.246667,
+   "ms": 1775.868334,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 107.558,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1623.841167,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.469167,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 5,
+   "ok": true,
+   "error": null,
+   "wallMs": 2272.7515,
+   "ms": 2272.38625,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 105.248833,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 2123.102625,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.034792,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 6,
+   "ok": true,
+   "error": null,
+   "wallMs": 1739.247917,
+   "ms": 1738.7805839999999,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 102.710375,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1591.452,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.618209,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 7,
+   "ok": true,
+   "error": null,
+   "wallMs": 1717.465583,
+   "ms": 1716.902334,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 71.643042,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1601.077958,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.181334,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 8,
+   "ok": true,
+   "error": null,
+   "wallMs": 1936.798667,
+   "ms": 1936.4798750000002,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 285.794667,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1606.056583,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.628625,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  },
+  {
+   "op": "flow-batch",
+   "i": 9,
+   "ok": true,
+   "error": null,
+   "wallMs": 1741.247542,
+   "ms": 1740.701335,
+   "calls": [
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 102.808209,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo)\n@e1 text \"Sign In\"\n@e3 textbox \"Email\"\n@e4 password \"Password\"\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Not signed in\"\n@e8 group \"Tab Bar\"\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 236,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "batch",
+     "args": {
+      "steps": [
+       {
+        "tool": "type",
+        "text": "gary@example.com",
+        "into": "Email"
+       },
+       {
+        "tool": "type",
+        "text": "secret1",
+        "into": "Password",
+        "secret": true
+       },
+       {
+        "tool": "tap",
+        "target": "Sign In",
+        "role": "button"
+       }
+      ]
+     },
+     "ms": 1593.113917,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "ok 3 steps\n1. typed into @e3 · verified\n2. typed into @e4 · verified\n3. tapped @e6 \"Sign In\"\n~ @e7 cell \"Not signed in\" → \"Welcome, gary@example.com\"\nkeyboard shown over @e8",
+     "chars": 173,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    },
+    {
+     "kind": "mcp",
+     "tool": "snapshot",
+     "args": {
+      "diff": false
+     },
+     "ms": 44.779209,
+     "isError": false,
+     "error": null,
+     "timedOut": false,
+     "text": "app dev.simtap.demo (Demo) · keyboard shown\n@e1 text \"Sign In\"\n@e3 textbox \"gary@example.com\"\n@e4 password \"•••\" focused\n@e5 switch \"Remember me\" off\n@e6 button \"Sign In\"\n@e7 cell \"Welcome, gary@example.com\"\n@e8 group \"Tab Bar\" under-keyboard\n  @e9 button \"Login\" selected\n  @e10 button \"Items\"",
+     "chars": 294,
+     "images": [],
+     "other": [],
+     "structuredChars": 0
+    }
+   ],
+   "tokens": 177,
+   "verify": {
+    "sawWelcome": true,
+    "appSignedIn": true,
+    "calls": 3
+   }
+  }
+ ],
+ "condition": {
+  "deviceHubAsked": false,
+  "deviceHubRunning": false,
+  "simulator": "headless (simctl boot, no Device Hub)"
+ },
+ "environment": {
+  "date": "2026-11-17T19:47:00.490Z",
+  "macos": "27.0.1 (26A434)",
+  "hardware": {
+   "model": "Mac16,10",
+   "cpu": "Apple M4",
+   "cores": 10,
+   "memoryGB": 16
+  },
+  "xcode": "Xcode 27.0, Build version 27A266a",
+  "node": "v25.6.0",
+  "simulator": {
+   "udid": "A72FF9D4-E299-44EF-9AD9-805919E77C02",
+   "name": "Bench iPhone 17",
+   "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+   "runtime": "iOS 26.5 (23F73)"
+  }
+ },
+ "version": "phonedriver 0.1.5",
+ "server": {
+  "startToListMs": 14.843625,
+  "initMs": 10.536167,
+  "listMs": 1.125209,
+  "protocolVersion": "2025-06-18",
+  "serverInfo": {
+   "name": "phonedriver",
+   "version": "0.1.5"
+  },
+  "toolCount": 17,
+  "toolNames": [
+   "apps",
+   "batch",
+   "clipboard",
+   "devices",
+   "launch",
+   "logs",
+   "press",
+   "replay",
+   "screenshot",
+   "scroll",
+   "setting",
+   "shell",
+   "snapshot",
+   "swipe",
+   "tap",
+   "type",
+   "wait"
+  ],
+  "definitionsChars": 6875,
+  "instructionsChars": 517,
+  "outputSchemaChars": 86,
+  "env": [
+   "PHONEDRIVER_DEVICE",
+   "PHONEDRIVER_HOME"
+  ],
+  "command": "phonedriver mcp"
+ },
+ "finishedAt": "2026-11-17T19:49:39.090Z",
+ "mcpNotifications": 0,
+ "strayStdout": [],
+ "quick": {
+  "warmup": {
+   "n": 1,
+   "ok": 1,
+   "medianMs": 112.295667,
+   "p90Ms": 112.295667,
+   "medianTokens": 59
+  },
+  "read": {
+   "n": 20,
+   "ok": 20,
+   "medianMs": 28.706770499999998,
+   "p90Ms": 29.168917,
+   "medianTokens": 59
+  },
+  "tap": {
+   "n": 20,
+   "ok": 20,
+   "medianMs": 315.9750835,
+   "p90Ms": 330.277583,
+   "medianTokens": 20
+  },
+  "type": {
+   "n": 10,
+   "ok": 10,
+   "medianMs": 847.7546875,
+   "p90Ms": 859.674208,
+   "medianTokens": 13
+  },
+  "flow": {
+   "n": 10,
+   "ok": 10,
+   "medianMs": 1754.6558744999998,
+   "p90Ms": 1804.778209,
+   "medianTokens": 173
+  },
+  "flowBatch": {
+   "n": 10,
+   "ok": 10,
+   "medianMs": 1785.0208754999999,
+   "p90Ms": 2080.061126,
+   "medianTokens": 177
+  }
+ },
+ "conditionAtEnd": {
+  "deviceHubRunning": false
+ }
+}

@@ -1,0 +1,84 @@
+diff --git a/bench/lib/sim.mjs b/bench/lib/sim.mjs
+index 833e7be..17ea58d 100644
+--- a/bench/lib/sim.mjs
++++ b/bench/lib/sim.mjs
+@@ -89,7 +89,7 @@ export function killMatching(patterns) {
+     // Never the harness, its parents, or the commands around it (ps itself, tee logging a run).
+     if (keep.has(r.pid) || /^(ps|tee|bash|zsh|sh|grep) /.test(r.cmd) || r.cmd.includes("bench/run.mjs") || r.cmd.includes("run-all.sh")) continue;
+     // SIGTERM first: a helper that holds the Simulator's automation session must get to close it (SIGKILL only after 3 s).
+-    if (patterns.some((p) => r.cmd.includes(p))) { try { process.kill(r.pid, "SIGTERM"); killed.push(r); } catch {} }
++    if ((r.cmd.includes("bench-tools") || (process.env.UDID && r.cmd.includes(process.env.UDID))) && patterns.some((p) => r.cmd.includes(p))) { try { process.kill(r.pid, "SIGTERM"); killed.push(r); } catch {} }
+   }
+   if (killed.length) {
+     spawnSync("sleep", ["3"]);
+diff --git a/bench/run.mjs b/bench/run.mjs
+index 9d2949d..4bbe2ba 100644
+--- a/bench/run.mjs
++++ b/bench/run.mjs
+@@ -100,7 +100,7 @@ if (adapter.prepare) adapter.prepare(ctx);
+ // reboot and opened after it: quitting it after the reboot shut the new boot down (November 1, 2026, the first tries of
+ // Maestro's and AXe's control run, each after a run that left Device Hub open).
+ const hubRunning = () => sh("pgrep", ["-x", "DeviceHub"], { allowFail: true }).status === 0;
+-if (!deviceHub && hubRunning()) {
++if (false) {
+   sh("osascript", ["-e", 'quit app "DeviceHub"'], { allowFail: true });
+   for (let i = 0; i < 20 && hubRunning(); i++) { if (i === 5) sh("killall", ["-9", "DeviceHub"], { allowFail: true }); await sleep(500); }
+   await sleep(2000);
+diff --git a/bench/tools/agent-device.mjs b/bench/tools/agent-device.mjs
+index 7a9c79e..bddaa61 100644
+--- a/bench/tools/agent-device.mjs
++++ b/bench/tools/agent-device.mjs
+@@ -3,19 +3,20 @@
+ import { execFileSync } from "node:child_process";
+ import { join } from "node:path";
+ const bin = () => join(process.env.BENCH_TOOLS ?? "", "bin", "agent-device");
+-const sel = (what) => ({ kind: "selector", selector: `id="${what}"` });
++// 0.21.38 takes the target at the top level ("target was removed; pass the UI target at the top level").
++const sel = (what) => ({ selector: `id="${what}"` });
+ export default {
+   id: "agent-device", name: "agent-device", kind: "mcp",
+   server: () => ({ command: bin(), args: ["mcp"] }),
+   version: () => execFileSync(bin(), ["--version"], { encoding: "utf8" }).trim(),
+   async setup(ctx) { await ctx.call("open", { app: ctx.bundleId, platform: "ios", udid: ctx.udid, foreground: true }, { timeoutMs: 300_000 }); },
+   async read(ctx) { await ctx.call("snapshot", { interactiveOnly: true }); },
+-  async tap(ctx, what) { await ctx.call("press", { target: sel(what), settle: true }); },
+-  async type(ctx, field, text) { await ctx.call("fill", { target: sel(field), text, settle: true }); },
++  async tap(ctx, what) { await ctx.call("press", { ...sel(what), settle: true }); },
++  async type(ctx, field, text) { await ctx.call("fill", { ...sel(field), text, settle: true }); },
+   async batch(ctx, list) {
+     await ctx.call("batch", { steps: list.map(([what, field, value]) => what === "type"
+-      ? { command: "fill", input: { target: sel(field), text: value } }
+-      : { command: "press", input: { target: sel(field), settle: true } }) });
++      ? { command: "fill", input: { ...sel(field), text: value } }
++      : { command: "press", input: { ...sel(field), settle: true } }) });
+   },
+   async teardown(ctx) { await ctx.call("close", {}, { allowError: true }); },
+   cleanup: ["AgentDeviceRunner"],
+diff --git a/bench/tools/phonedriver.mjs b/bench/tools/phonedriver.mjs
+new file mode 100644
+index 0000000..c0744d9
+--- /dev/null
++++ b/bench/tools/phonedriver.mjs
+@@ -0,0 +1,22 @@
++// phonedriver: its MCP server (`phonedriver mcp`), the binary in $BENCH_TOOLS/bin. Its instructions: read with
++// snapshot, act on a ref or on the text the screen shows (role narrows it), type with into; every action answers with
++// what changed on the settled screen. A password goes in with secret: true, as its docs ask.
++import { execFileSync } from "node:child_process";
++import { join } from "node:path";
++import { LABELS } from "./lib.mjs";
++const bin = () => join(process.env.BENCH_TOOLS ?? "", "bin", "phonedriver");
++const type = (field, text) => ({ text, into: LABELS[field], ...(field === "password" ? { secret: true } : {}) });
++const tap = (what) => ({ target: LABELS[what], role: "button" });
++export default {
++  id: "phonedriver", name: "phonedriver", kind: "mcp",
++  server: (ctx) => ({ command: bin(), args: ["mcp"], env: { PHONEDRIVER_DEVICE: `sim:${ctx.udid}`, PHONEDRIVER_HOME: join(process.env.BENCH_TOOLS ?? "", "phonedriver-home") } }),
++  version: () => execFileSync(bin(), ["--version"], { encoding: "utf8" }).trim(),
++  async setup(ctx) { await ctx.call("launch", { app: ctx.bundleId }, { timeoutMs: 600_000 }); },
++  async read(ctx) { await ctx.call("snapshot", { diff: false }); },
++  async tap(ctx, what) { await ctx.call("tap", tap(what)); },
++  async type(ctx, field, text) { await ctx.call("type", type(field, text)); },
++  async batch(ctx, list) {
++    await ctx.call("batch", { steps: list.map(([what, field, value]) => (what === "type" ? { tool: "type", ...type(field, value) } : { tool: "tap", ...tap(field) })) });
++  },
++  cleanup: ["PhonedriverRunner", "phonedriver-home"],
++};

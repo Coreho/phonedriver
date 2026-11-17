@@ -76,7 +76,46 @@ export function board() {
   return { cell, total, before: j.totals_2026_11_07, device: d.device, date: "10 November 2026" };
 }
 
+type SimStep = { n: number; ok: number; medianMs: number; p90Ms: number; medianTokens: number; callsPerOp: number; reportsChange?: number };
+export type SimTool = {
+  tool: string;
+  name: string;
+  version: string;
+  toolList: { count: number; totalTokens: number };
+  cold: { setupMs: number; firstReadMs: number };
+  read: SimStep;
+  tap: SimStep;
+  type: SimStep;
+  flow: SimStep;
+  flowBatch: SimStep;
+  environment: { macos: string; xcode: string; hardware: { cpu: string; memoryGB: number }; simulator: { deviceType: string; runtime: string } };
+};
+export type SimKey = "read" | "tap" | "type" | "flow" | "flowBatch";
+
+const SIM = "docs/bench/data/simulator-2026-11-17";
+const SIM_TOOLS = ["phonedriver", "simulator-use", "agent-device", "argent"];
+
+export const SIM_STEPS: [SimKey, string, string][] = [
+  ["read", "Read the screen", "The sign-in screen, unchanged, 20 times"],
+  ["tap", "Tap a button", "Sign In with empty fields, after a fresh launch and an untimed read, 20 times"],
+  ["type", "Type into a field", "An email into the Email field, after a fresh launch and an untimed read, 10 times"],
+  ["flow", "Sign in, step by step", "Read, type the email, type the password, tap Sign In, read: five calls, 10 times"],
+  ["flowBatch", "Sign in, one batch", "The same, with the three actions in the tool's own batch call, 10 times"],
+];
+
+export function simulator() {
+  const s = json<{ tokenMethod: string; tools: SimTool[] }>(`${SIM}/summary.json`);
+  const tools = SIM_TOOLS.map((id) => s.tools.find((t) => t.tool === id)!);
+  for (const t of tools) for (const [k] of SIM_STEPS) if (t[k].ok !== t[k].n) throw new Error(`simulator summary: ${t.tool} ${k} passed ${t[k].ok} of ${t[k].n}`);
+  const env = tools[0].environment;
+  const device = env.simulator.deviceType.split(".").pop()!.replace(/-/g, " ");
+  return { tools, method: s.tokenMethod, env, device, runtime: env.simulator.runtime.replace(/ \(.*\)$/, ""), date: "17 November 2026" };
+}
+
 export const DATA_FILES: Record<string, string> = {
+  "simulator-summary.json": `${SIM}/summary.json`,
+  ...Object.fromEntries(SIM_TOOLS.map((t) => [`simulator-${t}.json`, `${SIM}/${t}.json`])),
+  "simulator-harness.patch": "bench/simulator-use/harness.patch",
   "speed.json": "docs/bench/speed.json",
   "jobs.json": "docs/bench/jobs.json",
   "tokens.json": "docs/bench/tokens.json",
@@ -108,5 +147,9 @@ export function benchmarksMd() {
   for (const o of speed())
     s += `| ${o.label} | ${fmt(o.phonedriver)} | ${fmt(o.phonedriver_p95)} | ${fmt(o.adb)} | ${fmt(o.adb_p95)} | ${fmt(o.phone_harness)} | ${fmt(o.phone_harness_p95)} | ${ratio(o.adb / o.phonedriver)} (${fmt(o.adb_ratio_ci[0])} to ${fmt(o.adb_ratio_ci[1])}) |\n`;
   s += `\nOn a ${PHONE.name} phone (${PHONE.os}): reading the screen ${PHONE.read[0]} ms against ${ms(PHONE.read[1])} ms for adb, a screenshot ${PHONE.shot[0]} ms against ${ms(PHONE.shot[1])} ms.\n`;
+  const sim = simulator();
+  s += `\niOS Simulator, simulator-use's own benchmark (its harness, demo app and scoring), ${sim.date}, ${sim.device} Simulator (${sim.runtime}), Mac mini (${sim.env.hardware.cpu}). Median ms, then median tokens (characters / 4); every step of every tool passed.\n\n| Tool | ${SIM_STEPS.map(([, l]) => l).join(" | ")} | Tool list |\n|---|${SIM_STEPS.map(() => "---|").join("")}---|\n`;
+  for (const t of sim.tools)
+    s += `| ${t.name} ${t.version.replace(/^phonedriver /, "")} | ${SIM_STEPS.map(([k]) => `${ms(t[k].medianMs)} ms, ${tokens(t[k].medianTokens)} tokens`).join(" | ")} | ${t.toolList.count} tools, ${tokens(t.toolList.totalTokens)} tokens |\n`;
   return s;
 }

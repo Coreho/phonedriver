@@ -39,7 +39,7 @@ Three tasks (set an alarm, read a birth date on Wikipedia, submit a web form), `
 
 ## Limits of phonedriver
 
-One Android phone is tested on hardware, a HONOR X8 on Android 13; the emulator suite passes on API 26 and 37. On iPhone and iPad a tap takes 454 to 534 ms at p50, over its 80 ms budget. The approval guard matches a fixed list of labels in eleven languages, so an unlabeled button is not guarded. See the README's [Supported devices](../README.md#supported-devices).
+One Android phone is tested on hardware, a HONOR X8 on Android 13; the emulator suite passes on API 26 and 37. On iPhone and iPad a tap takes 454 to 534 ms at p50, over its 80 ms budget. The approval guard matches a fixed list of labels in eleven languages, so an unlabeled button is not guarded. See the README's [Supported devices](../README.md#devices).
 
 ## Sources
 

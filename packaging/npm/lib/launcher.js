@@ -22,7 +22,7 @@ function targetFor(platform, arch) {
   if (!target) {
     throw new Error(
       `no prebuilt binary for ${platform} ${arch}. Supported: ${Object.keys(TARGETS).join(", ")}. ` +
-        "Build from source: https://github.com/hridaya423/phonedriver#install",
+        "Build from source: https://github.com/hridaya423/phonedriver/blob/main/docs/reference.md#install",
     );
   }
   return target;
@@ -85,7 +85,7 @@ async function ensureBinary({ env = process.env, platform = process.platform, ar
   } catch (err) {
     throw new Error(
       `download failed: ${err.message}. Check your connection, or install another way: ` +
-        "https://github.com/hridaya423/phonedriver#install",
+        "https://github.com/hridaya423/phonedriver/blob/main/docs/reference.md#install",
     );
   }
 

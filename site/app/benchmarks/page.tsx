@@ -1,7 +1,28 @@
 import Link from "next/link";
 import { JsonLd } from "@/components/Bits";
 import { PageTop } from "@/components/PageTop";
-import { HARNESSES, PHONE, TASKS, VERSIONS, board, fmt, minutes, ms, op, ratio, short, speed, tokens, type Cell, type Harness, type Op } from "@/lib/bench";
+import {
+  HARNESSES,
+  PHONE,
+  SIM_STEPS,
+  TASKS,
+  VERSIONS,
+  board,
+  fmt,
+  minutes,
+  ms,
+  op,
+  ratio,
+  short,
+  simulator,
+  speed,
+  tokens,
+  type Cell,
+  type Harness,
+  type Op,
+  type SimKey,
+  type SimTool,
+} from "@/lib/bench";
 import { JOBS } from "@/lib/data";
 import { meta } from "@/lib/meta";
 import { AUTHOR, PUBLISHER, REPO, TODAY, raw, url } from "@/lib/site";
@@ -16,7 +37,7 @@ export function generateMetadata() {
   return meta({
     path: "/benchmarks/",
     title: `phonedriver benchmarks: ${fewer} fewer tokens, ${ratio(read.adb / read.phonedriver)} faster than adb`,
-    description: `Nine real phone jobs with Claude Sonnet 5.5: phonedriver used ${fewer} fewer tokens than mobile-mcp. Speed against adb with p50, p95 and intervals. Raw data.`,
+    description: `Nine real phone jobs with Claude Sonnet 5.5: phonedriver used ${fewer} fewer tokens than mobile-mcp. Speed against adb, and the iOS Simulator against simulator-use, agent-device and Argent. Raw data.`,
     og: "/og/benchmarks.png",
     md: true,
   });
@@ -58,6 +79,40 @@ function Speed({ o }: { o: Op }) {
   );
 }
 
+const secs = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(2)} s` : `${ms(v)} ms`);
+
+function SimStep({ k, label, how, tools }: { k: SimKey; label: string; how: string; tools: SimTool[] }) {
+  const max = Math.max(...tools.map((t) => t[k].p90Ms));
+  const [first, second] = [...tools].sort((a, b) => a[k].medianMs - b[k].medianMs);
+  return (
+    <div className="mblock">
+      <h3>{label}</h3>
+      <p>{how}.</p>
+      {tools.map((t) => (
+        <div className={t.tool === "phonedriver" ? "mrow us" : "mrow"} key={t.tool}>
+          <span>{t.name}</span>
+          <span className="mbar" aria-hidden="true">
+            <i style={{ "--f": t[k].medianMs / max } as React.CSSProperties} />
+            <b style={{ "--f": t[k].p90Ms / max } as React.CSSProperties} />
+          </span>
+          <span className="mval">
+            {secs(t[k].medianMs)}
+            <small>p90 {secs(t[k].p90Ms)}</small>
+            <small>{tokens(t[k].medianTokens)} tokens</small>
+          </span>
+        </div>
+      ))}
+      <p>
+        {first.name} is fastest,{" "}
+        {second[k].medianMs / first[k].medianMs < 1.1
+          ? `${secs(second[k].medianMs - first[k].medianMs)} ahead of ${second.name}`
+          : `${ratio(second[k].medianMs / first[k].medianMs)} faster than ${second.name}`}
+        .
+      </p>
+    </div>
+  );
+}
+
 const TOKENS: [string, string, string][] = [
   ['alarm-gym: 7:30 AM weekday alarm "Gym" in Clock', "110,419 (19.5 calls)", "220,723 (19 calls)"],
   ["wiki-birthdate: Chrome, Wikipedia, Grace Hopper's birth date", "57,753 (7 calls)", "53,403 (7 calls)"],
@@ -79,13 +134,15 @@ export default function Benchmarks() {
   const slower = jobs.flatMap(({ task, cells }) => cells.filter(([h, c]) => h !== "phonedriver" && c.wall < cells[0][1].wall).map(([h, c]) => `${h} on ${task} (${c.wall} s against ${cells[0][1].wall} s)`));
   const fastest = jobs.filter(({ cells }) => cells.every(([, c]) => c.wall >= cells[0][1].wall)).length;
   const mixed = jobs.filter(({ cells }) => cells.some(([h]) => h === "adb")).reduce((n, j) => n + j.cells[0][1].tokens, 0);
+  const sim = simulator();
+  const pd = sim.tools[0];
+  const simWins = SIM_STEPS.filter(([k]) => sim.tools.every((t) => t[k].medianMs >= pd[k].medianMs)).length;
   const ld = [
     {
       "@context": "https://schema.org",
       "@type": "Dataset",
-      name: "phonedriver benchmarks: real phone jobs (2026-11-10) and speed (2026-11-07)",
-      description:
-        "Tokens, tool calls, wall time and pass counts for phonedriver, mobile-mcp 1.0.16, phone-harness 0.3.3 and adb on nine phone jobs run by Claude Sonnet 5.5, and p50 and p95 latency of phonedriver, adb and phone-harness on an Android 17 emulator.",
+      name: "phonedriver benchmarks: real phone jobs (2026-11-10), Android speed (2026-11-11) and the iOS Simulator (2026-11-17)",
+      description: `Tokens, tool calls, wall time and pass counts for phonedriver, mobile-mcp 1.0.16, phone-harness 0.3.3 and adb on nine phone jobs run by Claude Sonnet 5.5; p50 and p95 latency of phonedriver, adb and phone-harness on an Android 17 emulator; and time and tokens of ${sim.tools.map((t) => `${t.name} ${t.version.replace(/^phonedriver /, "")}`).join(", ")} on simulator-use's iOS Simulator benchmark.`,
       url: url("/benchmarks/"),
       license: "https://www.gnu.org/licenses/agpl-3.0.html",
       creator: AUTHOR,
@@ -94,6 +151,7 @@ export default function Benchmarks() {
         { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: url("/benchmarks/data/jobs.json") },
         { "@type": "DataDownload", encodingFormat: "text/csv", contentUrl: url("/benchmarks/data/speed-samples.csv") },
         { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: url("/benchmarks/data/speed.json") },
+        { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: url("/benchmarks/data/simulator-summary.json") },
       ],
     },
     {
@@ -121,7 +179,9 @@ export default function Benchmarks() {
         <h1>Benchmarks</h1>
         <p className="lede">
           On nine real phone jobs, mobile-mcp used {ratio(mm.tokens / us.tokens)} the tokens of phonedriver, and reading a screen takes {fmt(read.phonedriver)} ms
-          where adb takes {fmt(read.adb)} ms. Every number, what was thrown away and the raw data are below.
+          where adb takes {fmt(read.adb)} ms. On the iOS Simulator, in simulator-use&apos;s own benchmark, phonedriver was the fastest of four tools{" "}
+          {simWins === SIM_STEPS.length ? "at every step" : `at ${simWins} of ${SIM_STEPS.length} steps`}; simulator-use typed faster by hiding the on-screen
+          keyboard, which phonedriver keeps up as a phone does. Every number, what was thrown away and the raw data are below.
         </p>
         <ul className="jump">
           <li>
@@ -129,6 +189,9 @@ export default function Benchmarks() {
           </li>
           <li>
             <a href="#speed">Speed</a>
+          </li>
+          <li>
+            <a href="#simulator">iOS Simulator</a>
           </li>
           <li>
             <a href="#tokens">An earlier token run</a>
@@ -379,13 +442,122 @@ export default function Benchmarks() {
               </li>
               <li>phone-harness&apos;s helpers ran in process, which spares it a Python start per call and favours it.</li>
               <li>
-                No iOS device is in this run. On the iOS 26.5 Simulator a tap takes 357 ms against 80 ms for the Simulator&apos;s own tool, because XCTest takes about
-                240 ms to confirm the event (D15). On an iPhone 14 Plus and an iPad Pro (M5) it takes 534 and 454 ms.
+                No iOS device is in this run; the iOS Simulator has <a href="#simulator">its own comparison</a> below. On an iPhone 14 Plus and an iPad Pro (M5) a tap
+                takes 534 and 454 ms, because XCTest takes about 240 ms to confirm the event (D15).
               </li>
             </ul>
             <p>
               The earlier 153x figure came from a quieter, single-tool run and is not current.{" "}
               <a href={raw("docs/bench/speed.md")}>The full method, machine state and the history of the number</a> are in the repo.
+            </p>
+
+            <h2 id="simulator">iOS Simulator against simulator-use, agent-device and Argent</h2>
+            <p>
+              This is <a href="https://github.com/NoMac-app/simulator-use/tree/main/bench">simulator-use&apos;s own benchmark</a>: its harness (MIT), its demo app,
+              its five steps on the app&apos;s sign-in screen and its scoring script, with phonedriver added as one more tool. Each tool ran through its own MCP
+              server, one at a time, each after a reboot of the Simulator, on {sim.date}: an {sim.device} Simulator ({sim.runtime}) on a
+              Mac mini ({sim.env.hardware.cpu}, {sim.env.hardware.memoryGB} GB, macOS {sim.env.macos}, {sim.env.xcode.split(",")[0]}). The app&apos;s own log or
+              the tool&apos;s next read checks every step, and every step of every tool passed. Tokens are the replies&apos; characters divided by 4, the
+              harness&apos;s count without an API key. Bars are medians, drawn to scale within each step; the tick is p90.
+            </p>
+            <div className="mgrid two wide">
+              {SIM_STEPS.map(([k, label, how]) => (
+                <SimStep k={k} label={label} how={how} tools={sim.tools} key={k} />
+              ))}
+            </div>
+            <h3>Every step, time and tokens</h3>
+            <p>
+              Median time, with the median tokens of the replies under it. The last column is what the tool list and the server&apos;s instructions put in the
+              agent&apos;s context before its first call.
+            </p>
+            <div className="tw">
+              <table className="figs">
+                <thead>
+                  <tr>
+                    <th scope="col">Tool</th>
+                    {SIM_STEPS.map(([k, label]) => (
+                      <th scope="col" key={k}>
+                        {label}
+                      </th>
+                    ))}
+                    <th scope="col">Tool list</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sim.tools.map((t) => (
+                    <tr key={t.tool}>
+                      <th scope="row">
+                        {t.name} <span>{t.version.replace(/^phonedriver /, "")}</span>
+                      </th>
+                      {SIM_STEPS.map(([k]) => (
+                        <td key={k} className={t.tool === "phonedriver" ? "us" : undefined}>
+                          <b>{secs(t[k].medianMs)}</b>
+                          <small>{tokens(t[k].medianTokens)} tokens</small>
+                        </td>
+                      ))}
+                      <td className={t.tool === "phonedriver" ? "us" : undefined}>
+                        <b>{t.toolList.count} tools</b>
+                        <small>{tokens(t.toolList.totalTokens)} tokens</small>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p>
+              These numbers are phonedriver 0.1.5; 0.1.4 taps and settles through XCTest. Before{" "}
+              <a href={raw("docs/decisions.md#d93-on-the-ios-simulator-one-fingers-touches-and-the-settles-frames-go-through-simio")}>that change</a>, in this
+              harness earlier the same day, a tap took 842 ms and the sign-in step by step 3.63 s. This is one run on one Mac, 10 or 20 samples a step, so the
+              medians describe this run and are not rates.
+            </p>
+            <h3>Where simulator-use is faster</h3>
+            <p>
+              Typing, and the batch, which types twice. simulator-use presses keys on the Simulator&apos;s hardware keyboard port, and iOS answers a hardware key
+              by hiding the on-screen keyboard: none of simulator-use&apos;s replies reports a keyboard, and its last read lists the tab bar as on screen.
+              phonedriver types through XCTest&apos;s text input, as it does on an iPhone, so the on-screen keyboard comes up and covers the bottom of the
+              screen, as it will for the app&apos;s users. phonedriver&apos;s reply waits for the keyboard to finish rising, about half of the step after a fresh
+              launch, and says what it covers (<code>keyboard shown over @e8</code>); the next read marks the tab bar <code>under-keyboard</code>. Hardware keys
+              with the on-screen keyboard kept up were no answer: in apps started after the keyboard was set that way, shift was lost and{" "}
+              <code>Ga@m</code> came out <code>ga2m</code>.
+            </p>
+            <p>
+              Not in the five steps: the first call, a launch of the app. phonedriver&apos;s took {secs(pd.cold.setupMs)} and simulator-use&apos;s{" "}
+              {secs(sim.tools[1].cold.setupMs)}, because phonedriver first starts its XCTest runner on the Simulator, the runner it drives an iPhone with; later
+              calls reuse it. simulator-use&apos;s tap reply is 3 tokens shorter ({tokens(sim.tools[1].tap.medianTokens)} against {tokens(pd.tap.medianTokens)}):
+              phonedriver says what a changed element showed before as well.
+            </p>
+            <p>
+              Real devices and Android are on simulator-use&apos;s own list of{" "}
+              <a href="https://github.com/NoMac-app/simulator-use#what-it-cant-do-yet">what it can&apos;t do yet</a>. phonedriver runs the same commands on an
+              iPhone, an iPad and an Android phone, so on the Simulator it types the way a phone does.
+            </p>
+            <blockquote className="mic">
+              <p>
+                It&apos;s called <b>simulator</b>-use.
+                <br />
+                This is <b>phone</b>driver.
+              </p>
+            </blockquote>
+            <h3>What I changed in the harness</h3>
+            <ul>
+              <li>
+                Added <code>tools/phonedriver.mjs</code>, which drives phonedriver the way its MCP instructions say: read with <code>snapshot</code>, tap and type
+                by the text the screen shows, and type the password with <code>secret: true</code>.
+              </li>
+              <li>
+                Before each tool the harness stops leftover processes by name. This Mac runs other work, so the stop is limited to processes of the benchmark&apos;s
+                own tool folder and Simulator.
+              </li>
+              <li>Device Hub is left alone instead of quit. It was closed for every run, and each results file records that.</li>
+              <li>
+                agent-device&apos;s adapter passes its selector at the top level, the form agent-device 0.21.38 and later take. With the adapter as published, every
+                agent-device tap and type failed with &quot;target was removed; pass the UI target at the top level&quot;.
+              </li>
+            </ul>
+            <p>
+              The whole diff is <a href="/benchmarks/data/simulator-harness.patch">simulator-harness.patch</a>, and the write-up with every version is{" "}
+              <a href={raw("docs/bench/simulator.md")}>docs/bench/simulator.md</a>. If you maintain one of these tools and think I set it up wrong,{" "}
+              <a href={`${REPO}/issues`}>open an issue</a> and I will rerun it.
             </p>
 
             <h2 id="tokens">An earlier token run: three small tasks</h2>
@@ -440,6 +612,22 @@ export default function Benchmarks() {
               </li>
               <li>
                 <a href="/benchmarks/data/tokens.json">tokens.json</a>: every run of the earlier three-task benchmark.
+              </li>
+              <li>
+                <a href="/benchmarks/data/simulator-summary.json">simulator-summary.json</a>: the iOS Simulator run as the harness&apos;s <code>summarize.mjs</code>{" "}
+                scores it, and every call with its reply for{" "}
+                {sim.tools.map((t, i) => (
+                  <span key={t.tool}>
+                    {i ? (i === sim.tools.length - 1 ? " and " : ", ") : ""}
+                    <a href={`/benchmarks/data/simulator-${t.tool}.json`}>{t.name}</a>
+                  </span>
+                ))}
+                .
+              </li>
+              <li>
+                Repeat the iOS Simulator run: apply <a href="/benchmarks/data/simulator-harness.patch">simulator-harness.patch</a> to simulator-use&apos;s{" "}
+                <code>bench</code> folder, then <code>bash bench/setup.sh</code> and{" "}
+                <code>bash bench/run-all.sh &lt;folder&gt; phonedriver simulator-use agent-device argent</code>.
               </li>
               <li>
                 Repeat the speed run: <code>PH_PYTHON=&lt;python with phone-harness 0.3.3&gt; bash bench/speed/reproduce.sh</code> in the <a href={REPO}>repository</a>.
