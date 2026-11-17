@@ -464,15 +464,19 @@ async fn set_into_a_field_that_refuses_set_text_selects_all_and_pastes_over_it()
     );
 }
 
-/// The power service's last user activity on the phone's own screen, in ms of uptime.
+/// The power service's last user activity on the phone's own screen, in ms of uptime, counting activity that leaves the
+/// screen's brightness as it is.
 async fn last_user_activity(raw: &agent::RawAgent) -> u64 {
     let out = raw.adb.shell(&raw.serial, "dumpsys power").await.unwrap();
     out.stdout_text()
         .lines()
         .filter_map(|l| {
             let l = l.trim();
-            l.strip_prefix("lastUserActivityTime=")
-                .or_else(|| l.strip_prefix("mLastUserActivityTime="))
+            ["lastUserActivityTime", "mLastUserActivityTime"]
+                .iter()
+                .find_map(|k| l.strip_prefix(k))
+                .map(|rest| rest.strip_prefix("NoChangeLights").unwrap_or(rest))
+                .and_then(|rest| rest.strip_prefix('='))
         })
         .filter_map(|v| v.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok())
         .max()

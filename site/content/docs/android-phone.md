@@ -54,7 +54,7 @@ I have tested one physical Android phone, a HONOR X8 (MagicOS, Android 13), over
 
 Unlocking the phone, a USB debugging prompt and a biometric prompt are yours. When one blocks the agent, the error says what to do on the device and the command line exits with code 3. The agent tells you and continues when you say it is done.
 
-phonedriver keeps the phone awake while it is in use: for 10 minutes after each command it resets the screen timeout every 10 seconds, on the phone's own screen and on the hidden one, and `phonedriver release` stops that. This comes with 0.1.5.
+phonedriver keeps the phone awake while it is in use: for 10 minutes after each command it resets the screen timeout every 10 seconds, on the phone's own screen and on the hidden one, and `phonedriver release` stops that. The screen still dims on its usual schedule; it only does not go off. This comes with 0.1.5.
 
 ## Safety on a real phone
 

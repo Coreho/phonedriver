@@ -3034,3 +3034,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Live: see D92's Evidence. The mini's `~/.emulator_console_auth_token` was from an older emulator and was replaced with win-pc's.
 - Also found: after a boot under heavy disk load the emulator's screen was off (`mWakefulness=0`, `mCurrentFocus=null` for 30 minutes); `input keyevent KEYCODE_WAKEUP` gave the launcher focus.
 
+## 2026-11-17: the keep-awake nudge lets the screen dim (D86 amended)
+
+- Asked: why the owner's screen stayed lit in hidden mode. The nudge called `userActivity` with no flags, which brightens the screen every 10 s.
+- Changed: `PowerManager.java` passes `USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS` (1); `agent_live.rs`'s `last_user_activity` also reads `lastUserActivityTimeNoChangeLights`, where such activity is recorded.
+- Proof on the API 37 emulator (win-pc, through the mini's tunnel), `stay_on_while_plugged_in` 0 and timeout 15 s for the run (`dim/proof.sh`, run 3; runs 1 and 2 failed on the emulator, not the change): bright at 5 s, `policy=DIM` brightness 0.05 from 10 s, still `Awake` and dim at 60 s with `lastUserActivityTime` 70 s old and the NoChangeLights time refreshed every ~10 s; after `release`, `policy=OFF` at 5 s and `Asleep` at 10 s. Settings restored (`1`, `2147483647`).
+- `cargo test -p phonedriver-android --test agent_live a_phone_in_use -- --ignored` on the emulator: 1 passed in 12.9 s.
+- Docs: D86's amendment, the Android phone page, CHANGELOG.
+

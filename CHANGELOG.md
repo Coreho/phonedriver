@@ -17,7 +17,7 @@ Not released yet.
 - **App permissions**: `phonedriver apps grant <app> <permission>` and `revoke` work without launching the app.
 - **Crashes**: an action during which the app crashed says so in its reply, and `phonedriver logs` prints the app's last lines and its last crash.
 - **Several agents on one Android phone**: a device id that ends in `+a`, `+b` and so on gives each agent a hidden screen of its own (Android 13 and later).
-- **An Android phone in use stays awake**: while phonedriver has used a phone in the last 10 minutes it resets the phone's screen timeout every 10 seconds, on the phone's own screen and with `PHONEDRIVER_DISPLAY=hidden`, so the phone no longer locks while an agent thinks. `phonedriver release` stops it. Tested on a HONOR X8.
+- **An Android phone in use stays awake**: while phonedriver has used a phone in the last 10 minutes it resets the phone's screen timeout every 10 seconds, on the phone's own screen and with `PHONEDRIVER_DISPLAY=hidden`, so the phone no longer locks while an agent thinks. The screen still dims on its usual schedule. `phonedriver release` stops it. Tested on a HONOR X8 and the emulator.
 - **The emulator's console**: on an Android emulator, `phonedriver shell "emu geo fix -122.41 37.77"` sets the location, and any other console command works the same way (`emu sms send`, `emu power capacity`). On the iOS Simulator, `shell "simctl location set 37.77,-122.41"` does it.
 - **Fingerprint and Face ID**: `press fingerprint` and `press wrong-fingerprint` on an Android emulator and on an iOS Simulator.
 - **`press landscape` and `press portrait`** turn the screen.
