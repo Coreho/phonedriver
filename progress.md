@@ -2925,3 +2925,18 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
   sign in, batched             median 5.26 s  tokens 177  ok 10 of 10  calls 3
   ```
   One earlier run of the same tree had one step-by-step sign-in of 10 fail; the next two runs had none. Its text was not kept.
+
+## 2026-11-17: on macOS, Vision reads at the Fast level only (D88)
+
+- Asked: "holy shit why?" about `compare` taking 21 to 31 s the first time on a Mac and 10 to 15 s every time on the Mac mini.
+- Found:
+  - with a Swift probe that times `VNRecognizeTextRequest` in a fresh process, on the MacBook the Accurate level's first call took 28,235 ms (then 146 ms) and the Fast level's 41 to 56 ms (then 20 to 23 ms);
+  - on the mini the Accurate level failed every call (`nilError`) after 12 to 17 s, with any compute device or renderer.
+  - The OCR test binary that hung for over 7 minutes on the mini was waiting in a Core Image GPU render inside Vision (`sample`).
+  - Single calls stalled for 172 to 256 s at either level with every setting, while the mini swapped (3.6 of 4 GB) and another session compiled Metal shaders.
+- Changed: `ocr::recognize` on macOS reads at the Fast level only; `Level` and `recognize_at` are gone. The macOS OCR tests are merged into `vision_reads_the_taps_tab_at_both_sizes_settings_and_the_ios_tab_bar`.
+- On the mini, `cargo test -p phonedriver --test ocr`: the five reading tests pass; the speed test fails there (`p50 174.2 ms, min 53.5, max 177075.3`).
+- On the MacBook, the debug binary, a new process each time, pairs of the iOS testbed's screenshots (the first timings I took were of pairs of different sizes, which `compare` refuses before reading any text, so they are not counted):
+  - `taps.png text.png`: 1.17 s, 14 lines, `+ "Plain" at 76,185` first;
+  - `gestures.png dialogs.png`: 0.44 s; `busy.png nav.png`: 0.27 s, `changed: 6 regions, 2.3% of the screen`;
+  - `list.png list.png`: 0.15 s, `same` (no text read).

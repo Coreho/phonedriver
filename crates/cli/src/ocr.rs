@@ -2,9 +2,9 @@
 //! (`Windows.Media.Ocr`) on Windows, and the `tesseract` program on Linux when it is installed. All three run on
 //! this machine and send nothing anywhere.
 //!
-//! Vision hands back normalized boxes with the origin at the bottom left. `boundingBox`, `setRevision` and the
-//! Core Image calls that enlarge a picture are declared `unsafe` by the `objc2` crates, so this module allows
-//! unsafe code for those and nothing else.
+//! Vision hands back normalized boxes with the origin at the bottom left. `boundingBox` and the Core Image calls
+//! that enlarge a picture are declared `unsafe` by the `objc2` crates, so this module allows unsafe code for those
+//! and nothing else.
 
 #![cfg_attr(target_os = "macos", allow(unsafe_code))]
 
@@ -13,47 +13,14 @@ use phonedriver_core::error::Op;
 use phonedriver_core::geometry::Size;
 use phonedriver_core::ocr::TextBox;
 
-/// Recognizes text in `png`, a screenshot of a screen `screen` points large.
+/// Recognizes text in `png`, a screenshot of a screen `screen` points large, at Vision's Fast level.
 ///
-/// Reads at Vision's Accurate level. Once that level has refused a picture the Fast level could read, this process
-/// reads at the Fast level only.
+/// With the picture enlarged to about three pixels a point, the Fast level reads all 30 strings of the testbed's taps
+/// tab, 23 of its 24 two-character labels exact (the Accurate level: 24), in about 20 ms on an M4 Pro. The Accurate
+/// level needs a model that macOS 27.0.1 compiles on a process's first call: 28 s on an M4 Pro, and on a Mac mini
+/// whose compiled models are never cached it failed every process's first call after 12 to 17 s (decision D88).
 #[cfg(target_os = "macos")]
 pub fn recognize(png: &[u8], screen: Size) -> Result<Vec<TextBox>, Error> {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    // On macOS 27.0.1, on a Mac where `~/Library/Caches/<program>/com.apple.e5rt.e5bundlecache` is never written
-    // (a Mac mini with 3 GB of disk free: every program's was empty), the Accurate level reads until the process
-    // has been idle for 8 s and from then on fails every call with `CRImageReaderError 1` under an e5rt error
-    // (`create_precompiled_compute_operation`, code 13): three probe runs and three whole test runs on 2026-11-15.
-    // Later that day it refused from a process's first call, and a refusal took seconds, not 10 ms: 33 reads took
-    // 222 s. It was never seen to recover inside a process, so one refusal ends the asking. The Fast level read
-    // every frame the Accurate level refused.
-    static ACCURATE_REFUSES: AtomicBool = AtomicBool::new(false);
-    if !ACCURATE_REFUSES.load(Ordering::Relaxed)
-        && let Ok(boxes) = recognize_at(png, screen, Level::Accurate)
-    {
-        return Ok(boxes);
-    }
-    let boxes = recognize_at(png, screen, Level::Fast)?;
-    ACCURATE_REFUSES.store(true, Ordering::Relaxed);
-    Ok(boxes)
-}
-
-/// How hard Vision looks.
-#[cfg(target_os = "macos")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Level {
-    /// Vision's Accurate level, revision 2: all 30 strings of the testbed's taps tab at one pixel a point, in
-    /// about 45 ms.
-    Accurate,
-    /// Vision's Fast level, which does not load the model the Accurate level needs. On the same tab it reads 20
-    /// strings as the picture comes, 26 enlarged twice and 28 enlarged three times, so the picture is enlarged to
-    /// about three pixels a point first. About 40 ms a frame.
-    Fast,
-}
-
-/// Recognizes text in `png` at one of Vision's levels, with no fallback to the other.
-#[cfg(target_os = "macos")]
-pub fn recognize_at(png: &[u8], screen: Size, level: Level) -> Result<Vec<TextBox>, Error> {
     use objc2::AnyThread;
     use objc2::rc::{Retained, autoreleasepool};
     use objc2::runtime::AnyObject;
@@ -72,38 +39,26 @@ pub fn recognize_at(png: &[u8], screen: Size, level: Level) -> Result<Vec<TextBo
     autoreleasepool(|_| {
         let request = VNRecognizeTextRequest::new();
         request.setUsesLanguageCorrection(false);
+        request.setRecognitionLevel(VNRequestTextRecognitionLevel::Fast);
         let data = NSData::with_bytes(png);
+        let image = unsafe { CIImage::imageWithData(&data) }.ok_or(UNREADABLE)?;
+        let across = unsafe { image.extent() }.size.width.max(1.0);
+        let enlarge = (3.0 * f64::from(screen.w) / across).round().clamp(1.0, 3.0);
+        let image = unsafe {
+            image.imageByApplyingTransform(CGAffineTransform {
+                a: enlarge,
+                b: 0.0,
+                c: 0.0,
+                d: enlarge,
+                tx: 0.0,
+                ty: 0.0,
+            })
+        };
         let options: Retained<NSDictionary<_, AnyObject>> = NSDictionary::new();
-        let handler = if level == Level::Fast {
-            request.setRecognitionLevel(VNRequestTextRecognitionLevel::Fast);
-            let image = unsafe { CIImage::imageWithData(&data) }.ok_or(UNREADABLE)?;
-            let across = unsafe { image.extent() }.size.width.max(1.0);
-            let enlarge = (3.0 * f64::from(screen.w) / across).round().clamp(1.0, 3.0);
-            let image = unsafe {
-                image.imageByApplyingTransform(CGAffineTransform {
-                    a: enlarge,
-                    b: 0.0,
-                    c: 0.0,
-                    d: enlarge,
-                    tx: 0.0,
-                    ty: 0.0,
-                })
-            };
-            unsafe {
-                VNImageRequestHandler::initWithCIImage_options(
-                    VNImageRequestHandler::alloc(),
-                    &image,
-                    &options,
-                )
-            }
-        } else {
-            // Revisions 1 and 3 run the Accurate model on the Neural Engine, which on macOS 27.0.1 takes 18 to 36 s and
-            // often fails with an e5rt error; revision 2 recognizes the same text in about 45 ms.
-            unsafe { request.setRevision(2) };
-            request.setRecognitionLevel(VNRequestTextRecognitionLevel::Accurate);
-            VNImageRequestHandler::initWithData_options(
+        let handler = unsafe {
+            VNImageRequestHandler::initWithCIImage_options(
                 VNImageRequestHandler::alloc(),
-                &data,
+                &image,
                 &options,
             )
         };

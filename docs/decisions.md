@@ -863,6 +863,8 @@ The first run is why the `shell` description no longer says to prefer it for set
 
 **Reopen if.** A later macOS writes the cache on that Mac (then check whether the fallback still runs at all); the Fast level's misreads show up in agent runs.
 
+**Superseded by D88** (2026-11-16): Vision reads at the Fast level only, so no process waits for the Accurate level's model.
+
 ## D65. A Linux host reads pixels with Tesseract when it is installed, after cleaning the picture for it
 
 **Choice.** On Linux (every host that is neither macOS nor Windows), `recognize` runs the `tesseract` program found on the `PATH`: `tesseract stdin stdout --psm 11 tsv`, the picture on its standard input, its word table parsed by `phonedriver_core::ocr::from_tesseract_tsv`. Nothing is linked and nothing is downloaded; without the program the reply is `unsupported` and names the package to install (`tesseract-ocr`). Before the picture is handed over it is made grey, enlarged to three pixels a point, and each pixel is replaced by how far it is from the mean of the square of 16 points around it (24 levels or fewer are white, three times the rest is the darkness). Words Tesseract is less than 60% sure of are left out. This replaces the "Linux has none" of D61.
@@ -1260,3 +1262,17 @@ D85 rejected two of these cuts, because each took away something an agent uses. 
 - `at` is in the JSON reply only. The command line prints it with `--json`.
 
 **Rejected.** Dropping a `~` line's old value (`~ @e7 cell "Invalid email or password"`): it would win the single tap, but the old value is what lets an agent see which of two similar rows changed without reading the screen again. Not printing the keyboard at all: an agent needs to know that part of the screen is covered.
+
+## D88. On macOS, Vision reads at the Fast level only
+
+**Choice.** `recognize` on macOS reads at Vision's Fast level only, with the picture enlarged to about three pixels a point through Core Image first, as D64's fallback did. The Accurate level, its revision 2, the fallback that remembered a refusal for the rest of the process, and `recognize_at` are gone.
+
+**Why.** The Accurate level needs a model that macOS 27.0.1 compiles on a process's first call, and the command line is a new process for every `compare`. The user asked why `compare` took 21 to 31 s the first time on a Mac and 10 to 15 s every time on the Mac mini. A probe that times `VNRecognizeTextRequest` in a fresh process, 2026-11-16: on the MacBook (M4 Pro, macOS 27.0.1) the Accurate level's first call took 28 s and the next ones 146 ms; the Fast level's first call took 41 to 56 ms and the next ones 20 to 23 ms. On the Mac mini the Accurate level failed every call (`nilError`) after 12 to 17 s, whatever the compute device or renderer, and the Fast level read. On the four pictures the tests use (the testbed's taps tab at one and two pixels a point, Android's Settings, the iOS testbed's gestures tab) the Fast level found what D64 records the Accurate level finding, except `Busy`, read as `Bus`: 23 of the taps tab's 24 two-character labels exact at one pixel a point, and 21 at two.
+
+**Rejected.** Warming the Accurate model up in the daemon: `compare` runs in its own process, and the warm-up would still cost a Mac 28 s of compute the first time and the mini a 12 to 17 s refusal at every daemon start. Pinning Vision to the CPU and giving it a software Core Image context (`setComputeDevice`, `kCIContextUseSoftwareRenderer`): the same speed on the MacBook, and on the mini they did not stop the stalls under Limits. A lock so that one Vision call runs at a time: the stalls came on one thread too.
+
+**Evidence.** `phonedriver compare` (debug build) on the MacBook, a new process each time, on pairs of the iOS testbed's screenshots: 0.27 to 1.17 s for two different tabs, the slowest the taps and text tabs (`+ "Plain" at 76,185`, `- "Last tap: none" at 302,352` and twelve more lines), and 0.15 s and `same` for a picture against itself, which reads no text. On the mini, `--test ocr`: the five reading tests pass.
+
+**Limits.** The Fast level misreads small, low-contrast text more often than the Accurate level did: `B0` came out `BO` on an iOS screenshot at 1.5 pixels a point. On the Mac mini, which was swapping (3.6 of 4 GB) while another session compiled Metal shaders, single Vision calls stalled for 172 to 256 s with the CPU idle, waiting in Core Image renders, at both levels and with every setting tried. The speed test (`a_frame_of_412_by_915_takes_under_120_ms_at_the_median`) fails there for that reason (median 174 ms, one call 177 s). Not seen on the MacBook.
+
+**Reopen if.** Agent runs show the Fast level's misreads costing taps, or a later macOS caches the Accurate model so that its first call is fast.

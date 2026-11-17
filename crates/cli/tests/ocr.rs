@@ -131,78 +131,28 @@ fn tesseract_reads_the_taps_tab_light_and_dark_at_one_and_two_pixels_per_point()
     }
 }
 
-/// What Vision's Accurate level reads, or `None` after saying so on a Mac where that level refuses to run (see
-/// the note in `recognize`): there `recognize` answers from the Fast level, which the test below covers.
-#[cfg(target_os = "macos")]
-fn accurate(png: &[u8], w: f32, h: f32) -> Option<Vec<String>> {
-    use phonedriver::ocr::{Level, recognize_at};
-    match recognize_at(png, Size { w, h }, Level::Accurate) {
-        Ok(boxes) => Some(boxes.into_iter().map(|b| b.text).collect()),
-        Err(e) => {
-            eprintln!("Vision's Accurate level refuses on this Mac ({e}); nothing checked");
-            None
-        }
-    }
-}
-
+/// Vision on four pictures: the testbed's taps tab at one and two pixels a point, Android's Settings and the iOS
+/// testbed's gestures tab.
 #[cfg(target_os = "macos")]
 #[test]
-fn the_android_testbed_taps_tab_at_one_pixel_per_point() {
-    let Some(found) = accurate(&read(&format!("{ANDROID}testbed_taps.png")), 411.0, 923.0) else {
-        return;
-    };
-    let mut expected = vec!["Taps", "Text", "List", "Gestures", "Busy", "Dark theme"];
-    let buttons: Vec<String> = (1..12).map(|i| format!("b{i}")).collect();
-    expected.extend(buttons.iter().map(String::as_str));
-    assert_finds(&found, &expected);
-}
-
-#[cfg(target_os = "macos")]
-#[test]
-fn the_same_tab_at_twice_the_resolution_reads_the_lower_rows_too() {
-    if hosted_runner() {
-        return;
-    }
-    let Some(found) = accurate(
-        &read(&format!("{FIXTURES}testbed_taps_2x.png")),
-        411.0,
-        923.0,
-    ) else {
-        return;
-    };
-    let mut expected = vec!["Taps", "Text", "List", "Gestures", "Dark theme"];
-    let buttons: Vec<String> = [
-        0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23,
-    ]
-    .iter()
-    .map(|i| format!("b{i}"))
-    .collect();
-    expected.extend(buttons.iter().map(String::as_str));
-    assert_finds(&found, &expected);
-}
-
-/// The reader `recognize` falls back to when Vision's Accurate level fails, on the same four pictures.
-#[cfg(target_os = "macos")]
-#[test]
-fn the_quick_reader_reads_the_same_pictures_when_the_accurate_one_cannot() {
-    use phonedriver::ocr::{Level, recognize_at};
+fn vision_reads_the_taps_tab_at_both_sizes_settings_and_the_ios_tab_bar() {
     let quick = |path: String, w: f32, h: f32| -> Vec<phonedriver_core::ocr::TextBox> {
-        recognize_at(&read(&path), Size { w, h }, Level::Fast).unwrap()
+        recognize(&read(&path), Size { w, h }).unwrap()
     };
     let words = |boxes: &[phonedriver_core::ocr::TextBox]| -> Vec<String> {
         boxes.iter().map(|b| b.text.clone()).collect()
     };
-    for file in [
-        format!("{ANDROID}testbed_taps.png"),
-        format!("{FIXTURES}testbed_taps_2x.png"),
+    for (file, least) in [
+        (format!("{ANDROID}testbed_taps.png"), 22),
+        (format!("{FIXTURES}testbed_taps_2x.png"), 19),
     ] {
         let boxes = quick(file, 411.0, 923.0);
         let found = words(&boxes);
-        assert_finds(&found, &["Taps", "Text", "Gestures", "Dark theme"]);
+        assert_finds(&found, &["Taps", "Text", "List", "Gestures", "Dark theme"]);
         let labels = (0..24)
             .filter(|i| found.iter().any(|f| *f == format!("b{i}")))
             .count();
-        assert!(labels >= 19, "{labels} of 24 labels in {found:?}");
+        assert!(labels >= least, "{labels} of 24 labels in {found:?}");
         let dark = boxes
             .iter()
             .find(|b| b.text.contains("Dark theme"))
