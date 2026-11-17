@@ -429,7 +429,7 @@ pub(crate) enum Verb {
         #[arg(long, default_value_t = 1)]
         from: usize,
         /// Compare the screen after each step with the screenshot this folder keeps for it, and stop at the first
-        /// whose text changed. A step with no screenshot there keeps its own. The status bar's clock is left out.
+        /// whose text changed. A step with no screenshot there keeps its own. The status bar is left out.
         #[arg(long, value_name = "DIR")]
         screens: Option<PathBuf>,
     },
@@ -1357,7 +1357,7 @@ pub(crate) fn compared(
     after: &[u8],
     image: Option<&std::path::Path>,
 ) -> Result<String, String> {
-    let report = crate::compare::compare(before, after)?;
+    let report = crate::compare::compare(before, after, 0.0)?;
     let mut text = crate::compare::render(&report);
     if let Some(path) = image.filter(|_| !report.regions.is_empty()) {
         let marks: Vec<phonedriver_video::marks::Mark> = report
@@ -2064,6 +2064,14 @@ impl Replay {
     }
 }
 
+/// Observed on the API 37 emulator, about one replay in seven: a step's screenshot caught a switch's thumb halfway
+/// across (read as "q•") or the app's window still black after a restart, and the same screen matched a moment later.
+/// So a screen that differs is looked at again, every `LOOK_AGAIN`, until it has stayed the same for `STILL_FOR` or
+/// `LOOK_FOR` has passed, and one about to be kept must first look the same twice.
+const LOOK_AGAIN: std::time::Duration = std::time::Duration::from_millis(250);
+const STILL_FOR: std::time::Duration = std::time::Duration::from_millis(1500);
+const LOOK_FOR: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Compares the screen after step `n` with the screenshot `dir` keeps for it, or keeps it there when there is none.
 /// A failure comes with the hint for it.
 async fn screen(
@@ -2072,24 +2080,26 @@ async fn screen(
     dir: &std::path::Path,
     n: usize,
 ) -> Result<Screen, (Failure, Option<String>)> {
-    let result = client
-        .call("screenshot", with(json!({"marks": false, "inline": true})))
-        .await
-        .map_err(|f| (f, None))?;
-    let shot: ScreenshotResult = decode(&result).map_err(|f| (f, None))?;
-    let now = base64::engine::general_purpose::STANDARD
-        .decode(shot.data_b64.unwrap_or_default())
-        .map_err(|e| {
-            (
-                Failure::Local(format!("the daemon sent bad image data: {e}")),
-                None,
-            )
-        })?;
     let path = dir.join(format!("{n:02}.png"));
     let local = |m: String| (refused(&m), None);
+    let (mut now, bar) = shoot(client, with).await?;
+    let still = |a: &[u8], b: &[u8]| {
+        crate::compare::still(a, b, bar)
+            .map_err(|e| local(format!("its screen cannot be compared with itself: {e}")))
+    };
     let kept = match std::fs::read(&path) {
         Ok(kept) => kept,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let started = std::time::Instant::now();
+            loop {
+                tokio::time::sleep(LOOK_AGAIN).await;
+                let (next, _) = shoot(client, with).await?;
+                let settled = still(&now, &next)?;
+                now = next;
+                if settled || started.elapsed() >= LOOK_FOR {
+                    break;
+                }
+            }
             std::fs::create_dir_all(dir)
                 .and_then(|()| std::fs::write(&path, &now))
                 .map_err(|e| local(format!("cannot keep {}: {e}", path.display())))?;
@@ -2097,29 +2107,64 @@ async fn screen(
         }
         Err(e) => return Err(local(format!("cannot read {}: {e}", path.display()))),
     };
-    let report = crate::compare::compare(&kept, &now).map_err(|e| {
-        local(format!(
-            "its screen cannot be compared with {}: {e}",
-            path.display()
-        ))
-    })?;
-    if report.regions.is_empty() {
-        return Ok(Screen::Same);
+    let started = std::time::Instant::now();
+    loop {
+        let report = crate::compare::compare(&kept, &now, bar).map_err(|e| {
+            local(format!(
+                "its screen cannot be compared with {}: {e}",
+                path.display()
+            ))
+        })?;
+        if report.regions.is_empty() {
+            return Ok(Screen::Same);
+        }
+        if report.text.is_empty() && report.unread.is_none() {
+            return Ok(Screen::Silent(report.regions.len()));
+        }
+        let still_since = std::time::Instant::now();
+        loop {
+            if still_since.elapsed() >= STILL_FOR || started.elapsed() >= LOOK_FOR {
+                return Err((
+                    refused(&format!(
+                        "its screen is not the one in {}\n{}",
+                        path.display(),
+                        crate::compare::render(&report)
+                    )),
+                    Some(format!(
+                        "If the new screen is right, delete {} and replay again to keep it.",
+                        path.display()
+                    )),
+                ));
+            }
+            tokio::time::sleep(LOOK_AGAIN).await;
+            let (next, _) = shoot(client, with).await?;
+            if !still(&now, &next)? {
+                now = next;
+                break;
+            }
+        }
     }
-    if report.text.is_empty() && report.unread.is_none() {
-        return Ok(Screen::Silent(report.regions.len()));
-    }
-    Err((
-        refused(&format!(
-            "its screen is not the one in {}\n{}",
-            path.display(),
-            crate::compare::render(&report)
-        )),
-        Some(format!(
-            "If the new screen is right, delete {} and replay again to keep it.",
-            path.display()
-        )),
-    ))
+}
+
+/// A screenshot's PNG and the rows its status bar covers.
+async fn shoot(
+    client: &mut Client,
+    with: &(dyn Fn(Value) -> Value + Sync),
+) -> Result<(Vec<u8>, f32), (Failure, Option<String>)> {
+    let result = client
+        .call("screenshot", with(json!({"marks": false, "inline": true})))
+        .await
+        .map_err(|f| (f, None))?;
+    let shot: ScreenshotResult = decode(&result).map_err(|f| (f, None))?;
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(shot.data_b64.unwrap_or_default())
+        .map_err(|e| {
+            (
+                Failure::Local(format!("the daemon sent bad image data: {e}")),
+                None,
+            )
+        })?;
+    Ok((png, shot.status_bar.unwrap_or(0) as f32))
 }
 
 fn refused(detail: &str) -> Failure {

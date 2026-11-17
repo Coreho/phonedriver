@@ -450,6 +450,7 @@ impl Device for CoreDevice {
                 },
             }],
             nodes: Vec::new(),
+            status_bar: None,
         })
     }
 

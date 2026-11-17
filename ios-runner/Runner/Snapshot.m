@@ -185,6 +185,24 @@ static NSArray *PUSpringboardAlerts(void)
     return out;
 }
 
+// The status bar is SpringBoard's too. Its frame changes only with the orientation, which the app's width tells, so
+// it is asked for once for each width.
+static CGFloat PUStatusBarBottom(CGFloat width)
+{
+    static XCUIApplication *springboard;
+    static NSMutableDictionary<NSNumber *, NSNumber *> *bottoms;
+    if (!springboard) {
+        springboard = [[XCUIApplication alloc] initWithBundleIdentifier:@"com.apple.springboard"];
+        bottoms = [NSMutableDictionary dictionary];
+    }
+    NSNumber *key = @(width);
+    if (!bottoms[key]) {
+        XCUIElement *bar = springboard.statusBars.firstMatch;
+        bottoms[key] = @(bar.exists ? CGRectGetMaxY(bar.frame) : 0);
+    }
+    return bottoms[key].doubleValue;
+}
+
 NSDictionary *PUSnapshot(NSInteger maxDepth, NSError **error)
 {
     id<XCAccessibilityElement> element = PUActiveElement(error);
@@ -208,5 +226,7 @@ NSDictionary *PUSnapshot(NSInteger maxDepth, NSError **error)
     NSMutableDictionary *reply = [@{@"app": @{@"bundle_id": app.bundleID ?: @"", @"pid": @(pid)}, @"nodes": nodes} mutableCopy];
     NSArray *alerts = PUSpringboardAlerts();
     if (alerts.count) reply[@"alerts"] = alerts;
+    CGFloat bar = PUStatusBarBottom(root.frame.size.width);
+    if (bar > 0) reply[@"bar"] = @(bar);
     return reply;
 }

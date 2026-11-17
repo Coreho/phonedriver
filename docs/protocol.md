@@ -167,7 +167,7 @@ Frames: `u32 big-endian length` + UTF-8 JSON. Requests carry `id`; replies echo 
 | op | Request fields (device px) | Reply |
 |---|---|---|
 | `hello` | `version` | device facts |
-| `tree` | none | `{windows:[{id, type, package, layer, bounds}], nodes:[RawNode]}`; every node is listed with its `v`/`V` flags, and full-width status and navigation bar windows (at most a tenth of the screen high, on the top or bottom edge) are left out |
+| `tree` | none | `{windows:[{id, type, package, layer, bounds}], nodes:[RawNode], bar?}`; every node is listed with its `v`/`V` flags, and full-width status and navigation bar windows (at most a tenth of the screen high, on the top or bottom edge) are left out; `bar` is the bottom edge in pixels of the status bar left out, when there was one |
 | `gesture` | `pointers:[{id, path:[{x, y, t_ms}]}]` | `{}` after the final UP is delivered |
 | `key` | `keycode, meta?, action?: "down"|"up"|"press"` | `{}` |
 | `text` | `mode` (`paste`, `set`, `keys`), `text`, `sensitive?` (marks the clip `IS_SENSITIVE`) | `{}`; `set` acts on the focused input field; `keys` fails with `unmappable character U+XXXX at N` before typing anything |
@@ -241,7 +241,7 @@ Every request carries `id` and `op`. A reply echoes `id` and adds `ok: true` plu
 | op | Request | Reply |
 |---|---|---|
 | `hello` | `version` | `{version, ios, model, screen:{w,h,scale}, udid?, build?}` (points; `model` is the machine id, for example `iPhone18,3`; on a simulator `udid` is the simulator's, from `SIMULATOR_UDID`; `build` echoes the `PHONEDRIVER_BUILD` the daemon launched it with, the hash of the runner sources) |
-| `snapshot` | `max_depth` (default 30) | `{app:{bundle_id, pid}, nodes:[RawNode]}` with bounds in points |
+| `snapshot` | `max_depth` (default 30) | `{app:{bundle_id, pid}, nodes:[RawNode], alerts?, bar?}` with bounds in points; `bar` is the bottom edge of SpringBoard's status bar, asked for once for each width of the app |
 | `gesture` | `pointers:[{path:[{x,y,t_ms}]}]` (points, 1 to 5 pointers, `t_ms` non-decreasing) | `{}` after the last lift is delivered |
 | `screenshot` | `quality (0..100, default 80), format: "jpeg"|"png"|"luma"` (default `jpeg`), `scale?` (output pixels per point, above 0 and at most 4; 0 or absent means native pixels; required for `luma`) | `{data_b64, w, h}` (`w`, `h` in pixels); `luma` is one byte of gray per pixel, rows top to bottom, no header |
 | `type` | `text`, `speed?` (characters per second, default 60) | `{}` |

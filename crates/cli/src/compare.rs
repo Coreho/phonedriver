@@ -193,6 +193,15 @@ pub fn without_clock(mut report: Report, height: f32) -> Report {
     report
 }
 
+/// Leaves out what changed wholly inside the top `top` pixels of the pictures, where the system's status bar is: its
+/// clock, notification icons and battery change on their own between two screenshots of one app screen.
+fn below(mut report: Report, top: f32) -> Report {
+    let above = |r: Rect| r.y + r.h <= top;
+    report.text.retain(|c| !above(at(c)));
+    report.regions.retain(|r| !above(*r));
+    report
+}
+
 fn at(change: &TextChange) -> Rect {
     match change {
         TextChange::Changed { at, .. }
@@ -248,7 +257,27 @@ pub fn text_changes(before: &[TextBox], after: &[TextBox], regions: &[Rect]) -> 
 }
 
 /// Compares two PNG screenshots of one size. Text is read from both only when pixels differ.
-pub fn compare(before_png: &[u8], after_png: &[u8]) -> Result<Report, String> {
+/// True when no pixels below the top `top` changed between two pictures of one screen.
+pub fn still(before_png: &[u8], after_png: &[u8], top: f32) -> Result<bool, String> {
+    let (before, after) = (decode(before_png)?, decode(after_png)?);
+    if (before.width, before.height) != (after.width, after.height) {
+        return Ok(false);
+    }
+    let (regions, share) = regions(&before, &after);
+    Ok(below(
+        Report {
+            regions,
+            share,
+            ..Report::default()
+        },
+        top,
+    )
+    .regions
+    .is_empty())
+}
+
+/// What changed between two pictures of one screen, leaving out the top `top` pixels (the status bar's, or none).
+pub fn compare(before_png: &[u8], after_png: &[u8], top: f32) -> Result<Report, String> {
     let before =
         decode(before_png).map_err(|e| format!("the first picture cannot be read: {e}"))?;
     let after = decode(after_png).map_err(|e| format!("the second picture cannot be read: {e}"))?;
@@ -259,11 +288,14 @@ pub fn compare(before_png: &[u8], after_png: &[u8]) -> Result<Report, String> {
         ));
     }
     let (regions, share) = regions(&before, &after);
-    let mut report = Report {
-        regions,
-        share,
-        ..Report::default()
-    };
+    let mut report = below(
+        Report {
+            regions,
+            share,
+            ..Report::default()
+        },
+        top,
+    );
     if report.regions.is_empty() {
         return Ok(report);
     }
@@ -275,7 +307,7 @@ pub fn compare(before_png: &[u8], after_png: &[u8]) -> Result<Report, String> {
     match (read(before_png), read(after_png)) {
         (Ok(b), Ok(a)) => {
             report.text = text_changes(&b, &a, &report.regions);
-            report = without_clock(report, screen.h);
+            report = below(without_clock(report, screen.h), top);
         }
         (Err(e), _) | (_, Err(e)) => report.unread = Some(e.to_string()),
     }
@@ -517,6 +549,42 @@ mod tests {
     }
 
     #[test]
+    fn what_changed_inside_the_status_bar_is_left_out_and_what_reaches_below_it_is_not() {
+        let icon = rect(336.0, 16.0, 48.0, 16.0);
+        let title = rect(0.0, 40.0, 400.0, 40.0);
+        let report = Report {
+            regions: vec![rect(40.0, 16.0, 24.0, 24.0), icon, title],
+            share: 0.05,
+            text: vec![
+                TextChange::Added {
+                    text: "O".into(),
+                    at: rect(44.0, 18.0, 14.0, 14.0),
+                },
+                TextChange::Changed {
+                    from: "Inbox".into(),
+                    to: "Inbox 2".into(),
+                    at: rect(20.0, 44.0, 120.0, 32.0),
+                },
+            ],
+            unread: None,
+        };
+        let left = below(report, 52.0);
+        assert_eq!(left.regions, vec![title]);
+        assert_eq!(left.text.len(), 1);
+        assert!(matches!(&left.text[0], TextChange::Changed { from, .. } if from == "Inbox"));
+
+        let only_bar = Report {
+            regions: vec![icon],
+            text: vec![TextChange::Added {
+                text: "O".into(),
+                at: icon,
+            }],
+            ..Report::default()
+        };
+        assert_eq!(render(&below(only_bar, 52.0)), "same");
+    }
+
+    #[test]
     fn the_report_reads_like_a_snapshot_diff() {
         assert_eq!(render(&Report::default()), "same");
         let report = Report {
@@ -542,6 +610,27 @@ mod tests {
              + \"All changes saved\" at 40,248\n\
              region 0,36 100x24 (no text changed)"
         );
+    }
+
+    fn png(p: &Picture) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let mut e = png::Encoder::new(&mut bytes, p.width as u32, p.height as u32);
+        e.set_color(png::ColorType::Grayscale);
+        e.write_header().unwrap().write_image_data(&p.luma).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn a_picture_is_still_when_nothing_below_the_status_bar_moved() {
+        let base = flat(64, 128, 200);
+        let shot = png(&base);
+        let icon = png(&painted(base.clone(), 40, 8, 8, 8, 0));
+        let row = png(&painted(base, 40, 80, 8, 8, 0));
+        assert!(still(&shot, &shot, 0.0).unwrap());
+        assert!(!still(&shot, &icon, 0.0).unwrap());
+        assert!(still(&shot, &icon, 24.0).unwrap());
+        assert!(!still(&shot, &row, 24.0).unwrap());
+        assert!(!still(&shot, &png(&flat(64, 64, 200)), 0.0).unwrap());
     }
 
     #[test]

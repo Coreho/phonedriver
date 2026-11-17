@@ -388,7 +388,7 @@ changed: 2 regions, 35.7% of the screen
 hint: If the new screen is right, delete screens/settings/05.png and replay again to keep it.
 ```
 
-Pixels that changed with no text in them (a pressed row, a scroll bar) do not stop a replay; the step's line says how many regions changed. The status bar's clock is left out. A screenshot of another size stops the replay, so keep the screens on the device type the replays run on. Text is read with the recognition of section 9, so on Linux it needs Tesseract. Decision D89.
+Pixels that changed with no text in them (a pressed row, a scroll bar) do not stop a replay; the step's line says how many regions changed. The status bar is left out (its clock, notification icons, battery and signal): the Android agent and the iOS runner report how far down it reaches. A screen that differs is looked at again every quarter second until it has stayed the same for 1.5 s or 5 s have passed, so a switch still sliding or a picture the video encoder has not sharpened yet does not stop the replay; a screen about to be kept must first look the same twice. A screenshot of another size stops the replay, so keep the screens on the device type the replays run on. Text is read with the recognition of section 9, so on Linux it needs Tesseract. Decision D89.
 
 #### Replaying runs in GitHub Actions
 

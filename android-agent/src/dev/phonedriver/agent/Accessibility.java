@@ -280,10 +280,14 @@ final class Accessibility {
     private static JSONObject read() {
         JSONArray windows = new JSONArray();
         JSONArray nodes = new JSONArray();
+        int statusBar = 0;
         for (AccessibilityWindowInfo w : displayWindows()) {
             Rect b = new Rect();
             w.getBoundsInScreen(b);
             if (isEdgeBar(w, b)) {
+                if (b.top == 0) {
+                    statusBar = b.bottom;
+                }
                 continue;
             }
             AccessibilityNodeInfo root = Build.VERSION.SDK_INT >= 33
@@ -302,7 +306,8 @@ final class Accessibility {
                 walk(root, -1, nodes);
             }
         }
-        return Json.put(Json.put(new JSONObject(), "windows", windows), "nodes", nodes);
+        JSONObject tree = Json.put(Json.put(new JSONObject(), "windows", windows), "nodes", nodes);
+        return statusBar > 0 ? Json.put(tree, "bar", statusBar) : tree;
     }
 
     // Status and navigation bars are full-width system windows of at most a tenth of the screen height on the

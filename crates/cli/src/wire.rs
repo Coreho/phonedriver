@@ -276,6 +276,9 @@ pub struct ScreenshotResult {
     /// How many elements were boxed, when the screenshot asked for marks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marks: Option<u32>,
+    /// How many rows at the top of the picture the system's status bar covers, when the last screen read showed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_bar: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]

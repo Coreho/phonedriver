@@ -58,7 +58,7 @@ changed: 2 regions, 35.7% of the screen
 hint: If the new screen is right, delete screens/settings/05.png and replay again to keep it.
 ```
 
-Pixels that change with no text in them, such as a pressed row or a scroll bar, do not stop a replay, and the status bar's clock is left out. Keep the screens on the device type CI runs, since a screenshot of another size stops the replay.
+Pixels that change with no text in them, such as a pressed row or a scroll bar, do not stop a replay, and the status bar is left out: its clock, notification icons and battery change on their own. A screen that differs is looked at again until it stops moving, so an animation that had not finished does not fail the job. Keep the screens on the device type CI runs, since a screenshot of another size stops the replay.
 
 ## Run the files in GitHub Actions
 

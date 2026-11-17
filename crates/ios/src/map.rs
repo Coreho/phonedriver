@@ -560,6 +560,14 @@ mod tests {
     }
 
     #[test]
+    fn the_status_bar_springboard_reported_is_kept_with_the_tree() {
+        let mut reply: Value = serde_json::from_str(TESTBED_MAIN).unwrap();
+        assert_eq!(raw_tree(&reply, SCREEN).unwrap().status_bar, None);
+        reply["bar"] = json!(62);
+        assert_eq!(raw_tree(&reply, SCREEN).unwrap().status_bar, Some(62.0));
+    }
+
+    #[test]
     fn a_prompt_of_springboard_in_front_is_listed_once() {
         let prompt = |parent: i64| {
             json!([

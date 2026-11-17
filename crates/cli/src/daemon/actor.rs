@@ -1331,6 +1331,16 @@ impl Actor {
             .map_err(|e| Error::Transport {
                 detail: format!("cannot write {}: {e}", path.display()),
             })?;
+        let bar = self
+            .shown
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|t| t.status_bar);
+        let status_bar = bar
+            .zip(self.live.as_ref().map(|l| l.screen().h))
+            .filter(|&(_, h)| h > 0.0)
+            .map(|(bar, h)| (bar * image.height as f32 / h).ceil() as u32);
         Ok(ScreenshotResult {
             path: path.display().to_string(),
             width: image.width,
@@ -1339,6 +1349,7 @@ impl Actor {
             data_b64: inline
                 .then(|| base64::engine::general_purpose::STANDARD.encode(&image.bytes)),
             marks: marked,
+            status_bar,
         })
     }
 
