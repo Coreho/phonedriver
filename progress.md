@@ -3042,3 +3042,10 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - `cargo test -p phonedriver-android --test agent_live a_phone_in_use -- --ignored` on the emulator: 1 passed in 12.9 s.
 - Docs: D86's amendment, the Android phone page, CHANGELOG.
 
+## 2026-11-17: two recipes in the skill: a Simulator push, Android frame times
+
+- K4 and K5 of the overnight list, as recipes rather than code: `shell` already reaches both.
+- iOS Simulator: `phonedriver shell "simctl push com.apple.mobilecal /tmp/pd-push.json"` answered `exit 0` and `Notification sent to 'com.apple.mobilecal'` on the mini (a banner needs the app's notification permission).
+- Android: `shell "dumpsys gfxinfo com.android.settings reset"`, `launch Settings`, `swipe up`, then `shell "dumpsys gfxinfo com.android.settings" --grep "Janky|percentile"` answered `Janky frames: 16 (94.12%)`, `50th percentile: 200ms`, ... (the emulator was starved by another session's builds on win-pc's disk).
+- Both SKILL.md files list them.
+
