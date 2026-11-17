@@ -7,17 +7,15 @@ export const slug = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+/** Code spans stand aside as placeholders while bold, italics and links apply, so `**` around code makes it bold. */
 export function inline(s: string): string {
-  return s
-    .split(/(`[^`]+`)/)
-    .map((p) => {
-      if (p.length > 1 && p.startsWith("`") && p.endsWith("`")) return `<code>${esc(p.slice(1, -1))}</code>`;
-      return esc(p)
-        .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
-        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-        .replace(/(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])/g, "<em>$1</em>");
-    })
-    .join("");
+  const codes: string[] = [];
+  const marked = s.replace(/`([^`]+)`/g, (_, c: string) => `\u0000${codes.push(`<code>${esc(c)}</code>`) - 1}\u0000`);
+  return esc(marked)
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])/g, "<em>$1</em>")
+    .replace(/\u0000(\d+)\u0000/g, (_, i: string) => codes[Number(i)]);
 }
 
 function screen(code: string) {

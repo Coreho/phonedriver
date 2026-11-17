@@ -3090,3 +3090,10 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Test: `a_lane_this_daemon_still_holds_is_waited_for_and_other_refusals_are_not`; the Android lib's 71 tests pass, clippy clean.
 - Live, API 37 emulator: 15 reconnects right after `daemon stop` before the change and 5 after all answered (the race needs a reconnect inside one daemon); `text.steps` replayed in 14.2 s.
 - Also: the mini's adb tunnel to win-pc had dropped with the LAN for a minute and was opened again.
+
+## 2026-11-17: the site renders bold around code, and its check fails on markdown left in a page
+
+- Found building the site for this branch (task H): on the changelog page `**`phonedriver init`**` showed as `** phonedriver init **`. `inline` in `site/lib/md.ts` split the text at code spans before it looked for `**`, so bold that wraps code never matched. The live site has it once in the changelog and four times on the troubleshooting page.
+- Test first: `scripts/check.mjs` now fails on `**` left in a page's text outside `pre`, `code`, `script` and `style`. On the build before the fix: `problems 22` (changelog and troubleshooting). After it: `problems 0`.
+- Changed: `inline` puts code spans aside as placeholders, applies links, bold and italics to the whole line, then puts the code back.
+- Built on the mini with this branch's `site/`, `CHANGELOG.md`, `docs/bench` and `.github/assets` (`next build`, the repo's `node_modules`): the changelog shows 0.1.5 and the new lines, the Replay in CI page the new paragraph; Firefox screenshots of both looked at. `tsc --noEmit` clean. Not deployed: that needs the user's word.

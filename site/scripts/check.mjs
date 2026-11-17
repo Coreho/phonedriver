@@ -82,6 +82,8 @@ for (const [f, p] of pages) {
     if (!p.tags.some((t) => t.name === "link" && t.a.rel === "canonical")) fail("CANONICAL", rel);
   }
   for (const t of p.tags.filter((t) => t.name === "img")) if (!t.a.alt || !t.a.width || !t.a.height) fail("IMG", rel, JSON.stringify(t.a));
+  const prose = p.html.replace(/<(pre|code|script|style)\b[\s\S]*?<\/\1>/g, "").replace(/<[^>]+>/g, "");
+  for (const m of prose.matchAll(/\*\*/g)) fail("MARKDOWN LEFT IN", rel, JSON.stringify(prose.slice(Math.max(0, m.index - 30), m.index + 30)));
 }
 for (const f of ["sitemap.xml", "robots.txt", "llms.txt", "llms-full.txt", "blog/feed.xml", "404.html", "favicon.svg", "benchmarks/data/speed-samples.csv", "og/docs.png", "faq/index.md"])
   if (!existsSync(join(OUT, f))) fail("MISSING", f);
