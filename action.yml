@@ -199,6 +199,7 @@ runs:
             result="stopped: $(grep -m1 '^error:' "$out/$name.txt" | sed 's/^error: //')"
             phonedriver screenshot "$out/$name.png" > /dev/null 2>&1
             phonedriver logs --head 0 > "$out/$name.logs.txt" 2>&1
+            cp "${PHONEDRIVER_HOME:-$HOME/.phonedriver}"/runner/*.log "$out/" 2> /dev/null
             echo "::error file=$f::$result"
           fi
           [ "$RECORD" = true ] && phonedriver record stop > /dev/null
