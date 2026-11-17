@@ -2990,3 +2990,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Seen once, not reproduced in four cold starts: a replay right after `daemon stop` failed at its first step with `device sim:E02F... disconnected`.
 - Added `testbeds/android/runs/taps.steps` (restart, switch Dark theme, open List; no keyboard) and a second Action step in `replay-action.yml` that replays it against the screens the first step kept.
 
+## 2026-11-17: the iOS runner no longer fills Xcode's DerivedData
+
+- Found while freeing the Mac mini's disk (302 MB left): `~/Library/Developer/Xcode/DerivedData` held 84 `PhonedriverRunner-*` folders, 940 MB. Each is one runner session: `xcodebuild test-without-building` had no `-derivedDataPath`, so it made a new folder at every start, and when the runner was stopped it gathered `simctl_diagnostics` (the Simulator's system log archive, `system.logarchive` alone 95 MB) into its result bundle: 20 KB to 250 MB a session. A user's Mac gets the same from every session.
+- Failing check first, on the mini with the debug build (`pd-dd-check.sh`: count the folders, `daemon stop`, `snapshot`, `daemon stop`, count): `before 83, after 84`.
+- Changed (`crates/ios/src/runner.rs`): one `test_without_building` for the Simulator and the iPhone, with `-collect-test-diagnostics never` (in `xcodebuild -help` of Xcode 27.0) and `-derivedDataPath <home>/runner/<udid>.dd`, deleted before each start.
+- After: `before 84, after 84`, and `runner/E02FE8A6-....dd` is 204 KB. The 67 folders older than 30 minutes were the mini's own leftovers from tests and were deleted (979 MB free after).
+- Docs: architecture's Simulator lifecycle paragraph, CHANGELOG.
+

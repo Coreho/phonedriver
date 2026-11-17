@@ -571,12 +571,7 @@ impl Runner {
         let err = file.try_clone().map_err(|e| Error::Transport {
             detail: format!("cannot write {}: {e}", log.display()),
         })?;
-        let mut child = Command::new("xcodebuild")
-            .arg("test-without-building")
-            .arg("-xctestrun")
-            .arg(&build.xctestrun)
-            .args(["-destination", &format!("id={udid}")])
-            .args(["-test-timeouts-enabled", "NO"])
+        let mut child = test_without_building(&build.xctestrun, udid, home)
             .env("TEST_RUNNER_PHONEDRIVER_PORT", port.to_string())
             .env("TEST_RUNNER_PHONEDRIVER_BUILD", &build.hash)
             .stdin(std::process::Stdio::null())
@@ -639,6 +634,25 @@ fn blocked(log: &str) -> Option<UserAction> {
 /// The runner's fixed port on a device; the host reaches it through usbmuxd, so nothing is claimed on the Mac.
 pub const DEVICE_PORT: u16 = PORT_BASE;
 
+/// `xcodebuild test-without-building`, which runs the runner, for `xctestrun` on `udid`. Xcode otherwise leaves a new
+/// folder in its own DerivedData at every start, and when the runner is stopped it gathers 120 to 250 MB of the
+/// Simulator's system logs into it; here the logs go under `home`, replaced at every start, and none are gathered.
+fn test_without_building(xctestrun: &Path, udid: &str, home: &Path) -> Command {
+    let logs = home.join("runner").join(format!("{udid}.dd"));
+    let _ = std::fs::remove_dir_all(&logs);
+    let mut xcodebuild = Command::new("xcodebuild");
+    xcodebuild
+        .arg("test-without-building")
+        .arg("-xctestrun")
+        .arg(xctestrun)
+        .args(["-destination", &format!("id={udid}")])
+        .args(["-test-timeouts-enabled", "NO"])
+        .args(["-collect-test-diagnostics", "never"])
+        .arg("-derivedDataPath")
+        .arg(logs);
+    xcodebuild
+}
+
 impl Runner {
     /// Starts the runner on a attached device with `xcodebuild test-without-building` (signed build from
     /// `build_for(home, Some(team))`) or reuses one that answers `hello` with this udid and build.
@@ -679,12 +693,7 @@ impl Runner {
         };
         let file = std::fs::File::create(&log).map_err(io)?;
         let err = file.try_clone().map_err(io)?;
-        let mut child = Command::new("xcodebuild")
-            .arg("test-without-building")
-            .arg("-xctestrun")
-            .arg(&build.xctestrun)
-            .args(["-destination", &format!("id={udid}")])
-            .args(["-test-timeouts-enabled", "NO"])
+        let mut child = test_without_building(&build.xctestrun, udid, home)
             .env("TEST_RUNNER_PHONEDRIVER_PORT", DEVICE_PORT.to_string())
             .env("TEST_RUNNER_PHONEDRIVER_BUILD", &build.hash)
             .env("TEST_RUNNER_PHONEDRIVER_UDID", udid)
