@@ -1,7 +1,9 @@
+import { onFrame } from "./frame";
+
 const RAMP = [".", ":", "·", "1", "0", "8", "@"];
 
 /** A still texture of glyphs on a canvas, the weave's material in two dimensions. `shade` gives the density (0 to 1) at a point in CSS pixels; denser places get heavier glyphs. */
-export function glyphField(canvas: HTMLCanvasElement, shade: (x: number, y: number, w: number, h: number) => number, cell = 9) {
+export function glyphField(canvas: HTMLCanvasElement, shade: (x: number, y: number, w: number, h: number) => number, cell = 9, lit?: (x: number, y: number) => boolean) {
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
@@ -12,12 +14,14 @@ export function glyphField(canvas: HTMLCanvasElement, shade: (x: number, y: numb
   const style = getComputedStyle(canvas);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.font = `700 ${cell}px ${style.fontFamily}`;
-  ctx.fillStyle = style.color;
+  const ink = style.color;
+  const hot = style.getPropertyValue("--or").trim() || ink;
   ctx.textBaseline = "top";
   for (let y = 0; y < h; y += cell * 1.15) {
     for (let x = 0; x < w; x += cell * 0.82) {
       const s = shade(x, y, w, h);
       if (s < 0.06) continue;
+      ctx.fillStyle = lit?.(x, y) ? hot : ink;
       ctx.globalAlpha = 0.12 + 0.6 * Math.min(1, s);
       ctx.fillText(RAMP[Math.min(RAMP.length - 1, Math.floor(s * RAMP.length))], x, y);
     }
@@ -30,40 +34,65 @@ export const grain = (a: number, b: number) => {
   return n - Math.floor(n);
 };
 
-/** A character drawn large in glyphs on `.faq-mark`. The glyphs are dealt again each time a question under `el` opens or closes. */
+const TURN = 9000;
+const RATE = 70;
+const DEPTH = 9;
+
+/** A character drawn large in glyphs on `.faq-mark`, as a slab turning about its upright axis: the face is dense and its edge is lighter. It turns only while on screen, and stands still for a reader who asked for less motion. */
 export function mountMark(el: HTMLElement): () => void {
   const canvas = el.querySelector<HTMLCanvasElement>(".faq-mark")!;
   const mask = document.createElement("canvas");
-  let seed = 0;
-  const draw = () => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let off: (() => void) | null = null;
+  let drawn = 0;
+  const draw = (now: number) => {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     if (!w || !h) return;
+    const turn = reduce ? 0.45 : (now / TURN) * Math.PI * 2;
+    const face = Math.cos(turn);
+    const side = Math.sin(turn);
     mask.width = w;
     mask.height = h;
     const ctx = mask.getContext("2d", { willReadFrequently: true })!;
-    ctx.clearRect(0, 0, w, h);
-    ctx.filter = "blur(5px)";
-    ctx.font = `800 ${h * 1.12}px ${getComputedStyle(canvas).fontFamily}`;
+    ctx.font = `800 ${h * 1.08}px ${getComputedStyle(canvas).fontFamily}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(canvas.dataset.mark!, w / 2, h * 0.54);
-    const alpha = ctx.getImageData(0, 0, w, h).data;
+    const layer = (k: number, tone: number) => {
+      ctx.setTransform(Math.abs(face) < 0.04 ? 0.04 : face, 0, 0, 1, w / 2 + side * k * (w * 0.022), h * 0.54);
+      ctx.fillStyle = `rgb(${tone},${tone},${tone})`;
+      ctx.fillText(canvas.dataset.mark!, 0, 0);
+    };
+    for (let k = -DEPTH; k < DEPTH; k++) layer(side * face > 0 ? -k : k, 95);
+    layer(side * face > 0 ? -DEPTH : DEPTH, 255);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const px = ctx.getImageData(0, 0, w, h).data;
     glyphField(canvas, (x, y) => {
-      const a = alpha[(Math.min(h - 1, Math.round(y + 5)) * w + Math.min(w - 1, Math.round(x + 3))) * 4 + 3] / 255;
-      return a < 0.12 ? 0 : Math.min(1, a * 1.25) * (0.62 + 0.38 * grain(Math.round(x / 7) + seed * 13, Math.round(y / 9) + seed * 7));
+      const i = (Math.min(h - 1, Math.round(y + 5)) * w + Math.min(w - 1, Math.round(x + 3))) * 4;
+      const a = (px[i] / 255) * (px[i + 3] / 255);
+      return a < 0.1 ? 0 : a * (0.7 + 0.3 * grain(Math.round(x / 7), Math.round(y / 9)));
     });
   };
-  const deal = () => {
-    seed++;
-    draw();
+  const tick = (now: number) => {
+    if (now - drawn < RATE) return;
+    drawn = now;
+    draw(now);
   };
-  const ro = new ResizeObserver(draw);
+  const io = new IntersectionObserver(([e]) => {
+    if (e.isIntersecting && !off && !reduce) off = onFrame(tick);
+    else if (!e.isIntersecting && off) {
+      off();
+      off = null;
+    }
+  });
+  io.observe(canvas);
+  const still = () => draw(performance.now());
+  const ro = new ResizeObserver(still);
   ro.observe(canvas);
-  el.addEventListener("toggle", deal, true);
-  document.fonts.ready.then(draw);
+  document.fonts.ready.then(still);
   return () => {
+    off?.();
+    io.disconnect();
     ro.disconnect();
-    el.removeEventListener("toggle", deal, true);
   };
 }

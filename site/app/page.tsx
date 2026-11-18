@@ -177,6 +177,13 @@ export default function Home() {
     },
   ];
   const read = race[0].o;
+  const LIMITS = [
+    ["Which devices is it tested on?", `Android emulators (API 26 and 37), a ${PHONE.name} (${PHONE.os}), the iOS Simulator, an iPhone 13 Pro Max, an iPhone 14 Plus and an iPad Pro. Other Android phones use the same path.`],
+    ["How long does a tap take?", `${Math.round(op("tap_paced").phonedriver)} to ${Math.round(op("tap").phonedriver)} ms on an Android emulator and 450 to 530 ms on a real iPhone.`],
+    ["Should I let it run on my own phone unattended?", "The model can do anything on the phone you could do with your finger. For unattended runs, use an emulator or a spare phone."],
+    ["What happens if the phone locks?", "The task stops. phonedriver never enters a passcode and can't pass Face ID or a fingerprint check."],
+    ["Does it work in banking apps?", "Screens that block screenshots, as some banking apps do, come out black in a screenshot. Their text can still be read."],
+  ];
   const ld = [
     ...softwareLd(),
     { "@context": "https://schema.org", "@type": "WebSite", name: "phonedriver", alternateName: "phonedriver.dev", description: HOME_DESC, url: url("/"), inLanguage: "en", publisher: PUBLISHER },
@@ -195,7 +202,7 @@ export default function Home() {
     {
       "@context": "https://schema.org",
       "@type": "FAQPage",
-      mainEntity: HOME_FAQ.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: plain(a) } })),
+      mainEntity: [...HOME_FAQ, ...LIMITS].map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: plain(a) } })),
     },
   ];
   return (
@@ -735,13 +742,11 @@ export default function Home() {
               <div className="tr-n tr-daemon">
                 <h3>Local daemon</h3>
                 <p className="tr-line">
-                  <span className="tr-stack" aria-hidden="true">
-                    {[4, 3, 2, 1].map((r) => (
-                      <i key={r} style={{ "--n": r } as React.CSSProperties} />
-                    ))}
-                    <i style={{ "--n": 0 } as React.CSSProperties}>
-                      {Array.from({ length: 72 }, (_, c) => c + 1).map((n) => (n === 10 ? <b key={n}>@e{n} </b> : `@e${n} `))}
-                    </i>
+                  <span className="tr-core">
+                    <canvas className="tr-stack" aria-hidden="true" />
+                    <span className="tr-ref">
+                      <b>{replay.trace.reply[0].match(/@e\d+/)![0]}</b> is {replay.trace.cmd.replace(/^tap /, "")}
+                    </span>
                   </span>
                   <i className="tr-wire" data-via="adb or Xcode" aria-hidden="true" />
                 </p>
@@ -826,32 +831,28 @@ export default function Home() {
         <Route n={8} say={STOPS[7][2]} short={STOPS[7][3]} />
         <div className="wrap hm-rail">
           <div className="faq-side">
-            <h2>Limits and questions.</h2>
+            <h2>Questions and limits.</h2>
             <canvas className="faq-mark" data-mark="?" aria-hidden="true" />
             <MarkEngine />
           </div>
           <div>
-            <ul className="limits" data-land="">
-              <li>
-                Tested on Android emulators (API 26 and 37), a {PHONE.name} ({PHONE.os}), the iOS Simulator, an iPhone 13 Pro Max, an iPhone 14 Plus and an iPad Pro. Other
-                Android phones use the same path.
-              </li>
-              <li>
-                A tap takes {Math.round(op("tap_paced").phonedriver)} to {Math.round(op("tap").phonedriver)} ms on an Android emulator and 450 to 530 ms on a real iPhone.
-              </li>
-              <li>The model can do anything on the phone you could do with your finger. For unattended runs, use an emulator or a spare phone.</li>
-              <li>phonedriver never enters a passcode and can&apos;t pass Face ID or a fingerprint check, so a phone that locks mid-task stops the task.</li>
-              <li>Screens that block screenshots, as some banking apps do, come out black in a screenshot. Their text can still be read.</li>
-            </ul>
             <div className="faq" id="faq">
-              <div className="faq-list">
-                {HOME_FAQ.map(([q, a], i) => (
-                  <details className="qa" name="faq" key={q} open={i === 0}>
-                    <summary>
-                      <h3>{q}</h3>
-                    </summary>
-                    <Html html={`<p>${inline(a)}</p>`} />
-                  </details>
+              <div className="faq-list" data-land="">
+                {[
+                  ["Getting started", HOME_FAQ],
+                  ["Limits", LIMITS],
+                ].map(([group, items], g) => (
+                  <div className="faq-group" key={group as string}>
+                    <h3 className="hm-kick">{group as string}</h3>
+                    {(items as string[][]).map(([q, a], i) => (
+                      <details className="qa" name="faq" key={q} open={g === 0 && i === 0}>
+                        <summary>
+                          <h3>{q}</h3>
+                        </summary>
+                        <Html html={`<p>${inline(a)}</p>`} />
+                      </details>
+                    ))}
+                  </div>
                 ))}
                 <p className="small">
                   More answers, on speed, tokens, iPhones and other tools, are in <Link href="/faq/">the FAQ</Link>.

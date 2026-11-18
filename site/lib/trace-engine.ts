@@ -13,7 +13,7 @@ export function mountTrace(el: HTMLElement): () => void {
   const at: [number, number] = JSON.parse(el.dataset.tap!);
   const tapped = Number(el.dataset.t);
   const chip = el.querySelector<HTMLElement>(".tr-chip")!;
-  const stack = el.querySelector<HTMLElement>(".tr-stack")!;
+  const stack = el.querySelector<HTMLCanvasElement>(".tr-stack")!;
   const shot = el.querySelector<HTMLElement>(".tr-shot")!;
   const video = shot.querySelector("video")!;
   const tap = shot.querySelector<HTMLElement>(".ln-tap")!;
@@ -34,6 +34,7 @@ export function mountTrace(el: HTMLElement): () => void {
     if (n === step) return;
     step = n;
     el.dataset.step = String(n);
+    plates();
   };
   const rest = () => {
     video.pause();
@@ -89,20 +90,69 @@ export function mountTrace(el: HTMLElement): () => void {
     t0 = performance.now();
     off = onFrame(tick);
   };
+  const PLATES = 5;
+  let seed = 0;
+  const plates = () => {
+    const hot = step === 2;
+    glyphField(
+      stack,
+      (x, y, w, h) => {
+        const lean = w * 0.16;
+        const wide = w - lean;
+        const face = h * 0.3;
+        const rise = (h - face - 12) / (PLATES - 1);
+        if (y > h - 3) return 0;
+        for (let i = 0; i < PLATES; i++) {
+          const top = i * rise;
+          const k = (y - top) / face;
+          if (k >= 0 && k <= 1) {
+            const left = lean * (1 - k);
+            if (x >= left && x <= left + wide) return i === 0 ? 0.5 + 0.5 * grain(Math.round(x / 6) + seed, Math.round(y / 8)) : 0.16 + 0.3 * grain(Math.round(x / 6) + i * 31, Math.round(y / 8));
+          }
+          if (y > top + face && y <= top + face + 9 && x >= 0 && x <= wide) return 0.95;
+        }
+        return 0;
+      },
+      8,
+      (_, y) => hot && y < stack.clientHeight * 0.3,
+    );
+  };
+  let shuffled = 0;
+  const idle = (now: number) => {
+    if (now - shuffled < 320) return;
+    shuffled = now;
+    seed++;
+    plates();
+  };
   const draw = () =>
     glyphField(stream, (x, y, w, h) => {
       const d = Math.abs(y - h / 2 - Math.sin(x * 0.02) * h * 0.12) / (h * (0.22 + 0.1 * Math.sin(x * 0.011 + 2)));
       return d > 1 ? 0 : (1 - d * d) * (0.45 + 0.55 * grain(Math.round(x / 7), Math.round(y / 9)));
     });
 
-  const ro = new ResizeObserver(draw);
+  const ro = new ResizeObserver(() => {
+    draw();
+    plates();
+  });
   ro.observe(stream);
+  ro.observe(stack);
+  let shimmer: (() => void) | null = null;
+  const io = new IntersectionObserver(([e]) => {
+    if (e.isIntersecting && !shimmer && !reduce) shimmer = onFrame(idle);
+    else if (!e.isIntersecting && shimmer) {
+      shimmer();
+      shimmer = null;
+    }
+  });
+  io.observe(stack);
   play.addEventListener("click", run);
   el.addEventListener("life", run);
   play.hidden = false;
   rest();
   return () => {
     off?.();
+    shimmer?.();
+    io.disconnect();
     ro.disconnect();
     play.removeEventListener("click", run);
     el.removeEventListener("life", run);
