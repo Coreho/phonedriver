@@ -214,7 +214,7 @@ const PALM = curl([0, 0, 0, 0, 0], [-0.08, 0, 0.05, 0.03], [0, 0, 0.05, 0.03], [
 /** The raised palm at the approval stop. It comes up from the bottom edge of the pane when the recorded question does. */
 export function mountPalm(el: HTMLElement): () => void {
   const canvas = el.querySelector<HTMLCanvasElement>(".ask-fig")!;
-  const ask = el.querySelector<HTMLElement>(".ask")!;
+  const ask = el.closest(".pay")!.querySelector<HTMLElement>(".ask")!;
   const delay = 1100;
   let t0 = -1e9;
   const prop = mountProp(canvas, {

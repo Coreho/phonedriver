@@ -67,7 +67,11 @@ Setup moves from second place to the end: the route starts with someone else's o
 - `lib/views-engine.ts`: the read (dither + shed) and the hover link.
 - `lib/dots-engine.ts`, `type-engine.ts`: unchanged roles.
 - `lib/race-engine.ts`: unchanged role, balls out and back.
-- `lib/lanes-engine.ts`, `lib/replay-engine.ts`: recordings played on one clock (decision D94). The lanes deal five videos from the phone's own screen and mark each tap. The saved run is a tape of stops beside one phone: actions travel from the phone to the tape while the agent drives, and from the tape to the phone on replay, and the tape jams where the last recording stops.
+- Figures sit on the page, not in a pane (decision D95): the pane is kept for text a terminal printed. A figure is recordings, the dotted orange route joining them, and a still field of glyphs (`lib/field.ts`, the weave's material in two dimensions).
+- `lib/lanes-engine.ts`: five recordings on one clock, as a staircase rising from the phone's own screen, each fed by a route from one point on that screen; a route marches while its agent's call is in flight.
+- `lib/replay-engine.ts`: the saved run as a route of numbered stops beside one phone, in three recordings; the last halts at the stop whose screen differs and brings the saved screen up beside it.
+- `lib/trace-engine.ts`: one recorded tap traced from the agent's command through the daemon to the phone, and its real reply back.
+- The approval stop is the held button cropped from the recording, the question as it was asked, and the palm.
 - Without JavaScript or with reduced motion: every stop is its final state, the spoken line is plain text above the heading, no canvas.
 
 ## Stops, desktop

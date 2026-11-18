@@ -53,7 +53,11 @@ const passes = PASSES.map((pass) => {
   };
 });
 execFileSync("sips", ["-s", "format", "jpeg", "-s", "formatOptions", "80", "--resampleWidth", "360", join(data, `screens/${String(stops).padStart(2, "0")}.png`), "--out", join(assets, "saved.jpg")], { stdio: "ignore" });
+const TRACED = 1;
+const sent = session.indexOf(`$ phonedriver ${steps[TRACED]}`);
+if (sent < 0) throw new Error("the traced step is not in the session");
 const out = {
+  trace: { step: TRACED, cmd: steps[TRACED], reply: session.slice(sent + 1, sent + 6) },
   file: "network.steps",
   steps,
   stops,

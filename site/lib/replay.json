@@ -1,4 +1,15 @@
 {
+ "trace": {
+  "step": 1,
+  "cmd": "tap \"Display & touch\"",
+  "reply": [
+   "ok tapped @e10 \"Display & touch\" · new screen",
+   "app com.android.settings (Settings)",
+   "@e13 group scrollable↑",
+   "  @e14 group \"Display & touch\"",
+   "    @e15 button \"Navigate up\""
+  ]
+ },
  "file": "network.steps",
  "steps": [
   "launch settings",

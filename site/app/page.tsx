@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Arrow, Html, JsonLd, Pane, Star } from "@/components/Bits";
-import { DotsEngine, EndEngine, HoldEngine, LanesEngine, ReplayEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
+import { DotsEngine, EndEngine, HoldEngine, LanesEngine, ReplayEngine, TraceEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
 import { Hero } from "@/components/Hero";
 import { Paste } from "@/components/Paste";
 import { Route } from "@/components/Route";
@@ -550,87 +550,47 @@ export default function Home() {
       <section className="stop" id="asking-before-it-pays">
         <Route n={4} say={STOPS[3][2]} short={STOPS[3][3]} />
         <div className="wrap">
-          <div className="hm-split rev">
-            <div>
+          <div className="pay">
+            <div className="pay-l">
               <h2>It asks you before it taps Pay.</h2>
-              <p className="lede">
-                A tap on Pay, Buy now, Place order or Delete account is held, and you are asked in a prompt the model can&apos;t answer.
-              </p>
-            </div>
-            <div className="hm-sticky">
-              <div className="ask-stage" data-land="">
-                <Pane title="Claude Code · Opus 5.5" note={`recorded ${run.date}`} label="The approval question from the recorded run">
-                  <div className="ask" data-life="">
-                    <p className="ask-you" style={at(0)}>
-                      <i aria-hidden="true">❯</i>
-                      <span>
-                        {ROWS[0].text!.split(". ")[0]}. <em>…</em>
-                      </span>
-                    </p>
-                    <p className="ask-gap" style={at(500)}>
-                      {run.calls} calls and {run.worked.replace("Worked for ", "")} later
-                    </p>
-                    <div className="ask-q" style={at(1100)}>
-                      {ASKED.map((l, i) => (
-                        <p key={i} style={at(1100 + i * 140)}>
-                          {l}
-                        </p>
-                      ))}
-                      <p className="ask-pick" style={at(PICK)}>
-                        <i aria-hidden="true"> </i>✔ Your answer: Allow
-                      </p>
-                      <p className="ask-pick" style={at(PICK + 200)}>
-                        <i className="ask-ca" aria-hidden="true" style={at(PICK + 500)}>
-                          ❯
-                        </i>
-                        Accept
-                        <i className="ask-cd" aria-hidden="true" style={at(PICK + 1100)}>
-                          ❯
-                        </i>
-                        <b style={at(PICK + 1100)}>Decline</b>
-                      </p>
-                    </div>
-                    <p className="ask-no" style={at(PICK + 1500)}>
-                      {DECLINED}
-                    </p>
-                  </div>
-                </Pane>
-                <canvas className="ask-fig" aria-hidden="true" />
-                <PalmEngine />
+              <p className="lede">The tap waits for your answer.</p>
+              <i className="pay-route" aria-hidden="true" />
+              <div className="ask" data-life="" role="img" aria-label="The approval question from the recorded run, answered Decline">
+                <p style={at(0)}>{ASKED[1]}</p>
+                <p className="ask-what" style={at(160)}>
+                  {ASKED[2]}
+                </p>
+                <p className="ask-pick" style={at(700)}>
+                  <span>Accept</span>
+                  <b style={at(1300)}>
+                    <i aria-hidden="true">❯</i>Decline
+                  </b>
+                </p>
+                <p className="ask-rec" style={at(1500)}>
+                  Recorded {run.date}, Claude Code
+                </p>
               </div>
-              <p className="tv-cap">
-                From the run at the top of this page. <a href="/assets/demo.mp4">Watch all 43 seconds (MP4)</a>
+              <p className="hm-say" style={at(0)}>
+                The human said no. <b>Nothing was charged.</b>
               </p>
-            </div>
-            <div className="hm-side">
-              <dl className="hm-facts">
-                <div>
-                  <dt>You answer</dt>
-                  <dd>Allow, Allow for this session, or Decline. In a client that can&apos;t show the prompt, the tap waits and the model has to ask you in chat.</dd>
-                </div>
-                <div>
-                  <dt>Eleven languages</dt>
-                  <dd>It reads button labels in eleven languages. It does not catch a button that is only an icon, or one labeled in another language.</dd>
-                </div>
-                <div>
-                  <dt>Passwords</dt>
-                  <dd>
-                    The model can&apos;t type plain text into a password or one-time code field. It has to use <code>secret</code>, which keeps the text out of logs
-                    and traces.
-                  </dd>
-                </div>
-              </dl>
               <p className="hm-end-links">
+                <a href="/assets/demo.mp4">Watch the recording</a>
                 <Link href="/docs/approval-guard/">
                   How the guard decides
                   <Arrow />
                 </Link>
               </p>
+              <p className="tv-cap">It reads button labels in eleven languages. It does not catch a button that is only an icon.</p>
+            </div>
+            <div className="pay-r ask-stage" data-land="" data-at=".1">
+              <figure className="pay-crop">
+                <img src="/assets/run-poster.jpg" width={540} height={1212} alt="The checkout in the recorded run: a total of £24.99 above a Buy with Google Pay button" decoding="async" loading="lazy" />
+                <figcaption>held</figcaption>
+              </figure>
+              <canvas className="ask-fig" aria-hidden="true" />
+              <PalmEngine />
             </div>
           </div>
-          <p className="hm-say">
-            The human said no. <b>Nothing was charged.</b>
-          </p>
         </div>
       </section>
 
@@ -760,37 +720,53 @@ export default function Home() {
         <div className="wrap">
           <div className="hm-head">
             <h2>How it works.</h2>
-            <p className="lede">
-              Nothing to install on the phone: a helper goes over adb on Android, and a small XCTest runner is built on your Mac for iOS.
-            </p>
+            <p className="lede">Follow one tap from the agent to Android and back.</p>
           </div>
           <div>
-            <ol className="flow" data-land="" data-at=".705">
-              <li>
+            <figure className="tr" data-land="" data-at=".4" data-life="" data-step="5" data-t={replay.passes[0].steps[replay.trace.step].t} data-tap={JSON.stringify(replay.passes[0].steps[replay.trace.step].at)}>
+              <div className="tr-n tr-agent">
                 <h3>Your agent</h3>
-                <p>Claude Code, Codex, Cursor or a script. It calls the tools over MCP, or runs the same commands in a shell.</p>
-                <span className="flow-via">MCP or CLI</span>
-                <span className="flow-tr" aria-hidden="true">
-                  <i />
-                </span>
-              </li>
-              <li>
-                <h3>A daemon on your computer</h3>
-                <p>
-                  It keeps the connection open and remembers which <code>@e</code> number is which element, so a tap still lands after a list has moved.
+                <p className="tr-line">
+                  <code className="tr-chip">{replay.trace.cmd}</code>
+                  <i className="tr-wire" data-via="MCP / CLI" aria-hidden="true" />
                 </p>
-                <span className="flow-via">adb or Xcode</span>
-                <span className="flow-tr" aria-hidden="true">
-                  <i />
-                </span>
-              </li>
-              <li>
-                <h3>A helper on the phone</h3>
-                <p>
-                  It reads the accessibility tree and streams the screen as video, which is how phonedriver knows the screen has stopped changing.
+                <p className="tr-d">Claude Code, Codex, Cursor or a script.</p>
+              </div>
+              <div className="tr-n tr-daemon">
+                <h3>Local daemon</h3>
+                <p className="tr-line">
+                  <span className="tr-stack" aria-hidden="true">
+                    {[0, 1, 2, 3, 4, 5].map((r) => (
+                      <i key={r}>{Array.from({ length: 9 }, (_, c) => `@e${r * 9 + c + 1}`).join(" ")}</i>
+                    ))}
+                  </span>
+                  <i className="tr-wire" data-via="adb or Xcode" aria-hidden="true" />
                 </p>
-              </li>
-            </ol>
+                <p className="tr-d">
+                  It keeps the connection open and remembers which <code>@e</code> number is which element.
+                </p>
+              </div>
+              <div className="tr-n tr-phone">
+                <h3>Phone helper</h3>
+                <div className="tr-shot">
+                  <video src={replay.passes[0].src} poster={replay.passes[0].poster} width={360} height={808} muted playsInline preload="metadata" aria-label="A recording of the phone taking the tap" />
+                  <i className="ln-tap" aria-hidden="true" />
+                </div>
+                <p className="tr-d">Nothing to install: it goes over adb on Android, and Xcode builds a small runner for iOS.</p>
+              </div>
+              <div className="tr-back">
+                <div className="tr-up">
+                  <h3>Screen update</h3>
+                  <pre>{replay.trace.reply.join("\n")}</pre>
+                </div>
+                <canvas className="tr-stream" aria-hidden="true" />
+              </div>
+              <button type="button" className="ln-play tr-play" hidden>
+                Trace a tap
+              </button>
+              <i className="tr-dot" aria-hidden="true" />
+              <TraceEngine />
+            </figure>
             <div className="works" id="works-with">
               <div className="tw">
                 <table>

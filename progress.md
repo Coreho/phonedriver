@@ -3151,3 +3151,4 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 
 - Two compare pages the same day, `/compare/simulator-use/` and `/compare/argent/`: numbers from `docs/bench/simulator.md` and its data, feature rows from each README read on 2026-11-18. Build clean, `problems 0`; looked at the compare index at 1440 px. The pages themselves were read as Markdown, not looked at rendered.
 - The race as a beat was reverted on the user's word; balls out and back again. Order, no places and the note stay (D94).
+- D95 the same day: lanes, saved run, approval and how-it-works redrawn after six pictures from the user, figures on the page joined by the route. Build clean, `problems 0`; the screens looked at are listed in D95.

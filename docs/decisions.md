@@ -1405,3 +1405,19 @@ If the helper cannot build or start, the device works as before: touches through
 **Limits.** The lanes of different calls are on different time scales (each its own slowest tool), which the caption says. The dotted line to the phone is drawn, not recorded: its ends are the recorded tap position and the step's time.
 
 **The beat was reverted the same day.** The user: "this feels so bad, like this isnt how latency balls work.. pls revert this part." The race is balls out and back again, with the speed switch. The Simulator order, the removed places and the note stay.
+
+## D95: figures sit on the page, joined by the route (2026-11-18)
+
+**Decision.** The lanes, the saved run, the approval and "how it works" are redrawn after six pictures the user sent ("take this visual style and make the website feel better"; of the approval one, "this is so much better"). A figure is no longer a dark pane with a caption bar. It is recordings placed on the page, the dotted orange route joining them, and a still field of glyphs behind. The pane stays for what a terminal printed.
+
+- Lanes: the phone's own screen on the left, five recordings rising as a staircase, a route from one point on the phone to the foot of each.
+- Saved run: a route of five numbered stops that a marker drives; after the change it halts at 04 and the screen saved with that step (`replay --screens` kept it) comes up beside the one on the phone, both with the changed text boxed. This replaces the tape of the same morning.
+- Approval: the heading, one sentence, the question as it was asked, the Buy button cropped from the recording's poster with "held" on it, the palm, and the closing line. The three facts became one sentence and a link.
+- How it works: one recorded tap (`tap "Display & touch"`, the second step of the saved run) traced from the agent through the daemon to the phone, with the first five lines of its real reply.
+
+**Why.** The user's pictures, and their earlier notes that the stops were wordy and the figures should be visual.
+
+**Evidence.** Mac mini: `pnpm typecheck` clean, `pnpm build` clean, `node scripts/check.mjs` ends `problems 0`. Looked at in headless Chrome: lanes at 1440 px dark and 390 px light; the saved run in all three recordings at 1440 px (dark and light) and at 390 px; the approval at 1440 and 390 px; the trace mid-flight and finished at 1440 px and finished at 390 px.
+
+**Limits.** The route lines, the marker and the travelling dot are drawn; their ends and times come from the recordings. The trace's legs are not to scale: the whole tap took under two seconds and the dot's crossing is slowed to be seen. The pictures the user sent also showed a ribbon of overlapping screens and a large 0 for the saved run; those were not built. Not looked at on a real phone.
+
