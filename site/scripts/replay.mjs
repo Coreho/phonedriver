@@ -52,10 +52,12 @@ const passes = PASSES.map((pass) => {
     steps: steps.map((_, i) => ({ t: marks[i]?.t_ms ?? length - 500, at: marks[i]?.at ? [Math.round((marks[i].at.x / 411) * 1e4) / 1e4, Math.round((marks[i].at.y / 923) * 1e4) / 1e4] : null })),
   };
 });
+execFileSync("sips", ["-s", "format", "jpeg", "-s", "formatOptions", "80", "--resampleWidth", "360", join(data, `screens/${String(stops).padStart(2, "0")}.png`), "--out", join(assets, "saved.jpg")], { stdio: "ignore" });
 const out = {
   file: "network.steps",
   steps,
   stops,
+  saved: "/assets/replay/saved.jpg",
   passes,
   matched: reply("again.txt").find((line) => line.includes("matched")),
   change: change[1],

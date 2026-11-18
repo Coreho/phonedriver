@@ -8,6 +8,7 @@
   "wait \"Internet\""
  ],
  "stops": 4,
+ "saved": "/assets/replay/saved.jpg",
  "passes": [
   {
    "src": "/assets/replay/pass1.mp4",

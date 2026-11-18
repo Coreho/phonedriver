@@ -637,48 +637,23 @@ export default function Home() {
       <section className="stop" id="lanes" data-weave="thin">
         <Route n={5} say={STOPS[4][2]} short={STOPS[4][3]} />
         <div className="wrap">
-          <div className="hm-stat">
-            <div>
-              <h2>One phone. Five agents.</h2>
-              <p className="lede">Each agent gets a hidden screen of its own on the same Android phone, and the screen in your hand stays yours.</p>
-            </div>
-            <p className="hm-pair" aria-hidden="true" data-land="" data-at=".07">
-              <span>
-                1<small>phone</small>
-              </span>
-              <i>→</i>
-              <b>
-                {lanes.screens}
-                <small>screens in use at once</small>
-              </b>
-            </p>
+          <div className="hm-head" data-land="" data-at=".2">
+            <h2>One phone. Five agents.</h2>
+            <p className="lede">Each agent gets a hidden Android screen. Your screen stays yours.</p>
           </div>
-          <figure className="ln pane" data-length={lanes.length} data-life="">
-            <figcaption className="pane-head">
-              <span>{lanes.device}</span>
-              <div className="race-ctl" hidden>
-                <button type="button" className="race-btn race-play">
-                  Pause
-                </button>
-              </div>
-            </figcaption>
+          <figure className="ln" data-length={lanes.length} data-life="">
             <div className="ln-stage">
+              <canvas className="ln-field" aria-hidden="true" />
+              <svg className="ln-routes" aria-hidden="true" />
               <div className="ln-s yours">
-                <p className="ln-id">
-                  <b>main</b>
-                  <span>yours</span>
-                </p>
+                <p className="ln-id">Your screen</p>
                 <div className="ln-shot">
                   <img src={lanes.main} width={360} height={808} alt="The phone's own screen during the run: its home screen, with no agent on it." decoding="async" loading="lazy" />
                 </div>
-                <p className="ln-now">untouched</p>
               </div>
               {lanes.lanes.map((l, i) => (
                 <div className="ln-s" data-lane={l.id} data-steps={JSON.stringify(l.steps)} style={{ "--n": i } as React.CSSProperties} key={l.id}>
-                  <p className="ln-id">
-                    <b>+{l.id}</b>
-                    <span>{l.app}</span>
-                  </p>
+                  <p className="ln-id">{l.app}</p>
                   <div className="ln-shot">
                     <video src={l.src} poster={l.poster} width={320} height={718} muted playsInline preload="metadata" aria-label={`A recording of agent ${l.id}'s hidden screen, in ${l.app}`} />
                     <i className="ln-tap" aria-hidden="true" />
@@ -688,10 +663,15 @@ export default function Home() {
               ))}
             </div>
             <div className="ln-bar">
+              <span className="race-ctl" hidden>
+                <button type="button" className="ln-play race-play">
+                  Pause
+                </button>
+              </span>
               <input className="ln-scrub" type="range" min={0} max={lanes.length} step={10} defaultValue={lanes.length} aria-label="Time in the recording, in milliseconds" />
               <output className="ln-clock">{secs(lanes.wall)}</output>
             </div>
-            <p className="race-cap">
+            <p className="tv-cap">
               One recording at real speed, {LANED}: five agents finish five jobs on one Android 17 emulator in {secs(lanes.wall)}.{" "}
               <Link href="/docs/android-phone/#a-hidden-screen-for-the-agent">Give each agent a lane</Link>
             </p>
@@ -703,58 +683,60 @@ export default function Home() {
       <section className="stop" id="saved-runs">
         <Route n={6} say={STOPS[5][2]} short={STOPS[5][3]} />
         <div className="wrap">
-          <div className="hm-stat">
-            <div>
-              <h2>A run that worked becomes a test.</h2>
-              <p className="lede">Save what the agent did, then replay it with no model. It stops at the first screen that changed.</p>
-            </div>
-            <p className="hm-pair" aria-hidden="true" data-land="" data-at=".07">
-              <b>
-                0<small>tokens to replay a saved run</small>
-              </b>
-            </p>
+          <div className="hm-head" data-land="" data-at=".2">
+            <h2>A run that worked becomes a test.</h2>
+            <p className="lede">Replay a saved run without a model. It stops at the first screen that changed.</p>
           </div>
           <div className="rp" data-life="" data-halt="" data-pass="2" data-passes={JSON.stringify(replay.passes.map((p) => ({ length: p.length, steps: p.steps })))} data-stops={replay.stops}>
             <div className="rp-tabs" role="group" aria-label="Which run to watch">
               {RUNS.map(([name, mode], i) => (
-                <button type="button" className="race-btn" data-run={i} data-mode={mode} aria-pressed={i === 2} key={name}>
-                  <b>{i + 1}</b> {name}
+                <button type="button" data-run={i} data-mode={mode} aria-pressed={i === 2} key={name}>
+                  {name}
                 </button>
               ))}
             </div>
             <div className="rp-stage">
+              <p className="rp-mode">{RUNS[2][1]}</p>
+              <div className="rp-way">
+                <canvas className="rp-field" aria-hidden="true" />
+                <svg aria-hidden="true">
+                  <clipPath id="rp-done">
+                    <rect x="-40" y="0" width="0" height="0" />
+                  </clipPath>
+                  <path className="rp-base" />
+                  <path className="rp-done" clipPath="url(#rp-done)" />
+                </svg>
+                <ol>
+                  {replay.steps.map((line, i) => (
+                    <li key={i} data-s={i < replay.stops - 1 ? "ok" : i === replay.stops - 1 ? "stop" : "skip"}>
+                      <button type="button" data-step={i}>
+                        <b>{String(i + 1).padStart(2, "0")}</b>
+                        <span>{line}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+                <i className="rp-car" aria-hidden="true" />
+                <canvas className="rp-fig" aria-hidden="true" />
+                <HoldEngine />
+              </div>
+              <figure className="rp-want">
+                <img src={replay.saved} width={360} height={808} alt={`The screen saved with step ${replay.stops} when the run was recorded`} decoding="async" loading="lazy" />
+                <figcaption>saved</figcaption>
+                <i className="rp-box" aria-hidden="true" style={{ left: `${replay.box[0] * 100}%`, top: `${replay.box[1] * 100}%`, width: `${replay.box[2] * 100}%`, height: `${replay.box[3] * 100}%` }} />
+              </figure>
               <div className="rp-phone">
                 {replay.passes.map((p, i) => (
                   <video key={p.src} src={p.src} poster={p.poster} width={360} height={808} muted playsInline preload="metadata" data-run={i} data-on={i === 2 ? "" : undefined} aria-label={`A recording of the phone: ${RUNS[i][0]}`} />
                 ))}
                 <i className="ln-tap" aria-hidden="true" />
                 <i className="rp-box" aria-hidden="true" style={{ left: `${replay.box[0] * 100}%`, top: `${replay.box[1] * 100}%`, width: `${replay.box[2] * 100}%`, height: `${replay.box[3] * 100}%` }} />
+                <span className="rp-tag">now</span>
               </div>
-              <figure className="pane rp-file">
-                <figcaption className="pane-head">
-                  <span>{replay.file}</span>
-                  <span className="rp-mode">{RUNS[2][1]}</span>
-                </figcaption>
-                <div className="rp-win">
-                  <ol className="rp-steps" style={{ "--n": replay.steps.length } as React.CSSProperties}>
-                    {replay.steps.map((line, i) => (
-                      <li key={i} data-s={i < replay.stops - 1 ? "ok" : i === replay.stops - 1 ? "stop" : "idle"}>
-                        <button type="button" data-step={i}>
-                          {line}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                  <i className="rp-gate" aria-hidden="true" />
-                </div>
-                <p className="rp-say" data-says={JSON.stringify([`saved ${replay.steps.length} steps to ${replay.file}`, replay.matched, `~ ${replay.change}`])}>
-                  ~ {replay.change}
-                </p>
-                <canvas className="rp-fig" aria-hidden="true" />
-                <HoldEngine />
-              </figure>
-              <canvas className="rp-wire" aria-hidden="true" />
             </div>
+            <p className="rp-say" data-says={JSON.stringify([`saved ${replay.steps.length} steps to ${replay.file}`, replay.matched, `Stopped at step ${replay.stops} of ${replay.steps.length}: ${replay.change}`])}>
+              Stopped at step {replay.stops} of {replay.steps.length}: {replay.change}
+            </p>
             <details className="qa rp-out">
               <summary>
                 <span>Show the output</span>

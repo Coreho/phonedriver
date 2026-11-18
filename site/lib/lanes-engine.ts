@@ -1,3 +1,4 @@
+import { glyphField, grain } from "./field";
 import { onFrame } from "./frame";
 
 const REST = 1800;
@@ -6,7 +7,7 @@ const DRIFT = 250;
 const TAP = 650;
 
 type Step = { t0: number; t1: number; cmd: string; at: [number, number, number] | null };
-type Lane = { el: HTMLElement; video: HTMLVideoElement; tap: HTMLElement; now: HTMLElement; steps: Step[]; said: string; tapped: number };
+type Lane = { el: HTMLElement; shot: HTMLElement; path: SVGPathElement; video: HTMLVideoElement; tap: HTMLElement; now: HTMLElement; steps: Step[]; said: string; tapped: number };
 
 /** A dot where a finger landed: placed at `x`, `y` (0 to 1 of the screen) and its ring restarted. */
 export function touch(dot: HTMLElement, x: number, y: number) {
@@ -26,8 +27,15 @@ export function mountLanes(el: HTMLElement): () => void {
   const clock = el.querySelector<HTMLElement>(".ln-clock")!;
   const stage = el.querySelector<HTMLElement>(".ln-stage")!;
   const home = el.querySelector<HTMLElement>(".ln-s.yours")!;
+  const port = home.querySelector<HTMLElement>(".ln-shot")!;
+  const routes = el.querySelector<SVGSVGElement>(".ln-routes")!;
+  const field = el.querySelector<HTMLCanvasElement>(".ln-field")!;
+  const node = routes.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "circle"));
+  node.setAttribute("r", "7");
   const lanes: Lane[] = [...el.querySelectorAll<HTMLElement>(".ln-s[data-lane]")].map((card) => ({
     el: card,
+    shot: card.querySelector<HTMLElement>(".ln-shot")!,
+    path: routes.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "path")),
     video: card.querySelector("video")!,
     tap: card.querySelector<HTMLElement>(".ln-tap")!,
     now: card.querySelector<HTMLElement>(".ln-now")!,
@@ -56,6 +64,7 @@ export function mountLanes(el: HTMLElement): () => void {
         l.said = text + busy;
         l.now.textContent = text;
         l.el.toggleAttribute("data-busy", busy);
+        l.path.toggleAttribute("data-busy", busy);
       }
       let tapped = -1;
       l.steps.forEach((s, i) => {
@@ -98,6 +107,7 @@ export function mountLanes(el: HTMLElement): () => void {
   };
   const sync = () => {
     play.textContent = wanted ? "Pause" : "Play";
+    play.toggleAttribute("data-on", wanted);
     const go = wanted && seen && !("wait" in el.dataset);
     if (go && !off) {
       last = performance.now();
@@ -121,12 +131,46 @@ export function mountLanes(el: HTMLElement): () => void {
     paint(true);
   };
   const deal = () => {
-    const o = home.getBoundingClientRect();
-    for (const l of lanes) {
-      const r = l.el.getBoundingClientRect();
-      l.el.style.setProperty("--dx", `${o.left - r.left}px`);
-      l.el.style.setProperty("--dy", `${o.top - r.top}px`);
-    }
+    const box = (card: HTMLElement, shot: HTMLElement) => {
+      const left = card.offsetLeft + shot.offsetLeft;
+      const top = card.offsetTop + shot.offsetTop;
+      return { left, top, right: left + shot.offsetWidth, bottom: top + shot.offsetHeight, width: shot.offsetWidth, height: shot.offsetHeight };
+    };
+    const s = { left: 0, top: 0 };
+    const p = box(home, port);
+    const boxes = lanes.map((l) => box(l.el, l.shot));
+    const nx = p.right - s.left;
+    const ny = p.top - s.top + p.height * 0.62;
+    const floor = Math.max(...boxes.map((b) => b.bottom)) - s.top + 26;
+    lanes.forEach((l, i) => {
+      l.el.style.setProperty("--dx", `${home.offsetLeft - l.el.offsetLeft}px`);
+      l.el.style.setProperty("--dy", `${home.offsetTop - l.el.offsetTop}px`);
+      const x = boxes[i].left - s.left + boxes[i].width / 2;
+      const y = boxes[i].bottom - s.top + 6;
+      const f = floor + i * 15;
+      const bend = Math.min(36, (x - nx) / 3);
+      l.path.setAttribute("d", `M${nx} ${ny}C${nx + 34 + i * 7} ${ny} ${nx + 14 + i * 7} ${f} ${nx + 70 + i * 7} ${f}L${x - bend} ${f}Q${x} ${f} ${x} ${f - bend}L${x} ${y}`);
+    });
+    node.setAttribute("cx", String(nx));
+    node.setAttribute("cy", String(ny));
+    if (!boxes.length || field.clientWidth === 0) return;
+    const fx = { left: 0, top: 0 };
+    const a = boxes[0];
+    const b = boxes[boxes.length - 1];
+    const x0 = a.left - fx.left - 40;
+    const x1 = b.right - fx.left + 30;
+    const y0 = a.top - fx.top + a.height * 0.72;
+    const y1 = b.top - fx.top + b.height * 0.5;
+    glyphField(field, (x, y) => {
+      const k = (x - x0) / (x1 - x0);
+      if (k < 0 || k > 1.04) return 0;
+      const mid = y0 + (y1 - y0) * k + Math.sin(k * 7.3) * 16;
+      const half = a.height * (0.62 + 0.2 * Math.sin(k * 4.1 + 1));
+      const d = Math.abs(y - mid) / half;
+      if (d > 1) return 0;
+      const edge = Math.min(1, k * 5) * (1 - d * d);
+      return edge * (0.35 + 0.65 * grain(Math.round(x / 7), Math.round(y / 9))) * (0.55 + 0.45 * Math.sin(y * 0.11 + k * 9));
+    });
   };
 
   const ro = new ResizeObserver(deal);
