@@ -3156,3 +3156,11 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Later: the question mark turns as a slab with a lighter edge; the five limits became five questions under a "Limits" group, closed by default, so the stop is one list in two groups; the daemon is a stack of plates drawn in glyphs whose top plate reshuffles and lights as the tap passes. Build clean, `problems 0`; looked at the questions at 1440 px dark and light and the daemon at 1440 px.
 - Coherence pass (D95): the race out of its pane with the shared tabs, a Play and Pause on the saved run. Build clean, `problems 0`; looked at the race at 1440 px light and 390 px dark and the saved run's bar at 1440 px.
 - `.github/workflows/site.yml`: a push to main that touches the site or what it reads builds it, runs typecheck and `scripts/check.mjs`, and deploys `out` to the Vercel project. The user declined to hand over a Vercel token in this session, so the deploy step warns and skips until the `VERCEL_TOKEN` secret exists; `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are set as repository variables. Not yet seen deploying.
+
+## 2026-11-18: main at b75c573 deployed, changed pages sent to IndexNow
+
+- Built `main` (b75c573) on the mini: typecheck clean, `node scripts/check.mjs` ended `] problems 0`.
+- Deployed the built folder with `npx -y vercel@latest deploy --prod --yes --scope hridaya423s-projects`. Deployment `phonedriver-51tb6eu50`.
+- Proof: `curl` of `https://phonedriver.dev/`, `/compare/argent/`, `/compare/simulator-use/` and `/faq/` each returned 200, and the home page HTML contains `faq-mark`, `tr-stack`, `ln-routes` and `race-note`.
+- IndexNow: posted the 11 changed URLs (home, compare index, the two new compare pages, six docs pages, FAQ). Reply `200 11 urls`.
+- `.github/workflows/site.yml` builds on every push but skips the upload: no `VERCEL_TOKEN` secret is set. The Vercel project is not connected to the GitHub repo.
