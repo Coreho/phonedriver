@@ -1,0 +1,49 @@
+name: site
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "docs/bench/**"
+      - "docs/compare.md"
+      - ".github/assets/**"
+      - "bench/simulator-use/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: site
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Build
+        working-directory: site
+        run: |
+          npx -y pnpm@10 install --frozen-lockfile
+          npx -y pnpm@10 build
+          npx -y pnpm@10 typecheck
+          node scripts/check.mjs
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::warning::The VERCEL_TOKEN secret is not set, so the site was built and checked but not deployed."
+            exit 0
+          fi
+          mkdir "$RUNNER_TEMP/phonedriver"
+          cp -R site/out/. "$RUNNER_TEMP/phonedriver/"
+          cd "$RUNNER_TEMP/phonedriver"
+          npx -y vercel@66.2.0 deploy --prod --yes
