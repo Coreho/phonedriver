@@ -1385,3 +1385,14 @@ If the helper cannot build or start, the device works as before: touches through
 
 **Reopen if.** Three or more lanes are shown to work, a GPU-backed recording changes the timings, or the range input over the tracks gets in the way of scrolling on a phone.
 
+**Amended the same day (2026-11-18), after the user saw it.** "it feels a biiit wordy still", "why not add like simulator use and argent in the visual like latency balls only why extra numbers", "the features should be displayed in easy to understand and really nice visual pleasing animation", then "it can run upto 5 lanes, show 5 lanes". What changed:
+
+- The lanes are five agents, each a video of its own hidden screen (`phonedriver record` on each lane), played on one clock at real speed, with a dot where each tap landed (the `at` of the recording's steps file). The cards are dealt from the phone's own screen when the stop lands; pointing at one dims the rest; one slider scrubs all five. The bars, the devices table and the note are gone.
+- The saved run is one phone and one list in three recordings: an agent does it and each action lands in the list, the list replays it, and a replay after Wi-Fi was turned off stops at step 4 of 5 with the changed text boxed and the chauffeur's palm raised (`mountHold`). Three buttons choose the recording and a row jumps to its step. The terminal output is behind "Show the output".
+- The race has a device switch (Android emulator, real phone, iOS Simulator). The Simulator race has all four tools of the published benchmark and says where phonedriver placed in each call, second in two of five. The two rows of figures under the race are gone.
+- Each stop's introduction is one sentence, and what else is new is a row of chips.
+
+**Evidence for the amendment.** The emulator was started in win-pc's desktop session with `-gpu host` (the `pdemu` task). Five lanes opened in 1.9 to 2.6 s each one after another; Calendar on a fifth lane landed on a Google sign-in screen, so the fifth app is Phone. The recorded run: `launch` plus one to four taps on each of Settings, Clock, Contacts, Files and Phone, all five at once, 10.9 s, every call exit 0 (`docs/bench/data/lanes-2026-11-18/`). The saved run: `saved 5 steps`, `replayed 5 steps in 6.3 s` keeping 5 screens, `5 screens matched`, then `error: step 4 of 5 (tap "Network & internet") failed` with `~ "AndroidWifi" → "T-Mobile" at 111,158` (`docs/bench/data/replay-2026-11-18/`). The earlier limit of two lanes was the software-rendered emulator, not phonedriver.
+
+**Limits of the amendment.** One run of five lanes, not repeated. The videos are 320 px wide at 20 frames a second. Contacts shows the benchmark's made-up contacts. Looked at in headless Chrome at 1440 and 390 px; video autoplay on a real iPhone was not tried. The palm is not drawn below 900 px.
+

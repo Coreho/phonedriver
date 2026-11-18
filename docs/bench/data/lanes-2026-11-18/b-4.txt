@@ -1,5 +1,0 @@
-ok tapped @e45 "Start"
-the screen before the last one is back, except:
-- @e31
-~ @e24 progress "97%" → "100%"
-+ @e46 text "4 minutes 58 seconds remaining"

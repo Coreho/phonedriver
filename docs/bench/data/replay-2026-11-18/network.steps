@@ -1,3 +1,5 @@
 {"changed":true,"method":"act","params":{"action":{"app":"settings","grant":[],"kind":"launch","restart":false}},"summary":"launched Settings"}
+{"changed":true,"method":"act","params":{"action":{"count":null,"kind":"tap","long":null,"target":{"role":null,"text":"Display & touch"}}},"summary":"tapped @e10 \"Display & touch\""}
+{"changed":true,"method":"act","params":{"action":{"key":"back","kind":"press"}},"summary":"pressed back"}
 {"changed":true,"method":"act","params":{"action":{"count":null,"kind":"tap","long":null,"target":{"role":null,"text":"Network & internet"}}},"summary":"tapped @e4 \"Network & internet\""}
 {"method":"wait","params":{"condition":{"appears":{"role":null,"text":"Internet"}}},"summary":"\"Internet\" appeared after 1 tree read"}

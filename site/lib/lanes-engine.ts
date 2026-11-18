@@ -1,96 +1,100 @@
 import { onFrame } from "./frame";
 
-const REST = 2600;
-const IDLE = 1400;
+const REST = 1800;
+const IDLE = 1200;
+const DRIFT = 250;
+const TAP = 650;
 
-type Seg = { el: HTMLElement; t0: number; t1: number; cmd: string; reply: string };
-type Lane = { frames: { el: HTMLElement; t: number }[]; frame: number; segs: Seg[]; now: HTMLElement | null; said: string; ball: HTMLElement; track: HTMLElement; run: number; host: HTMLElement };
+type Step = { t0: number; t1: number; cmd: string; at: [number, number, number] | null };
+type Lane = { el: HTMLElement; video: HTMLVideoElement; tap: HTMLElement; now: HTMLElement; steps: Step[]; said: string; tapped: number };
 
-/** The lanes: one recording of several sessions on one phone, played on one clock. Each lane's ball rides its track, its calls fill as they run, and its screen shows the frame the phone had at that moment. The slider under the tracks scrubs all of them at once. */
+/** A dot where a finger landed: placed at `x`, `y` (0 to 1 of the screen) and its ring restarted. */
+export function touch(dot: HTMLElement, x: number, y: number) {
+  dot.style.left = `${x * 100}%`;
+  dot.style.top = `${y * 100}%`;
+  delete dot.dataset.go;
+  void dot.offsetWidth;
+  dot.dataset.go = "";
+}
+
+/** The lanes: one recording of several agents on one phone, each lane's video played on one clock. The cards are dealt from the phone's own screen when the stop lands, a dot marks each tap where it landed, and the slider scrubs every lane at once. */
 export function mountLanes(el: HTMLElement): () => void {
-  const wall = Number(el.dataset.wall);
-  const rate = Number(el.dataset.rate ?? 1);
+  const length = Number(el.dataset.length);
   const ctl = el.querySelector<HTMLElement>(".race-ctl")!;
   const play = el.querySelector<HTMLButtonElement>(".race-play")!;
   const scrub = el.querySelector<HTMLInputElement>(".ln-scrub")!;
-  const head = el.querySelector<HTMLElement>(".ln-head")!;
   const clock = el.querySelector<HTMLElement>(".ln-clock")!;
-  const score = el.querySelector<HTMLElement>(".ln-score")!;
-  const lanes: Lane[] = [...el.querySelectorAll<HTMLElement>(".ln-row")].map((row) => {
-    const host = el.querySelector<HTMLElement>(`.ln-s[data-lane="${row.dataset.lane}"]`)!;
-    return {
-      host,
-      frames: [...host.querySelectorAll<HTMLElement>("[data-t]")].map((f) => ({ el: f, t: Number(f.dataset.t) })),
-      frame: -1,
-      segs: [...row.querySelectorAll<HTMLElement>("b")].map((b) => ({ el: b, t0: Number(b.dataset.t0), t1: Number(b.dataset.t1), cmd: b.dataset.cmd!, reply: b.dataset.reply! })),
-      now: row.querySelector<HTMLElement>(".ln-now"),
-      said: "",
-      ball: row.querySelector<HTMLElement>(".ln-track i")!,
-      track: row.querySelector<HTMLElement>(".ln-track")!,
-      run: 0,
-    };
-  });
-  for (const l of lanes) for (const f of l.frames) f.el.removeAttribute("data-on");
+  const stage = el.querySelector<HTMLElement>(".ln-stage")!;
+  const home = el.querySelector<HTMLElement>(".ln-s.yours")!;
+  const lanes: Lane[] = [...el.querySelectorAll<HTMLElement>(".ln-s[data-lane]")].map((card) => ({
+    el: card,
+    video: card.querySelector("video")!,
+    tap: card.querySelector<HTMLElement>(".ln-tap")!,
+    now: card.querySelector<HTMLElement>(".ln-now")!,
+    steps: JSON.parse(card.dataset.steps!),
+    said: "",
+    tapped: -1,
+  }));
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let t = reduce ? wall : 0;
+  let t = reduce ? length : 0;
   let last = 0;
   let rest = 0;
+  let held = 0;
   let wanted = !reduce;
   let seen = false;
-  let held = 0;
   let off: (() => void) | null = null;
 
-  const say = (l: Lane, text: string, state: string) => {
-    if (!l.now || l.said === state + text) return;
-    l.said = state + text;
-    l.now.textContent = text;
-    l.now.dataset.s = state;
-  };
-  const paint = () => {
-    const k = Math.min(t / wall, 1);
+  const paint = (seek: boolean) => {
     for (const l of lanes) {
-      let f = -1;
-      for (let i = 0; i < l.frames.length; i++) if (l.frames[i].t <= t) f = i;
-      if (f !== l.frame) {
-        l.frames[l.frame]?.el.removeAttribute("data-on");
-        l.frames[(l.frame = f)]?.el.setAttribute("data-on", "");
+      const at = Math.min(t, length - 60) / 1000;
+      if (seek || Math.abs(l.video.currentTime * 1000 - Math.min(t, length - 60)) > DRIFT) l.video.currentTime = at;
+      let step: Step | null = null;
+      for (const s of l.steps) if (s.t0 <= t) step = s;
+      const busy = !!step && t < step.t1;
+      const text = step ? step.cmd : "waiting";
+      if (l.said !== text + busy) {
+        l.said = text + busy;
+        l.now.textContent = text;
+        l.el.toggleAttribute("data-busy", busy);
       }
-      let busy = false;
-      let done: Seg | null = null;
-      for (const s of l.segs) {
-        const p = Math.min(Math.max((t - s.t0) / (s.t1 - s.t0), 0), 1);
-        s.el.style.setProperty("--p", String(p));
-        if (p > 0 && p < 1) {
-          busy = true;
-          say(l, s.cmd, "run");
-        } else if (p === 1) done = s;
+      let tapped = -1;
+      l.steps.forEach((s, i) => {
+        if (s.at && s.at[2] <= t && t < s.at[2] + TAP) tapped = i;
+      });
+      if (tapped !== l.tapped) {
+        l.tapped = tapped;
+        if (tapped >= 0) touch(l.tap, l.steps[tapped].at![0], l.steps[tapped].at![1]);
       }
-      l.host.toggleAttribute("data-busy", busy);
-      if (!busy && l.segs.length) say(l, done ? done.reply : "", done ? "done" : "wait");
-      l.ball.style.transform = `translate3d(${k * l.run}px,0,0)`;
-      l.ball.toggleAttribute("data-busy", busy);
     }
-    head.style.transform = `translate3d(${k * (lanes[0]?.run ?? 0)}px,0,0)`;
-    clock.textContent = `${(Math.min(t, wall) / 1000).toFixed(1)} s`;
-    scrub.value = String(Math.round(Math.min(t, wall)));
-    scrub.style.setProperty("--p", `${k * 100}%`);
+    clock.textContent = `${(Math.min(t, length) / 1000).toFixed(1)} s`;
+    scrub.value = String(Math.round(Math.min(t, length)));
+    scrub.style.setProperty("--p", `${(Math.min(t, length) / length) * 100}%`);
   };
-  const measure = () => {
-    for (const l of lanes) l.run = l.track.clientWidth;
-    paint();
+  const run = (on: boolean) => {
+    for (const l of lanes) {
+      if (on && l.video.paused) l.video.play().catch(() => {});
+      else if (!on && !l.video.paused) l.video.pause();
+    }
   };
   const tick = (now: number) => {
     const dt = Math.min(now - last, 100);
     last = now;
-    if (held && now < held) return;
-    held = 0;
-    if (t >= wall) {
+    if (held) {
+      if (now < held) return;
+      held = 0;
+    }
+    if (t >= length) {
+      run(false);
       rest += dt;
       if (rest < REST) return;
       rest = 0;
       t = 0;
-    } else t = Math.min(t + dt * rate, wall);
-    paint();
+      paint(true);
+      return;
+    }
+    t = Math.min(t + dt, length);
+    run(t < length);
+    paint(false);
   };
   const sync = () => {
     play.textContent = wanted ? "Pause" : "Play";
@@ -101,22 +105,32 @@ export function mountLanes(el: HTMLElement): () => void {
     } else if (!go && off) {
       off();
       off = null;
+      run(false);
     }
   };
   const toggle = () => {
     wanted = !wanted;
-    if (wanted && t >= wall) t = 0;
+    if (wanted && t >= length) t = 0;
     sync();
   };
   const seek = () => {
     t = Number(scrub.value);
     rest = 0;
     held = performance.now() + IDLE;
-    paint();
+    run(false);
+    paint(true);
+  };
+  const deal = () => {
+    const o = home.getBoundingClientRect();
+    for (const l of lanes) {
+      const r = l.el.getBoundingClientRect();
+      l.el.style.setProperty("--dx", `${o.left - r.left}px`);
+      l.el.style.setProperty("--dy", `${o.top - r.top}px`);
+    }
   };
 
-  const ro = new ResizeObserver(measure);
-  ro.observe(score);
+  const ro = new ResizeObserver(deal);
+  ro.observe(stage);
   const io = new IntersectionObserver(
     ([e]) => {
       seen = e.isIntersecting;
@@ -129,9 +143,11 @@ export function mountLanes(el: HTMLElement): () => void {
   play.addEventListener("click", toggle);
   scrub.addEventListener("input", seek);
   el.addEventListener("life", sync);
-  measure();
+  deal();
+  paint(true);
   return () => {
     off?.();
+    run(false);
     ro.disconnect();
     io.disconnect();
     play.removeEventListener("click", toggle);

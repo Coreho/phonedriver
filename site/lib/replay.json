@@ -1,41 +1,140 @@
 {
  "file": "network.steps",
- "saved": "saved 3 steps to network.steps",
  "steps": [
   "launch settings",
+  "tap \"Display & touch\"",
+  "press back",
   "tap \"Network & internet\"",
   "wait \"Internet\""
  ],
- "stops": 2,
+ "stops": 4,
+ "passes": [
+  {
+   "src": "/assets/replay/pass1.mp4",
+   "poster": "/assets/replay/pass1.jpg",
+   "length": 5292,
+   "steps": [
+    {
+     "t": 51,
+     "at": null
+    },
+    {
+     "t": 1630,
+     "at": [
+      0.5005,
+      0.7999
+     ]
+    },
+    {
+     "t": 3092,
+     "at": null
+    },
+    {
+     "t": 3973,
+     "at": [
+      0.5005,
+      0.2968
+     ]
+    },
+    {
+     "t": 4792,
+     "at": null
+    }
+   ]
+  },
+  {
+   "src": "/assets/replay/pass2.mp4",
+   "poster": "/assets/replay/pass2.jpg",
+   "length": 5000,
+   "steps": [
+    {
+     "t": 15,
+     "at": null
+    },
+    {
+     "t": 1432,
+     "at": [
+      0.5005,
+      0.7999
+     ]
+    },
+    {
+     "t": 2768,
+     "at": null
+    },
+    {
+     "t": 3557,
+     "at": [
+      0.5005,
+      0.2968
+     ]
+    },
+    {
+     "t": 4500,
+     "at": null
+    }
+   ]
+  },
+  {
+   "src": "/assets/replay/pass3.mp4",
+   "poster": "/assets/replay/pass3.jpg",
+   "length": 6750,
+   "steps": [
+    {
+     "t": 13,
+     "at": null
+    },
+    {
+     "t": 1392,
+     "at": [
+      0.5005,
+      0.7999
+     ]
+    },
+    {
+     "t": 2778,
+     "at": null
+    },
+    {
+     "t": 3657,
+     "at": [
+      0.5005,
+      0.2968
+     ]
+    },
+    {
+     "t": 6250,
+     "at": null
+    }
+   ]
+  }
+ ],
+ "matched": "5 screens matched those in screens/network",
+ "change": "\"AndroidWifi\" → \"T-Mobile\"",
+ "box": [
+  0.1851,
+  0.1672,
+  0.17,
+  0.018
+ ],
  "first": [
   "$ phonedriver replay network.steps --screens screens/network",
-  "replayed 3 steps in 9.6 s",
+  "replayed 5 steps in 4.9 s",
   "1. launched Settings",
-  "2. tapped @e4 \"Network & internet\"",
-  "3. \"Internet\" appeared after 1 tree read",
-  "kept 3 screens in screens/network; a replay with --screens screens/network compares each step's screen with them"
+  "2. tapped @e10 \"Display & touch\"",
+  "3. pressed back",
+  "4. tapped @e4 \"Network & internet\"",
+  "5. \"Internet\" appeared after 1 tree read",
+  "5 screens matched those in screens/network"
  ],
  "second": [
   "$ phonedriver replay network.steps --screens screens/network",
-  "error: step 2 of 3 (tap \"Network & internet\") failed: its screen is not the one in screens/network/02.png",
-  "changed: 1 region, 0.7% of the screen",
+  "error: step 4 of 5 (tap \"Network & internet\") failed: its screen is not the one in screens/network/04.png",
+  "changed: 1 region, 0.8% of the screen",
   "~ \"AndroidWifi\" → \"T-Mobile\" at 111,158",
   "1. launched Settings",
-  "hint: If the new screen is right, delete screens/network/02.png and replay again to keep it."
- ],
- "changed": "after Wi-Fi was turned off",
- "kept": {
-  "src": "/assets/replay/kept.jpg",
-  "alt": "The Network & internet page of Settings as the first replay kept it. The Internet row says AndroidWifi."
- },
- "now": {
-  "src": "/assets/replay/now.jpg",
-  "alt": "The same page in the later replay, with Wi-Fi off. The Internet row says T-Mobile, the text that stopped the replay."
- },
- "box": [
-  0.1851,
-  0.1673,
-  0.17,
-  0.018
+  "2. tapped @e10 \"Display & touch\"",
+  "3. pressed back",
+  "hint: If the new screen is right, delete screens/network/04.png and replay again to keep it."
  ]
 }

@@ -235,3 +235,17 @@ export function mountPalm(el: HTMLElement): () => void {
     prop.stop();
   };
 }
+
+/** The raised palm at the saved run. It comes up from the bottom edge of the steps pane while the replay is stopped (`data-halt` on the figure). */
+export function mountHold(el: HTMLElement): () => void {
+  const canvas = el.querySelector<HTMLCanvasElement>(".rp-fig")!;
+  return mountProp(canvas, {
+    size: (w) => ({ hand: w * 6, cell: w < 170 ? 4 : 5 }),
+    rate: 8,
+    scene({ w, h }) {
+      const up = "halt" in el.dataset && !("wait" in el.dataset);
+      return { right: { at: [w * 0.5, up ? h * 1.29 : h * 2.7, up ? 50 : 0], fingers: [-0.1, -0.98, 0.1], palm: [-0.22, 0, 0.97], curl: PALM } };
+    },
+  }).stop;
+}
+

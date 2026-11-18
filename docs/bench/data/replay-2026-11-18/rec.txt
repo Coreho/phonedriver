@@ -1,0 +1,12 @@
+recording the screen to /Users/hridyaagrawal/pd-rec/pass1.mp4; `phonedriver record stop` ends it
+/Users/hridyaagrawal/pd-rec/pass1.mp4
+5.3 s, 1080x2424, 130 frames, 2.8 MB
+steps: 4 with their times in /Users/hridyaagrawal/pd-rec/pass1.mp4.steps.jsonl
+recording the screen to /Users/hridyaagrawal/pd-rec/pass2.mp4; `phonedriver record stop` ends it
+/Users/hridyaagrawal/pd-rec/pass2.mp4
+5.0 s, 1080x2424, 496 frames, 10.8 MB
+steps: 4 with their times in /Users/hridyaagrawal/pd-rec/pass2.mp4.steps.jsonl
+recording the screen to /Users/hridyaagrawal/pd-rec/pass3.mp4; `phonedriver record stop` ends it
+/Users/hridyaagrawal/pd-rec/pass3.mp4
+6.7 s, 1080x2424, 739 frames, 14.8 MB
+steps: 4 with their times in /Users/hridyaagrawal/pd-rec/pass3.mp4.steps.jsonl

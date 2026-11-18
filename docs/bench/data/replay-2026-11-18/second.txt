@@ -1,23 +1,25 @@
 $ phonedriver replay network.steps --screens screens/network
-error: step 2 of 3 (tap "Network & internet") failed: its screen is not the one in screens/network/02.png
-changed: 1 region, 0.7% of the screen
+error: step 4 of 5 (tap "Network & internet") failed: its screen is not the one in screens/network/04.png
+changed: 1 region, 0.8% of the screen
 ~ "AndroidWifi" → "T-Mobile" at 111,158
 1. launched Settings
+2. tapped @e10 "Display & touch"
+3. pressed back
 screen now:
 device android:emulator-5554 · sdk_gphone64_x86_64 · Android API 37 · 411x923pt · portrait
 app com.android.settings (Settings)
-@e18 group scrollable↑
-  @e54 group "Network & internet"
-    @e20 button "Navigate up"
-  @e55 button "Internet" "T-Mobile"
-  @e56 button "SIMs" "T-Mobile"
-  @e53 button "Airplane mode"
-    @e57 switch off
-  @e58 button "Hotspot & tethering" "Off"
-  @e59 button "Data Saver" "Off"
-  @e60 button "VPN" "None"
-  @e61 button "Private DNS" "Automatic"
-  @e62 button "Adaptive connectivity" "On"
-  @e63 button "Mobile network security" "Network type, encryption, notification controls"
-hint: If the new screen is right, delete screens/network/02.png and replay again to keep it.
+@e13 group scrollable↑
+  @e30 group "Network & internet"
+    @e15 button "Navigate up"
+  @e31 button "Internet" "T-Mobile"
+  @e32 button "SIMs" "T-Mobile"
+  @e12 button "Airplane mode"
+    @e33 switch off
+  @e34 button "Hotspot & tethering" "Off"
+  @e35 button "Data Saver" "Off"
+  @e36 button "VPN" "None"
+  @e37 button "Private DNS" "Automatic"
+  @e38 button "Adaptive connectivity" "On"
+  @e39 button "Mobile network security" "Network type, encryption, notification controls"
+hint: If the new screen is right, delete screens/network/04.png and replay again to keep it.
 [exit 1]

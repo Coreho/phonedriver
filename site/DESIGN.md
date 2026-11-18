@@ -40,8 +40,8 @@ Three concepts were weighed. (1) One route, chosen: it reuses the hero's own dev
 | 2 | `what-the-model-sees` | How is it that cheap? | It reads the screen as text. | the snapshot pane; the read |
 | 3 | `speed` | And is it quick? | 170x faster than adb at reading the screen. | latency balls pane |
 | 4 | `asking-before-it-pays` | Can it spend my money? | It asks you before it taps Pay. | the recorded approval prompt; the raised palm |
-| 5 | `lanes` | Do I have to put my phone down? | One phone. A screen for each agent. | the lanes: one recording of two agents on one phone, three screens on one clock |
-| 6 | `saved-runs` | Do I need the model every time? | A run that worked becomes a test. | the 0; the steps file, its replay, and the replay that stopped |
+| 5 | `lanes` | Do I have to put my phone down? | One phone. A screen for each agent. | the lanes: five agents on one phone, each a video of its own screen, on one clock |
+| 6 | `saved-runs` | Do I need the model every time? | A run that worked becomes a test. | the 0; one phone and one list in three recordings, the last stopped by the palm |
 | 7 | `how-it-works` | What is it made of? | How it works. | agent, daemon, helper; what else is new |
 | 8 | `limits`, `faq` | Anything I should know? | Limits and questions. | the list |
 | 9 | `install` | Fine. Set it up. | Give your agent a phone. | the setup prompt pane |
@@ -66,7 +66,7 @@ Setup moves from second place to the end: the route starts with someone else's o
 - `lib/weave.ts`: one fixed WebGL canvas for all stops.
 - `lib/views-engine.ts`: the read (dither + shed) and the hover link.
 - `lib/dots-engine.ts`, `race-engine.ts`, `type-engine.ts`: unchanged roles.
-- `lib/lanes-engine.ts`: the lanes (decision D94). One clock for every lane of a recording: a ball rides each lane's dotted track, a call's bar fills while it runs, and each screen shows the frame that display had then. A range input over the tracks scrubs it.
+- `lib/lanes-engine.ts`, `lib/replay-engine.ts`: recordings played on one clock (decision D94). The lanes deal five videos from the phone's own screen and mark each tap; the saved run plays three recordings of one phone against its list of steps and raises the palm where the last one stops.
 - Without JavaScript or with reduced motion: every stop is its final state, the spoken line is plain text above the heading, no canvas.
 
 ## Stops, desktop

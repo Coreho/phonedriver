@@ -1,4 +1,0 @@
-a	1	1795022992823	1795023002342	0	launch settings
-a	2	1795023002369	1795023003849	0	scroll down --until "About emulated device"
-a	3	1795023003873	1795023007522	0	tap "About emulated device"
-a	4	1795023007565	1795023009859	0	tap "Android version"

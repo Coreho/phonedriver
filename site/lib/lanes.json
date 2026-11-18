@@ -1,197 +1,200 @@
 {
  "date": "2026-11-18",
  "device": "android:emulator-5554",
- "wall": 21761,
- "serial": 26798,
- "rate": 2,
- "main": {
-  "alt": "The phone's own screen during the run: the home screen, as it was before the agents started.",
-  "frames": [
-   {
-    "t": 0,
-    "src": "/assets/lanes/main.jpg"
-   }
-  ]
- },
+ "wall": 10862,
+ "length": 12262,
+ "screens": 6,
+ "main": "/assets/lanes/main.jpg",
  "lanes": [
   {
    "id": "a",
-   "session": "one",
-   "who": "agent one, in Settings",
-   "alt": "The hidden screen of agent one at the end of the run: the Android version page of Settings, with Android version 17.",
+   "app": "Settings",
+   "src": "/assets/lanes/a.mp4",
+   "poster": "/assets/lanes/a.jpg",
    "steps": [
     {
      "t0": 32,
-     "t1": 11346,
+     "t1": 3473,
      "cmd": "launch settings",
-     "reply": "ok launched Settings · still animating after 7978ms, read as it is now"
+     "at": null
     },
     {
-     "t0": 11369,
-     "t1": 13065,
-     "cmd": "scroll down --until \"About emulated device\"",
-     "reply": "ok scrolled down 1 time to @e53 \"About emulated device\""
+     "t0": 3495,
+     "t1": 5400,
+     "cmd": "tap \"Network & internet\"",
+     "at": [
+      0.5,
+      0.2933,
+      3496
+     ]
     },
     {
-     "t0": 13090,
-     "t1": 18944,
-     "cmd": "tap \"About emulated device\"",
-     "reply": "ok tapped @e53 \"About emulated device\" · new screen"
-    },
-    {
-     "t0": 18970,
-     "t1": 21726,
-     "cmd": "tap \"Android version\"",
-     "reply": "ok tapped @e56 \"Android version\" · new screen"
-    }
-   ],
-   "frames": [
-    {
-     "t": 4331,
-     "src": "/assets/lanes/a-004331.jpg"
-    },
-    {
-     "t": 6276,
-     "src": "/assets/lanes/a-006276.jpg"
-    },
-    {
-     "t": 7396,
-     "src": "/assets/lanes/a-007396.jpg"
-    },
-    {
-     "t": 8654,
-     "src": "/assets/lanes/a-008654.jpg"
-    },
-    {
-     "t": 12673,
-     "src": "/assets/lanes/a-012673.jpg"
-    },
-    {
-     "t": 17939,
-     "src": "/assets/lanes/a-017939.jpg"
-    },
-    {
-     "t": 19781,
-     "src": "/assets/lanes/a-019781.jpg"
-    },
-    {
-     "t": 21465,
-     "src": "/assets/lanes/a-021465.jpg"
+     "t0": 5421,
+     "t1": 10777,
+     "cmd": "tap \"Internet\"",
+     "at": [
+      0.5,
+      0.1563,
+      5422
+     ]
     }
    ]
   },
   {
    "id": "b",
-   "session": "two",
-   "who": "agent two, in Clock",
-   "alt": "The hidden screen of agent two at the end of the run: a timer in the Clock app, counting down from six minutes.",
+   "app": "Clock",
+   "src": "/assets/lanes/b.mp4",
+   "poster": "/assets/lanes/b.jpg",
    "steps": [
     {
-     "t0": 43,
-     "t1": 8475,
+     "t0": 42,
+     "t1": 6135,
      "cmd": "launch clock",
-     "reply": "ok launched Clock · still animating after 5966ms, read as it is now"
+     "at": null
     },
     {
-     "t0": 8503,
-     "t1": 9390,
+     "t0": 6157,
+     "t1": 7102,
      "cmd": "tap \"5\"",
-     "reply": "ok tapped @e37 \"5\""
+     "at": [
+      0.5,
+      0.4951,
+      6157
+     ]
     },
     {
-     "t0": 9431,
-     "t1": 10146,
+     "t0": 7123,
+     "t1": 7837,
      "cmd": "tap \"00\"",
-     "reply": "ok tapped @e42 \"00\""
+     "at": [
+      0.2445,
+      0.7226,
+      7122
+     ]
     },
     {
-     "t0": 10183,
-     "t1": 13022,
+     "t0": 7861,
+     "t1": 9172,
      "cmd": "tap \"Start\"",
-     "reply": "ok tapped @e45 \"Start\""
-    },
-    {
-     "t0": 13046,
-     "t1": 15383,
-     "cmd": "tap \"Add 1 minute\"",
-     "reply": "ok tapped @e27 \"Add 1 minute\""
+     "at": [
+      0.5,
+      0.8402,
+      7861
+     ]
     }
-   ],
-   "frames": [
+   ]
+  },
+  {
+   "id": "c",
+   "app": "Contacts",
+   "src": "/assets/lanes/c.mp4",
+   "poster": "/assets/lanes/c.jpg",
+   "steps": [
     {
-     "t": 1001,
-     "src": "/assets/lanes/b-001001.jpg"
+     "t0": 52,
+     "t1": 7008,
+     "cmd": "launch contacts",
+     "at": null
     },
     {
-     "t": 1859,
-     "src": "/assets/lanes/b-001859.jpg"
+     "t0": 7030,
+     "t1": 10840,
+     "cmd": "tap \"Dentist\"",
+     "at": [
+      0.5,
+      0.3229,
+      7032
+     ]
+    }
+   ]
+  },
+  {
+   "id": "d",
+   "app": "Files",
+   "src": "/assets/lanes/d.mp4",
+   "poster": "/assets/lanes/d.jpg",
+   "steps": [
+    {
+     "t0": 59,
+     "t1": 2668,
+     "cmd": "launch files",
+     "at": null
     },
     {
-     "t": 5363,
-     "src": "/assets/lanes/b-005363.jpg"
+     "t0": 2689,
+     "t1": 3158,
+     "cmd": "tap \"Images\"",
+     "at": [
+      0.1776,
+      0.1863,
+      2688
+     ]
     },
     {
-     "t": 7023,
-     "src": "/assets/lanes/b-007023.jpg"
+     "t0": 3180,
+     "t1": 4102,
+     "cmd": "tap \"Videos\"",
+     "at": [
+      0.6679,
+      0.1863,
+      3184
+     ]
+    }
+   ]
+  },
+  {
+   "id": "e",
+   "app": "Phone",
+   "src": "/assets/lanes/e.mp4",
+   "poster": "/assets/lanes/e.jpg",
+   "steps": [
+    {
+     "t0": 67,
+     "t1": 6014,
+     "cmd": "launch phone",
+     "at": null
     },
     {
-     "t": 8137,
-     "src": "/assets/lanes/b-008137.jpg"
+     "t0": 6036,
+     "t1": 8556,
+     "cmd": "tap \"Keypad\"",
+     "at": [
+      0.5,
+      0.9393,
+      6036
+     ]
     },
     {
-     "t": 9229,
-     "src": "/assets/lanes/b-009229.jpg"
+     "t0": 8579,
+     "t1": 9393,
+     "cmd": "tap \"5\"",
+     "at": [
+      0.4994,
+      0.6213,
+      8579
+     ]
     },
     {
-     "t": 10741,
-     "src": "/assets/lanes/b-010741.jpg"
+     "t0": 9417,
+     "t1": 10117,
+     "cmd": "tap \"5\"",
+     "at": [
+      0.4994,
+      0.6213,
+      9418
+     ]
     },
     {
-     "t": 12054,
-     "src": "/assets/lanes/b-012054.jpg"
-    },
-    {
-     "t": 13190,
-     "src": "/assets/lanes/b-013190.jpg"
-    },
-    {
-     "t": 15091,
-     "src": "/assets/lanes/b-015091.jpg"
-    },
-    {
-     "t": 16703,
-     "src": "/assets/lanes/b-016703.jpg"
-    },
-    {
-     "t": 19054,
-     "src": "/assets/lanes/b-019054.jpg"
-    },
-    {
-     "t": 20676,
-     "src": "/assets/lanes/b-020676.jpg"
-    },
-    {
-     "t": 21761,
-     "src": "/assets/lanes/b-023470.jpg"
+     "t0": 10138,
+     "t1": 10627,
+     "cmd": "tap \"5\"",
+     "at": [
+      0.4994,
+      0.6213,
+      10137
+     ]
     }
    ]
   }
- ],
- "devices": [
-  [
-   "android:emulator-5554",
-   "-",
-   "main"
-  ],
-  [
-   "android:emulator-5554+a",
-   "one (idle 6s)",
-   "hidden (display 32)"
-  ],
-  [
-   "android:emulator-5554+b",
-   "two (idle 12s)",
-   "hidden (display 31)"
-  ]
  ]
 }

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Arrow, Html, JsonLd, Pane, Star } from "@/components/Bits";
-import { DotsEngine, EndEngine, LanesEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
+import { DotsEngine, EndEngine, HoldEngine, LanesEngine, ReplayEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
 import { Hero } from "@/components/Hero";
 import { Paste } from "@/components/Paste";
 import { Route } from "@/components/Route";
-import { HARNESSES, PHONE, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, simulator, tokens, type Cell, type Harness } from "@/lib/bench";
+import { HARNESSES, PHONE, SIM_STEPS, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, simulator, tokens, type Cell, type Harness } from "@/lib/bench";
 import { mark, PAINT } from "@/lib/chauffeur";
 import { DEMO_CAPTION, HOME_DESC, HOME_FAQ, JOBS, INIT, MCP_CONFIG, NPX } from "@/lib/data";
 import { softwareLd } from "@/lib/ld";
@@ -65,18 +65,10 @@ const RACE: [string, string][] = [
 
 const TOOLS = ["devices", "apps", "snapshot", "screenshot", "tap", "type", "swipe", "scroll", "press", "launch", "wait", "batch", "clipboard", "shell", "setting", "logs", "replay"];
 
-const ACTION = [
-  "on: [push, pull_request]",
-  "jobs:",
-  "  android:",
-  "    runs-on: ubuntu-latest",
-  "    steps:",
-  "      - uses: actions/checkout@v4",
-  "      - run: ./gradlew assembleDebug",
-  `      - uses: hridaya423/phonedriver@v${VERSION}`,
-  "        with:",
-  "          app: app/build/outputs/apk/debug/app-debug.apk",
-  "          runs: e2e/*.steps",
+const RUNS = [
+  ["Agent run", "an agent, with a model"],
+  ["Replay", "replay, no model"],
+  ["After a change", "replay, after Wi-Fi was turned off"],
 ];
 
 const ALSO: [string, string, string][] = [
@@ -120,7 +112,6 @@ const strip = (top: number, height: number) => {
 
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
 const LANED = new Date(`${lanes.date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-const LANES = [{ id: "", who: "your screen", alt: lanes.main.alt, frames: lanes.main.frames, steps: [] as (typeof lanes.lanes)[number]["steps"] }, ...lanes.lanes];
 
 export const metadata = meta({ path: "/", title: "phonedriver: MCP server for AI agents on Android and iOS phones", description: HOME_DESC, og: "/assets/og-home.png" });
 
@@ -144,6 +135,39 @@ export default function Home() {
   const fewer = ratio(b.total("mobile-mcp").tokens / b.total("phonedriver").tokens);
   const race = RACE.map(([id, label]) => ({ label, o: op(id) }));
   const sim = simulator();
+  const place = (n: number) => ["1st", "2nd", "3rd", "4th"][n];
+  const RACES = [
+    {
+      id: "emulator",
+      name: "Android emulator",
+      cap: "Medians of 50 runs on an Android 17 emulator, against adb.",
+      href: "/benchmarks/#speed",
+      rows: race.map(({ label, o }) => ({ label, fig: ratio(o.adb / o.phonedriver), lanes: [["phonedriver", o.phonedriver], ["adb", o.adb]] as [string, number][] })),
+    },
+    {
+      id: "phone",
+      name: "Real phone",
+      cap: `Medians on a ${PHONE.name} (${PHONE.os}), against adb.`,
+      href: "/benchmarks/#speed",
+      rows: (
+        [
+          ["Read the screen", PHONE.read],
+          ["Take a screenshot", PHONE.shot],
+        ] as [string, readonly number[]][]
+      ).map(([label, [us, adb]]) => ({ label, fig: ratio(adb / us), lanes: [["phonedriver", us], ["adb", adb]] as [string, number][] })),
+    },
+    {
+      id: "simulator",
+      name: "iOS Simulator",
+      cap: `Medians on an ${sim.device} Simulator, ${sim.date}, against three other tools.`,
+      href: "/benchmarks/#simulator",
+      rows: SIM_STEPS.map(([k, label]) => ({
+        label,
+        fig: place(sim.tools.filter((t) => t[k].medianMs < sim.tools[0][k].medianMs).length),
+        lanes: sim.tools.map((t) => [t.tool, t[k].medianMs] as [string, number]),
+      })),
+    },
+  ];
   const read = race[0].o;
   const ld = [
     ...softwareLd(),
@@ -230,8 +254,8 @@ export default function Home() {
             <div>
               <h2>{fewer} fewer tokens than mobile&#8209;mcp on nine real phone jobs.</h2>
               <p className="lede">
-                Nine jobs only a phone can do, run with Claude Sonnet 5.5 through three MCP servers on one Android emulator on {b.date}. A script checked the
-                phone&apos;s own data afterwards, not the model&apos;s report.
+                Nine jobs only a phone can do, run with Claude Sonnet 5.5 through three MCP servers and checked against the phone&apos;s own data.{" "}
+                <Link href="/benchmarks/">How it was measured</Link>
               </p>
             </div>
             <p className="hm-big" aria-hidden="true" data-land="" data-at=".07">
@@ -348,7 +372,7 @@ export default function Home() {
           <div className="hm-stat">
             <div>
               <h2>It reads the screen as text.</h2>
-              <p className="lede">Each screen arrives as a short numbered list, and the model taps by number. It takes a screenshot only when it needs to see a picture.</p>
+              <p className="lede">Each screen arrives as a short numbered list, and the model taps by number.</p>
             </div>
             <p className="hm-pair" aria-hidden="true">
               <span>
@@ -436,8 +460,7 @@ export default function Home() {
               </p>
               <Pane title="then, one screen later" note="only what changed" lines={TAPDIFF} label="phonedriver tap output" />
               <p className="tv-cap">
-                After every tap, phonedriver waits for the screen to settle and replies with only the lines that changed. The model never polls or guesses how long a
-                screen takes to load.
+                After every tap, phonedriver waits for the screen to settle and replies with only the lines that changed.
               </p>
             </div>
             <svg className="tv-link" aria-hidden="true">
@@ -455,12 +478,18 @@ export default function Home() {
           <div className="hm-head">
             <h2>{ratio(read.adb / read.phonedriver)} faster than adb at reading the screen.</h2>
             <p className="lede">
-              A helper on the phone keeps the accessibility connection open. <Link href="/compare/adb/">adb</Link> starts a new process and writes XML on every call.
+              A helper stays on the phone with the connection open, where <Link href="/compare/adb/">adb</Link> starts a new process on every call.
             </p>
           </div>
-          <figure className="race pane" data-slow={SLOW} data-land="" data-at=".72" data-life="" data-point="li:first-child .race-lane.us .race-ms" data-point-at="900">
+          <figure className="race pane" data-slow={SLOW} data-land="" data-at=".72" data-life="" data-point="ol:not([hidden]) li:first-child .race-lane.us .race-ms" data-point-at="900">
             <figcaption className="pane-head">
-              <span>four calls</span>
+              <div className="race-seg race-devs" role="group" aria-label="Device">
+                {RACES.map((r, i) => (
+                  <button type="button" className="race-btn" data-dev={r.id} aria-pressed={i === 0} key={r.id}>
+                    {r.name}
+                  </button>
+                ))}
+              </div>
               <div className="race-ctl" hidden>
                 <div className="race-seg" role="group" aria-label="Speed">
                   <button type="button" className="race-btn" data-speed="slow" aria-pressed="true">
@@ -475,68 +504,37 @@ export default function Home() {
                 </button>
               </div>
             </figcaption>
-            <ol>
-              {race.map(({ label, o }) => (
-                <li key={o.id}>
-                  <p className="race-name">
-                    {label}
-                    <b>{ratio(o.adb / o.phonedriver)}</b>
-                  </p>
-                  {(
-                    [
-                      ["phonedriver", o.phonedriver],
-                      ["adb", o.adb],
-                    ] as const
-                  ).map(([who, t]) => (
-                    <p className={who === "adb" ? "race-lane" : "race-lane us"} key={who}>
-                      <span className="race-who">{who}</span>
-                      <span className="race-track" aria-hidden="true">
-                        <i data-ms={t} />
-                      </span>
-                      <span className="race-ms">{ms(t)} ms</span>
+            {RACES.map((r, i) => (
+              <ol key={r.id} data-for={r.id} hidden={i > 0} className={r.rows[0].lanes.length > 2 ? "many" : undefined}>
+                {r.rows.map((row) => (
+                  <li key={row.label}>
+                    <p className="race-name">
+                      {row.label}
+                      <b>{row.fig}</b>
                     </p>
-                  ))}
-                </li>
-              ))}
-            </ol>
-            <p className="race-cap">
-              Each ball is one call, out to the phone and back. Medians of 50 runs on an Android 17 emulator, against <code>uiautomator dump</code>,{" "}
-              <code>screencap</code> and <code>input</code>. <Link href="/benchmarks/#speed">Method and raw data</Link>
-            </p>
+                    {row.lanes.map(([who, t]) => (
+                      <p className={who === "phonedriver" ? "race-lane us" : "race-lane"} key={who}>
+                        <span className="race-who">{who}</span>
+                        <span className="race-track" aria-hidden="true">
+                          <i data-ms={t} />
+                        </span>
+                        <span className="race-ms">{ms(t)} ms</span>
+                      </p>
+                    ))}
+                  </li>
+                ))}
+              </ol>
+            ))}
+            {RACES.map((r, i) => (
+              <p className="race-cap" data-for={r.id} hidden={i > 0} key={r.id}>
+                Each ball is one call, out and back. {r.cap} <Link href={r.href}>How it was measured</Link>
+              </p>
+            ))}
             <canvas className="pf" aria-hidden="true" />
             <i className="pf-ring" aria-hidden="true" />
             <RaceEngine />
             <PointEngine host=".race" />
           </figure>
-          <dl className="hm-phone">
-            <dt>
-              On a real phone{" "}
-              <span>
-                {PHONE.name}, {PHONE.os}
-              </span>
-            </dt>
-            <dd>
-              <b>{ratio(PHONE.read[1] / PHONE.read[0])}</b> Reading the screen took {PHONE.read[0]} ms against {ms(PHONE.read[1])} ms.
-            </dd>
-            <dd>
-              <b>{ratio(PHONE.shot[1] / PHONE.shot[0])}</b> A screenshot took {Math.round(PHONE.shot[0])} ms against {ms(PHONE.shot[1])} ms.
-            </dd>
-          </dl>
-          <dl className="hm-phone">
-            <dt>
-              On the iOS Simulator{" "}
-              <span>
-                {sim.device}, {sim.runtime}
-              </span>
-            </dt>
-            <dd>
-              <b>{Math.round(sim.tools[0].read.medianMs)} ms</b> Reading the screen. simulator-use took {Math.round(sim.tools[1].read.medianMs)} ms on the same screen.
-            </dd>
-            <dd>
-              <b>{Math.round(sim.tools[0].tap.medianMs)} ms</b> A tap with its reply, against {Math.round(sim.tools[1].tap.medianMs)} ms.{" "}
-              <Link href="/benchmarks/#simulator">The sign-in benchmark</Link>
-            </dd>
-          </dl>
         </div>
       </section>
 
@@ -547,8 +545,7 @@ export default function Home() {
             <div>
               <h2>It asks you before it taps Pay.</h2>
               <p className="lede">
-                When a tap lands on Pay, Buy now, Place order or Delete account, phonedriver holds it and asks you in Claude Code&apos;s own prompt. The model never sees
-                that question and can&apos;t answer it.
+                A tap on Pay, Buy now, Place order or Delete account is held, and you are asked in a prompt the model can&apos;t answer.
               </p>
             </div>
             <div className="hm-sticky">
@@ -633,11 +630,8 @@ export default function Home() {
         <div className="wrap">
           <div className="hm-stat">
             <div>
-              <h2>One phone. A screen for each agent.</h2>
-              <p className="lede">
-                On Android 13 and later, each agent works on a hidden screen of its own on the same phone. They run at the same time, and the screen in your hand
-                stays yours.
-              </p>
+              <h2>One phone. Five agents.</h2>
+              <p className="lede">Each agent gets a hidden screen of its own on the same Android phone, and the screen in your hand stays yours.</p>
             </div>
             <p className="hm-pair" aria-hidden="true" data-land="" data-at=".07">
               <span>
@@ -645,12 +639,12 @@ export default function Home() {
               </span>
               <i>→</i>
               <b>
-                {LANES.length}
+                {lanes.screens}
                 <small>screens in use at once</small>
               </b>
             </p>
           </div>
-          <figure className="ln pane" data-wall={lanes.wall} data-rate={lanes.rate} data-life="">
+          <figure className="ln pane" data-length={lanes.length} data-life="">
             <figcaption className="pane-head">
               <span>{lanes.device}</span>
               <div className="race-ctl" hidden>
@@ -659,95 +653,41 @@ export default function Home() {
                 </button>
               </div>
             </figcaption>
-            <div className="ln-body">
-            <ol className="ln-screens">
-              {LANES.map((l) => (
-                <li className={l.id ? "ln-s" : "ln-s yours"} data-lane={l.id || "main"} key={l.id}>
+            <div className="ln-stage">
+              <div className="ln-s yours">
+                <p className="ln-id">
+                  <b>main</b>
+                  <span>yours</span>
+                </p>
+                <div className="ln-shot">
+                  <img src={lanes.main} width={360} height={808} alt="The phone's own screen during the run: its home screen, with no agent on it." decoding="async" loading="lazy" />
+                </div>
+                <p className="ln-now">untouched</p>
+              </div>
+              {lanes.lanes.map((l, i) => (
+                <div className="ln-s" data-lane={l.id} data-steps={JSON.stringify(l.steps)} style={{ "--n": i } as React.CSSProperties} key={l.id}>
                   <p className="ln-id">
-                    <b>{l.id ? `+${l.id}` : "main"}</b>
-                    <span>{l.who}</span>
+                    <b>+{l.id}</b>
+                    <span>{l.app}</span>
                   </p>
                   <div className="ln-shot">
-                    {l.frames.map((f, i) => (
-                      <img key={f.src} src={f.src} data-t={f.t} data-on={i === l.frames.length - 1 ? "" : undefined} width={SHOT[0] / 2} height={SHOT[1] / 2} alt={i === l.frames.length - 1 ? l.alt : `${l.who}, ${(f.t / 1000).toFixed(1)} s into the run`} aria-hidden={i === l.frames.length - 1 ? undefined : true} decoding="async" loading="lazy" />
-                    ))}
+                    <video src={l.src} poster={l.poster} width={320} height={718} muted playsInline preload="metadata" aria-label={`A recording of agent ${l.id}'s hidden screen, in ${l.app}`} />
+                    <i className="ln-tap" aria-hidden="true" />
                   </div>
-                </li>
-              ))}
-            </ol>
-            <div className="ln-score">
-              {LANES.map((l) => (
-                <div className={l.id ? "ln-row" : "ln-row yours"} data-lane={l.id || "main"} key={l.id}>
-                  <span className="ln-who">{l.id ? `+${l.id}` : "main"}</span>
-                  <span className="ln-track" aria-hidden="true">
-                    {l.steps.map((st) => (
-                      <b
-                        key={st.t0}
-                        data-t0={st.t0}
-                        data-t1={st.t1}
-                        data-cmd={st.cmd}
-                        data-reply={st.reply}
-                        style={{ left: `${(st.t0 / lanes.wall) * 100}%`, width: `${((st.t1 - st.t0) / lanes.wall) * 100}%` }}
-                      />
-                    ))}
-                    <i />
-                  </span>
-                  {l.id ? (
-                    <span className="ln-now" data-s="done">
-                      {l.steps[l.steps.length - 1].reply}
-                    </span>
-                  ) : (
-                    <span className="ln-now" data-s="wait">
-                      no calls, it is yours
-                    </span>
-                  )}
+                  <p className="ln-now">{l.steps[l.steps.length - 1].cmd}</p>
                 </div>
               ))}
-              <span className="ln-head" aria-hidden="true" />
-              <input className="ln-scrub" type="range" min={0} max={lanes.wall} step={10} defaultValue={lanes.wall} aria-label="Time in the recording, in milliseconds" />
-              <p className="ln-ruler" aria-hidden="true">
-                <span>0 s</span>
-                <output className="ln-clock">{secs(lanes.wall)}</output>
-                <span>{secs(lanes.wall)}</span>
-              </p>
             </div>
+            <div className="ln-bar">
+              <input className="ln-scrub" type="range" min={0} max={lanes.length} step={10} defaultValue={lanes.length} aria-label="Time in the recording, in milliseconds" />
+              <output className="ln-clock">{secs(lanes.wall)}</output>
             </div>
             <p className="race-cap">
-              One recording on an Android 17 emulator, {LANED}. Each bar is one call, from the moment it was sent to its reply, and each screen is what that
-              display showed then. The two jobs took {secs(lanes.wall)} side by side and {secs(lanes.serial)} one after the other. It plays here at twice its speed; drag the line to move through it. <Link href="/docs/android-phone/#a-hidden-screen-for-the-agent">How to give each agent a lane</Link>
+              One recording at real speed, {LANED}: five agents finish five jobs on one Android 17 emulator in {secs(lanes.wall)}.{" "}
+              <Link href="/docs/android-phone/#a-hidden-screen-for-the-agent">Give each agent a lane</Link>
             </p>
             <LanesEngine />
           </figure>
-          <div className="ln-after">
-            <div className="tw">
-              <table>
-                <caption>
-                  <code>phonedriver devices</code>, during the run
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Id</th>
-                    <th scope="col">Lease</th>
-                    <th scope="col">Display</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lanes.devices.map(([id, lease, display]) => (
-                    <tr key={id}>
-                      <th scope="row">{id}</th>
-                      <td>{lease}</td>
-                      <td>{display}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="hm-note">
-              A device id that ends in <code>+a</code> or <code>+b</code> is a lane. One agent that only needs to stay off your screen sets{" "}
-              <code>PHONEDRIVER_DISPLAY=hidden</code>. Two lanes cannot show the same app, and typing into a web page shows the system&apos;s clipboard note. Tested
-              on an emulator and on a {PHONE.name} ({PHONE.os}).
-            </p>
-          </div>
         </div>
       </section>
 
@@ -757,10 +697,7 @@ export default function Home() {
           <div className="hm-stat">
             <div>
               <h2>A run that worked becomes a test.</h2>
-              <p className="lede">
-                Save what the agent did as a steps file. Replay it with no model, on your machine or on every commit. It stops at the first step that fails, or at
-                the first screen whose text changed.
-              </p>
+              <p className="lede">Save what the agent did, then replay it with no model. It stops at the first screen that changed.</p>
             </div>
             <p className="hm-pair" aria-hidden="true" data-land="" data-at=".07">
               <b>
@@ -768,61 +705,57 @@ export default function Home() {
               </b>
             </p>
           </div>
-          <div className="rp" data-life="">
-            <figure className="pane rp-file">
-              <figcaption className="pane-head">
-                <span>{replay.file}</span>
-                <span>{replay.saved.replace(` to ${replay.file}`, "")}</span>
-              </figcaption>
-              <ol className="rp-steps">
-                {replay.steps.map((line, i) => (
-                  <li key={i} style={{ "--n": i } as React.CSSProperties} data-stop={i === replay.stops - 1 ? "" : undefined}>
-                    {line}
-                  </li>
+          <div className="rp" data-life="" data-halt="" data-pass="2" data-passes={JSON.stringify(replay.passes.map((p) => ({ length: p.length, steps: p.steps })))} data-stops={replay.stops}>
+            <div className="rp-tabs" role="group" aria-label="Which run to watch">
+              {RUNS.map(([name, mode], i) => (
+                <button type="button" className="race-btn" data-run={i} data-mode={mode} aria-pressed={i === 2} key={name}>
+                  <b>{i + 1}</b> {name}
+                </button>
+              ))}
+            </div>
+            <div className="rp-stage">
+              <div className="rp-phone">
+                {replay.passes.map((p, i) => (
+                  <video key={p.src} src={p.src} poster={p.poster} width={360} height={808} muted playsInline preload="metadata" data-run={i} data-on={i === 2 ? "" : undefined} aria-label={`A recording of the phone: ${RUNS[i][0]}`} />
                 ))}
-              </ol>
-            </figure>
-            <div className="rp-runs">
-            <div className="rp-run rp-first">
-              <Pane title="the first replay" note="no model" lines={replay.first} label="Output of the first phonedriver replay" />
-            </div>
-            <div className="rp-run rp-second">
-              <Pane title={replay.changed} note={`stops at step ${replay.stops}`} lines={replay.second} label="Output of the replay after the change" />
-            </div>
-            </div>
-            <figure className="rp-shots">
-              <div>
-                <img src={replay.kept.src} width={360} height={808} alt={replay.kept.alt} decoding="async" loading="lazy" />
-                <p>the screen it kept</p>
+                <i className="ln-tap" aria-hidden="true" />
+                <i className="rp-box" aria-hidden="true" style={{ left: `${replay.box[0] * 100}%`, top: `${replay.box[1] * 100}%`, width: `${replay.box[2] * 100}%`, height: `${replay.box[3] * 100}%` }} />
               </div>
-              <div className="now">
-                <span className="rp-shot">
-                  <img src={replay.now.src} width={360} height={808} alt={replay.now.alt} decoding="async" loading="lazy" />
-                  <i aria-hidden="true" style={{ left: `${replay.box[0] * 100}%`, top: `${replay.box[1] * 100}%`, width: `${replay.box[2] * 100}%`, height: `${replay.box[3] * 100}%` }} />
-                </span>
-                <p>the screen it found</p>
+              <figure className="pane rp-file">
+                <figcaption className="pane-head">
+                  <span>{replay.file}</span>
+                  <span className="rp-mode">{RUNS[2][1]}</span>
+                </figcaption>
+                <ol className="rp-steps">
+                  {replay.steps.map((line, i) => (
+                    <li key={i} data-s={i < replay.stops - 1 ? "ok" : i === replay.stops - 1 ? "stop" : "idle"}>
+                      <button type="button" data-step={i}>
+                        {line}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+                <p className="rp-say" data-says={JSON.stringify([`saved ${replay.steps.length} steps to ${replay.file}`, replay.matched, `~ ${replay.change}`])}>
+                  ~ {replay.change}
+                </p>
+                <canvas className="rp-fig" aria-hidden="true" />
+                <HoldEngine />
+              </figure>
+            </div>
+            <details className="qa rp-out">
+              <summary>
+                <span>Show the output</span>
+              </summary>
+              <div className="rp-panes">
+                <Pane title="replay" note="no model" lines={replay.first} label="Output of a phonedriver replay that matched" />
+                <Pane title="replay, after Wi-Fi was turned off" note={`stops at step ${replay.stops}`} lines={replay.second} label="Output of the replay after the change" />
               </div>
-            </figure>
+            </details>
             <p className="tv-cap rp-cap">
-              One run on an Android 17 emulator, {LANED}. Wi-Fi was turned off between the two replays, so the Internet row changed. Each reply is cut where its
-              list of the screen&apos;s elements starts.
+              Recorded on an Android 17 emulator, {LANED}. Tap a step to jump to it. The <Link href="/docs/replay-in-ci/">GitHub Action</Link> replays saved runs on every
+              commit.
             </p>
-          </div>
-          <div className="rp-ci">
-            <div>
-              <h3>On every commit</h3>
-              <p>
-                The repository is also a GitHub Action. It starts an Android emulator or an iOS Simulator, installs your build and replays each file. A run that
-                stops fails the job, and its screen, reply and video are kept.
-              </p>
-              <p className="hm-end-links">
-                <Link href="/docs/replay-in-ci/">
-                  Replay in CI
-                  <Arrow />
-                </Link>
-              </p>
-            </div>
-            <Pane title=".github/workflows/replay.yml" lines={ACTION} label="A GitHub Actions workflow that replays saved runs" />
+            <ReplayEngine />
           </div>
         </div>
       </section>
@@ -833,7 +766,7 @@ export default function Home() {
           <div className="hm-head">
             <h2>How it works.</h2>
             <p className="lede">
-              On Android there is no app to install. phonedriver pushes its helper over adb when it connects. On iOS it builds a small XCTest runner on your Mac, and on the Simulator a tap goes to the Simulator&apos;s own touch input.
+              Nothing to install on the phone: a helper goes over adb on Android, and a small XCTest runner is built on your Mac for iOS.
             </p>
           </div>
           <div>
@@ -892,21 +825,20 @@ export default function Home() {
                   ))}
                 </ul>
                 <p className="hm-note">
-                  phonedriver sends no telemetry. After the first download it connects only to your device, and a test runs the whole tool in a sandbox that blocks
-                  every other connection. <a href={raw("docs/architecture.md")}>Architecture</a> and <a href={raw("docs/decisions.md")}>design decisions</a> are in the
-                  repository.
+                  phonedriver sends no telemetry: after the first download it connects only to your device. <a href={raw("docs/architecture.md")}>Architecture</a> and{" "}
+                  <a href={raw("docs/decisions.md")}>design decisions</a> are in the repository.
                 </p>
               </div>
             </div>
             <div className="also">
-              <h3 className="hm-kick">Also new in {VERSION}</h3>
-              <ul>
+              <h3 className="hm-kick">
+                Also new in {VERSION} <Link href="/changelog/">Everything in it</Link>
+              </h3>
+              <ul className="tools">
                 {ALSO.map(([cmd, what, href]) => (
                   <li key={cmd}>
-                    <Link href={href}>
-                      <code>{cmd}</code>
-                      <span>{what}</span>
-                      <Arrow />
+                    <Link href={href} title={what}>
+                      {cmd}
                     </Link>
                   </li>
                 ))}
@@ -956,7 +888,7 @@ export default function Home() {
           <div className="end-copy">
             <h2>Give your agent a phone.</h2>
             <p className="lede">
-              Paste one prompt, or run one command. Either way phonedriver is added to the agents on your machine, your setup is checked, and you are told what to plug in.
+              Paste one prompt or run one command, and phonedriver is added to the agents on your machine.
             </p>
             <p className="hm-end-links">
               <Link href="/docs/">

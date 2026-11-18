@@ -7,8 +7,11 @@ export function mountRace(el: HTMLElement): () => void {
   const ctl = el.querySelector<HTMLElement>(".race-ctl")!;
   const play = el.querySelector<HTMLButtonElement>(".race-play")!;
   const speeds = [...el.querySelectorAll<HTMLButtonElement>("[data-speed]")];
-  const balls = [...el.querySelectorAll<HTMLElement>("[data-ms]")].map((dot) => ({ dot, lane: dot.closest<HTMLElement>(".race-lane")!, ms: Number(dot.dataset.ms), run: 0, back: false }));
-  const round = Math.max(...balls.map((b) => b.ms)) + REST;
+  const devs = [...el.querySelectorAll<HTMLButtonElement>("[data-dev]")];
+  const panels = [...el.querySelectorAll<HTMLElement>("[data-for]")];
+  const collect = () => [...el.querySelectorAll<HTMLElement>("ol:not([hidden]) [data-ms]")].map((dot) => ({ dot, lane: dot.closest<HTMLElement>(".race-lane")!, ms: Number(dot.dataset.ms), run: 0, back: false }));
+  let balls = collect();
+  let round = Math.max(...balls.map((b) => b.ms)) + REST;
   let raf = 0;
   let last = 0;
   let t = 0;
@@ -76,6 +79,22 @@ export function mountRace(el: HTMLElement): () => void {
     sync();
   };
 
+  const device = (e: Event) => {
+    const id = (e.currentTarget as HTMLElement).dataset.dev;
+    clear();
+    for (const b of balls) b.dot.style.transform = "";
+    for (const d of devs) d.setAttribute("aria-pressed", String(d.dataset.dev === id));
+    for (const p of panels) p.hidden = p.dataset.for !== id;
+    balls = collect();
+    round = Math.max(...balls.map((b) => b.ms)) + REST;
+    t = 0;
+    lap = 0;
+    wanted = true;
+    measure();
+    sync();
+    el.dispatchEvent(new CustomEvent("life"));
+  };
+
   const ro = new ResizeObserver(measure);
   ro.observe(el);
   const io = new IntersectionObserver(
@@ -89,6 +108,7 @@ export function mountRace(el: HTMLElement): () => void {
   ctl.hidden = false;
   play.addEventListener("click", toggle);
   for (const s of speeds) s.addEventListener("click", speed);
+  for (const d of devs) d.addEventListener("click", device);
   sync();
   return () => {
     cancelAnimationFrame(raf);
@@ -96,6 +116,7 @@ export function mountRace(el: HTMLElement): () => void {
     io.disconnect();
     play.removeEventListener("click", toggle);
     for (const s of speeds) s.removeEventListener("click", speed);
+    for (const d of devs) d.removeEventListener("click", device);
     clear();
     for (const b of balls) b.dot.style.transform = "";
   };

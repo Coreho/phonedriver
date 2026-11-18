@@ -1,4 +1,0 @@
-ok tapped @e37 "5"
-~ @e32 text "0 hours, 0 minutes, 0 seconds" → "0 hours, 0 minutes, 5 seconds"
-~ @e44 button "Backspace" disabled → (none)
-~ @e45 button "Start" disabled → (none)

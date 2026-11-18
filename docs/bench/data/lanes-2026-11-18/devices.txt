@@ -1,4 +1,7 @@
-ID                       MODEL                OS                   TIER   LEASE           DISPLAY
-android:emulator-5554    sdk_gphone64_x86_64  Android 17 (API 37)  agent  -               main
-android:emulator-5554+a  sdk_gphone64_x86_64  Android 17 (API 37)  agent  one (idle 6s)   hidden (display 32)
-android:emulator-5554+b  sdk_gphone64_x86_64  Android 17 (API 37)  agent  two (idle 12s)  hidden (display 31)
+ID                       MODEL                OS                   TIER   LEASE          DISPLAY
+android:emulator-5554    sdk_gphone64_x86_64  Android 17 (API 37)  agent  -              main
+android:emulator-5554+a  sdk_gphone64_x86_64  Android 17 (API 37)  agent  sa (idle 8s)   hidden (display 8)
+android:emulator-5554+b  sdk_gphone64_x86_64  Android 17 (API 37)  agent  sb (idle 6s)   hidden (display 9)
+android:emulator-5554+c  sdk_gphone64_x86_64  Android 17 (API 37)  agent  sc (idle 6s)   hidden (display 5)
+android:emulator-5554+d  sdk_gphone64_x86_64  Android 17 (API 37)  agent  sd (idle 10s)  hidden (display 6)
+android:emulator-5554+e  sdk_gphone64_x86_64  Android 17 (API 37)  agent  se (idle 3s)   hidden (display 7)
