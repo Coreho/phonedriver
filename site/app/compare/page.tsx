@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { JsonLd } from "@/components/Bits";
 import { PageTop } from "@/components/PageTop";
-import { board, op, ratio } from "@/lib/bench";
+import { board, op, ratio, simulator } from "@/lib/bench";
 import { COMPARE, page } from "@/lib/content";
 import { listLd } from "@/lib/ld";
 import { meta } from "@/lib/meta";
@@ -9,7 +9,7 @@ import { meta } from "@/lib/meta";
 export const metadata = meta({
   path: "/compare/",
   title: "phonedriver vs mobile-mcp, phone-harness and adb, measured",
-  description: "Which tool should an AI agent use to control a phone? phonedriver against mobile-mcp, phone-harness, adb and Appium on tokens, passed runs and speed.",
+  description: "Which tool should an AI agent use to control a phone? phonedriver against mobile-mcp, phone-harness, adb, Appium, simulator-use and Argent on tokens, passed runs and speed.",
   og: "/og/compare-adb.png",
 });
 
@@ -17,11 +17,15 @@ export default function CompareIndex() {
   const b = board();
   const us = b.total("phonedriver").tokens;
   const read = op("tree_list");
+  const tools = simulator().tools;
+  const sim = (id: string) => tools.find((t) => t.tool === id)!;
   const figs: Record<string, [string, string]> = {
     adb: [ratio(read.adb / read.phonedriver), "faster screen reads"],
     "mobile-mcp": [ratio(b.total("mobile-mcp").tokens / us), "fewer tokens, nine jobs"],
     "phone-harness": [ratio(b.total("phone-harness").tokens / us), "fewer tokens, nine jobs"],
     appium: ["2.0x", "faster reads than tuned WebDriverAgent"],
+    "simulator-use": [ratio(sim("simulator-use").read.medianMs / sim("phonedriver").read.medianMs), "faster reads, iOS Simulator"],
+    argent: [ratio(sim("argent").read.medianTokens / sim("phonedriver").read.medianTokens), "fewer tokens a read"],
   };
   return (
     <>

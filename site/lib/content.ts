@@ -27,6 +27,8 @@ export const COMPARE: [string, string][] = [
   ["mobile-mcp", "phonedriver vs mobile-mcp"],
   ["phone-harness", "phonedriver vs phone-harness"],
   ["appium", "phonedriver vs Appium"],
+  ["simulator-use", "phonedriver vs simulator-use"],
+  ["argent", "phonedriver vs Argent"],
 ];
 
 export const POSTS = [
