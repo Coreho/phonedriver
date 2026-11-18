@@ -18,7 +18,7 @@ concurrency:
   group: site
   cancel-in-progress: false
 jobs:
-  deploy:
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -33,17 +33,3 @@ jobs:
           npx -y pnpm@10 build
           npx -y pnpm@10 typecheck
           node scripts/check.mjs
-      - name: Deploy to Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::warning::The VERCEL_TOKEN secret is not set, so the site was built and checked but not deployed."
-            exit 0
-          fi
-          mkdir "$RUNNER_TEMP/phonedriver"
-          cp -R site/out/. "$RUNNER_TEMP/phonedriver/"
-          cd "$RUNNER_TEMP/phonedriver"
-          npx -y vercel@66.2.0 deploy --prod --yes

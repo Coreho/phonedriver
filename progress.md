@@ -3164,3 +3164,9 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Proof: `curl` of `https://phonedriver.dev/`, `/compare/argent/`, `/compare/simulator-use/` and `/faq/` each returned 200, and the home page HTML contains `faq-mark`, `tr-stack`, `ln-routes` and `race-note`.
 - IndexNow: posted the 11 changed URLs (home, compare index, the two new compare pages, six docs pages, FAQ). Reply `200 11 urls`.
 - `.github/workflows/site.yml` builds on every push but skips the upload: no `VERCEL_TOKEN` secret is set. The Vercel project is not connected to the GitHub repo.
+
+## 2026-11-18: the Vercel project is connected to the GitHub repo
+
+- In the Vercel dashboard the `phonedriver` project is now connected to `hridaya423/phonedriver` ("Connected just now"). Project settings: root directory `site`, framework Next.js, Node 24, files outside the root included.
+- `site/vercel.json` is a copy of `site/public/vercel.json`: a git build reads its redirects from the root directory, not from the output folder.
+- The workflow no longer uploads; it only builds and checks. Vercel deploys each push to `main`.
