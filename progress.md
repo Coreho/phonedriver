@@ -3170,3 +3170,9 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - In the Vercel dashboard the `phonedriver` project is now connected to `hridaya423/phonedriver` ("Connected just now"). Project settings: root directory `site`, framework Next.js, Node 24, files outside the root included.
 - `site/vercel.json` is a copy of `site/public/vercel.json`: a git build reads its redirects from the root directory, not from the output folder.
 - The workflow no longer uploads; it only builds and checks. Vercel deploys each push to `main`.
+
+## 2026-11-18: a Gemini CLI extension manifest
+
+- `gemini-extension.json` at the repository root, so the Gemini CLI gallery can index phonedriver and `gemini extensions install https://github.com/hridaya423/phonedriver` works. It starts the same pinned server as the plugin (`npx -y phonedriver@0.1.5 mcp`), so a release has one more place to bump.
+- The gallery finds repositories by the `gemini-cli-extension` topic and crawls daily. The repository was at GitHub's limit of 20 topics, so `agentic-ai` made way for it.
+- Checked: `python3 -m json.tool gemini-extension.json` parses. Not checked: an install in Gemini CLI, which is not on these machines.
