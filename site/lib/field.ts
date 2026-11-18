@@ -29,3 +29,41 @@ export const grain = (a: number, b: number) => {
   const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return n - Math.floor(n);
 };
+
+/** A character drawn large in glyphs on `.faq-mark`. The glyphs are dealt again each time a question under `el` opens or closes. */
+export function mountMark(el: HTMLElement): () => void {
+  const canvas = el.querySelector<HTMLCanvasElement>(".faq-mark")!;
+  const mask = document.createElement("canvas");
+  let seed = 0;
+  const draw = () => {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+    mask.width = w;
+    mask.height = h;
+    const ctx = mask.getContext("2d", { willReadFrequently: true })!;
+    ctx.clearRect(0, 0, w, h);
+    ctx.filter = "blur(5px)";
+    ctx.font = `800 ${h * 1.12}px ${getComputedStyle(canvas).fontFamily}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(canvas.dataset.mark!, w / 2, h * 0.54);
+    const alpha = ctx.getImageData(0, 0, w, h).data;
+    glyphField(canvas, (x, y) => {
+      const a = alpha[(Math.min(h - 1, Math.round(y + 5)) * w + Math.min(w - 1, Math.round(x + 3))) * 4 + 3] / 255;
+      return a < 0.12 ? 0 : Math.min(1, a * 1.25) * (0.62 + 0.38 * grain(Math.round(x / 7) + seed * 13, Math.round(y / 9) + seed * 7));
+    });
+  };
+  const deal = () => {
+    seed++;
+    draw();
+  };
+  const ro = new ResizeObserver(draw);
+  ro.observe(canvas);
+  el.addEventListener("toggle", deal, true);
+  document.fonts.ready.then(draw);
+  return () => {
+    ro.disconnect();
+    el.removeEventListener("toggle", deal, true);
+  };
+}

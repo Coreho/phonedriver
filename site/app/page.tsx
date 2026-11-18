@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Arrow, Html, JsonLd, Pane, Star } from "@/components/Bits";
-import { DotsEngine, EndEngine, HoldEngine, LanesEngine, ReplayEngine, TraceEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
+import { DotsEngine, EndEngine, HoldEngine, LanesEngine, MarkEngine, ReplayEngine, TraceEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
 import { Hero } from "@/components/Hero";
 import { Paste } from "@/components/Paste";
 import { Route } from "@/components/Route";
@@ -736,9 +736,12 @@ export default function Home() {
                 <h3>Local daemon</h3>
                 <p className="tr-line">
                   <span className="tr-stack" aria-hidden="true">
-                    {[0, 1, 2, 3, 4, 5].map((r) => (
-                      <i key={r}>{Array.from({ length: 9 }, (_, c) => `@e${r * 9 + c + 1}`).join(" ")}</i>
+                    {[4, 3, 2, 1].map((r) => (
+                      <i key={r} style={{ "--n": r } as React.CSSProperties} />
                     ))}
+                    <i style={{ "--n": 0 } as React.CSSProperties}>
+                      {Array.from({ length: 72 }, (_, c) => c + 1).map((n) => (n === 10 ? <b key={n}>@e{n} </b> : `@e${n} `))}
+                    </i>
                   </span>
                   <i className="tr-wire" data-via="adb or Xcode" aria-hidden="true" />
                 </p>
@@ -822,7 +825,11 @@ export default function Home() {
       <section className="stop" id="limits" data-weave="thin">
         <Route n={8} say={STOPS[7][2]} short={STOPS[7][3]} />
         <div className="wrap hm-rail">
-          <h2>Limits and questions.</h2>
+          <div className="faq-side">
+            <h2>Limits and questions.</h2>
+            <canvas className="faq-mark" data-mark="?" aria-hidden="true" />
+            <MarkEngine />
+          </div>
           <div>
             <ul className="limits" data-land="">
               <li>
@@ -837,17 +844,19 @@ export default function Home() {
               <li>Screens that block screenshots, as some banking apps do, come out black in a screenshot. Their text can still be read.</li>
             </ul>
             <div className="faq" id="faq">
-              {HOME_FAQ.map(([q, a], i) => (
-                <details className="qa" name="faq" key={q} open={i === 0}>
-                  <summary>
-                    <h3>{q}</h3>
-                  </summary>
-                  <Html html={`<p>${inline(a)}</p>`} />
-                </details>
-              ))}
-              <p className="small">
-                More answers, on speed, tokens, iPhones and other tools, are in <Link href="/faq/">the FAQ</Link>.
-              </p>
+              <div className="faq-list">
+                {HOME_FAQ.map(([q, a], i) => (
+                  <details className="qa" name="faq" key={q} open={i === 0}>
+                    <summary>
+                      <h3>{q}</h3>
+                    </summary>
+                    <Html html={`<p>${inline(a)}</p>`} />
+                  </details>
+                ))}
+                <p className="small">
+                  More answers, on speed, tokens, iPhones and other tools, are in <Link href="/faq/">the FAQ</Link>.
+                </p>
+              </div>
             </div>
           </div>
         </div>
