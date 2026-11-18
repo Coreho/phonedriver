@@ -1404,3 +1404,4 @@ If the helper cannot build or start, the device works as before: touches through
 
 **Limits.** The lanes of different calls are on different time scales (each its own slowest tool), which the caption says. The dotted line to the phone is drawn, not recorded: its ends are the recorded tap position and the step's time.
 
+**The beat was reverted the same day.** The user: "this feels so bad, like this isnt how latency balls work.. pls revert this part." The race is balls out and back again, with the speed switch. The Simulator order, the removed places and the note stay.

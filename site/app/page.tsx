@@ -110,6 +110,7 @@ const strip = (top: number, height: number) => {
 };
 
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
+const SLOW = 25;
 const LANED = new Date(`${lanes.date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
 export const metadata = meta({ path: "/", title: "phonedriver: MCP server for AI agents on Android and iOS phones", description: HOME_DESC, og: "/assets/og-home.png" });
@@ -488,7 +489,7 @@ export default function Home() {
               A helper stays on the phone with the connection open, where <Link href="/compare/adb/">adb</Link> starts a new process on every call.
             </p>
           </div>
-          <figure className="race pane" data-land="" data-at=".72" data-life="" data-point="ol:not([hidden]) li:first-child .race-lane.us .race-ms" data-point-at="900">
+          <figure className="race pane" data-slow={SLOW} data-land="" data-at=".72" data-life="" data-point="ol:not([hidden]) li:first-child .race-lane.us .race-ms" data-point-at="900">
             <figcaption className="pane-head">
               <div className="race-seg race-devs" role="group" aria-label="Device">
                 {RACES.map((r, i) => (
@@ -498,6 +499,14 @@ export default function Home() {
                 ))}
               </div>
               <div className="race-ctl" hidden>
+                <div className="race-seg" role="group" aria-label="Speed">
+                  <button type="button" className="race-btn" data-speed="slow" aria-pressed="true">
+                    {SLOW}x slower
+                  </button>
+                  <button type="button" className="race-btn" data-speed="real" aria-pressed="false">
+                    Real speed
+                  </button>
+                </div>
                 <button type="button" className="race-btn race-play">
                   Play
                 </button>
@@ -515,7 +524,7 @@ export default function Home() {
                       <p className={who === "phonedriver" ? "race-lane us" : "race-lane"} key={who}>
                         <span className="race-who">{who}</span>
                         <span className="race-track" aria-hidden="true">
-                          <canvas data-ms={t} />
+                          <i data-ms={t} />
                         </span>
                         <span className="race-ms">{ms(t)} ms</span>
                       </p>
@@ -527,7 +536,7 @@ export default function Home() {
             ))}
             {RACES.map((r, i) => (
               <p className="race-cap" data-for={r.id} hidden={i > 0} key={r.id}>
-                A dot is one finished call. Each lane runs for as long as the slowest tool takes to finish one. {r.cap} <Link href={r.href}>How it was measured</Link>
+                Each ball is one call, out and back. {r.cap} <Link href={r.href}>How it was measured</Link>
               </p>
             ))}
             <canvas className="pf" aria-hidden="true" />
