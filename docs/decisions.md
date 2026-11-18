@@ -1396,3 +1396,11 @@ If the helper cannot build or start, the device works as before: touches through
 
 **Limits of the amendment.** One run of five lanes, not repeated. The videos are 320 px wide at 20 frames a second. Contacts shows the benchmark's made-up contacts. Looked at in headless Chrome at 1440 and 390 px; video autoplay on a real iPhone was not tried. The palm is not drawn below 900 px.
 
+**Amended again (2026-11-18), after the user saw the second version.** On the Simulator race: "some feel too slow for like for a user", "1st 2nd dont need to be shown", "the type into field and sign in one batch should be put at the last end", "a small note should be added"; and for the race and the saved run, "innovative, creative, visual way to show". What changed:
+
+- The race is a beat. Every lane of a call runs for as long as the slowest tool takes to finish that call once, and stamps a dot each time its own call finishes, so a faster tool draws a denser line and the slowest lands one dot at the end. All calls share one sweep of 2.6 s, so nothing waits on a 5 s call. The speed switch is gone.
+- The Simulator race has no places. Its order is read, tap, sign-in step by step, type, one batch, and it ends with a note on why simulator-use types faster, from `docs/bench/simulator.md`: it presses keys on the Simulator's hardware keyboard, so the on-screen keyboard never opens, and phonedriver types as it does on an iPhone. Every number is still shown.
+- The saved run is a tape beside the phone. While the agent drives, each action travels as a dotted line from where it landed on the phone to the tape and becomes a stop. On replay the tape rewinds and feeds the stops through a gate, and each travels to the phone. After the change the tape jams at stop 4.
+
+**Limits.** The lanes of different calls are on different time scales (each its own slowest tool), which the caption says. The dotted line to the phone is drawn, not recorded: its ends are the recorded tap position and the step's time.
+

@@ -65,8 +65,9 @@ Setup moves from second place to the end: the route starts with someone else's o
 - `lib/journey-engine.ts`: the driver. Per stop: route geometry from the DOM, progress from scroll (monotonic, eased), words typed along the path, the weave's `enter`, the landing (sets `data-landed`, removes `data-wait`, sets `data-enter`, fires `life` on the stop's `[data-life]` nodes). Also the dock state.
 - `lib/weave.ts`: one fixed WebGL canvas for all stops.
 - `lib/views-engine.ts`: the read (dither + shed) and the hover link.
-- `lib/dots-engine.ts`, `race-engine.ts`, `type-engine.ts`: unchanged roles.
-- `lib/lanes-engine.ts`, `lib/replay-engine.ts`: recordings played on one clock (decision D94). The lanes deal five videos from the phone's own screen and mark each tap; the saved run plays three recordings of one phone against its list of steps and raises the palm where the last one stops.
+- `lib/dots-engine.ts`, `type-engine.ts`: unchanged roles.
+- `lib/race-engine.ts`: the race as a beat. Each lane stamps a dot when its call finishes, over the time the slowest tool of that call takes once; one sweep for every call.
+- `lib/lanes-engine.ts`, `lib/replay-engine.ts`: recordings played on one clock (decision D94). The lanes deal five videos from the phone's own screen and mark each tap. The saved run is a tape of stops beside one phone: actions travel from the phone to the tape while the agent drives, and from the tape to the phone on replay, and the tape jams where the last recording stops.
 - Without JavaScript or with reduced motion: every stop is its final state, the spoken line is plain text above the heading, no canvas.
 
 ## Stops, desktop

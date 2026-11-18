@@ -4,7 +4,7 @@ import { DotsEngine, EndEngine, HoldEngine, LanesEngine, ReplayEngine, JourneyEn
 import { Hero } from "@/components/Hero";
 import { Paste } from "@/components/Paste";
 import { Route } from "@/components/Route";
-import { HARNESSES, PHONE, SIM_STEPS, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, simulator, tokens, type Cell, type Harness } from "@/lib/bench";
+import { HARNESSES, PHONE, SIM_STEPS, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, simulator, tokens, type Cell, type Harness, type SimKey } from "@/lib/bench";
 import { mark, PAINT } from "@/lib/chauffeur";
 import { DEMO_CAPTION, HOME_DESC, HOME_FAQ, JOBS, INIT, MCP_CONFIG, NPX } from "@/lib/data";
 import { softwareLd } from "@/lib/ld";
@@ -20,7 +20,6 @@ import "./home.css";
 
 const CONFIG = MCP_CONFIG;
 const CURSOR = `https://cursor.com/en/install-mcp?name=phonedriver&config=${Buffer.from(JSON.stringify({ command: "npx", args: ["-y", "phonedriver", "mcp"] })).toString("base64")}`;
-const SLOW = 25;
 const UNIT = 10000;
 const CLIENTS = [
   { id: "prompt", name: "Ask your agent", say: BOOT },
@@ -135,7 +134,7 @@ export default function Home() {
   const fewer = ratio(b.total("mobile-mcp").tokens / b.total("phonedriver").tokens);
   const race = RACE.map(([id, label]) => ({ label, o: op(id) }));
   const sim = simulator();
-  const place = (n: number) => ["1st", "2nd", "3rd", "4th"][n];
+  const SIM_ORDER: SimKey[] = ["read", "tap", "flow", "type", "flowBatch"];
   const RACES = [
     {
       id: "emulator",
@@ -143,6 +142,7 @@ export default function Home() {
       cap: "Medians of 50 runs on an Android 17 emulator, against adb.",
       href: "/benchmarks/#speed",
       rows: race.map(({ label, o }) => ({ label, fig: ratio(o.adb / o.phonedriver), lanes: [["phonedriver", o.phonedriver], ["adb", o.adb]] as [string, number][] })),
+      note: null as React.ReactNode,
     },
     {
       id: "phone",
@@ -155,17 +155,24 @@ export default function Home() {
           ["Take a screenshot", PHONE.shot],
         ] as [string, readonly number[]][]
       ).map(([label, [us, adb]]) => ({ label, fig: ratio(adb / us), lanes: [["phonedriver", us], ["adb", adb]] as [string, number][] })),
+      note: null as React.ReactNode,
     },
     {
       id: "simulator",
       name: "iOS Simulator",
       cap: `Medians on an ${sim.device} Simulator, ${sim.date}, against three other tools.`,
       href: "/benchmarks/#simulator",
-      rows: SIM_STEPS.map(([k, label]) => ({
-        label,
-        fig: place(sim.tools.filter((t) => t[k].medianMs < sim.tools[0][k].medianMs).length),
+      rows: SIM_ORDER.map((k) => ({
+        label: SIM_STEPS.find(([id]) => id === k)![1],
+        fig: "",
         lanes: sim.tools.map((t) => [t.tool, t[k].medianMs] as [string, number]),
       })),
+      note: (
+        <>
+          <b>Why simulator-use types faster.</b> It presses keys on the Simulator&apos;s hardware keyboard, so the on-screen keyboard never opens. An iPhone has no such shortcut. phonedriver types the
+          way it does on an iPhone and waits for the keyboard.
+        </>
+      ),
     },
   ];
   const read = race[0].o;
@@ -481,7 +488,7 @@ export default function Home() {
               A helper stays on the phone with the connection open, where <Link href="/compare/adb/">adb</Link> starts a new process on every call.
             </p>
           </div>
-          <figure className="race pane" data-slow={SLOW} data-land="" data-at=".72" data-life="" data-point="ol:not([hidden]) li:first-child .race-lane.us .race-ms" data-point-at="900">
+          <figure className="race pane" data-land="" data-at=".72" data-life="" data-point="ol:not([hidden]) li:first-child .race-lane.us .race-ms" data-point-at="900">
             <figcaption className="pane-head">
               <div className="race-seg race-devs" role="group" aria-label="Device">
                 {RACES.map((r, i) => (
@@ -491,14 +498,6 @@ export default function Home() {
                 ))}
               </div>
               <div className="race-ctl" hidden>
-                <div className="race-seg" role="group" aria-label="Speed">
-                  <button type="button" className="race-btn" data-speed="slow" aria-pressed="true">
-                    {SLOW}x slower
-                  </button>
-                  <button type="button" className="race-btn" data-speed="real" aria-pressed="false">
-                    Real speed
-                  </button>
-                </div>
                 <button type="button" className="race-btn race-play">
                   Play
                 </button>
@@ -510,24 +509,25 @@ export default function Home() {
                   <li key={row.label}>
                     <p className="race-name">
                       {row.label}
-                      <b>{row.fig}</b>
+                      {row.fig && <b>{row.fig}</b>}
                     </p>
                     {row.lanes.map(([who, t]) => (
                       <p className={who === "phonedriver" ? "race-lane us" : "race-lane"} key={who}>
                         <span className="race-who">{who}</span>
                         <span className="race-track" aria-hidden="true">
-                          <i data-ms={t} />
+                          <canvas data-ms={t} />
                         </span>
                         <span className="race-ms">{ms(t)} ms</span>
                       </p>
                     ))}
                   </li>
                 ))}
+                {r.note && <li className="race-note">{r.note}</li>}
               </ol>
             ))}
             {RACES.map((r, i) => (
               <p className="race-cap" data-for={r.id} hidden={i > 0} key={r.id}>
-                Each ball is one call, out and back. {r.cap} <Link href={r.href}>How it was measured</Link>
+                A dot is one finished call. Each lane runs for as long as the slowest tool takes to finish one. {r.cap} <Link href={r.href}>How it was measured</Link>
               </p>
             ))}
             <canvas className="pf" aria-hidden="true" />
@@ -726,21 +726,25 @@ export default function Home() {
                   <span>{replay.file}</span>
                   <span className="rp-mode">{RUNS[2][1]}</span>
                 </figcaption>
-                <ol className="rp-steps">
-                  {replay.steps.map((line, i) => (
-                    <li key={i} data-s={i < replay.stops - 1 ? "ok" : i === replay.stops - 1 ? "stop" : "idle"}>
-                      <button type="button" data-step={i}>
-                        {line}
-                      </button>
-                    </li>
-                  ))}
-                </ol>
+                <div className="rp-win">
+                  <ol className="rp-steps" style={{ "--n": replay.steps.length } as React.CSSProperties}>
+                    {replay.steps.map((line, i) => (
+                      <li key={i} data-s={i < replay.stops - 1 ? "ok" : i === replay.stops - 1 ? "stop" : "idle"}>
+                        <button type="button" data-step={i}>
+                          {line}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                  <i className="rp-gate" aria-hidden="true" />
+                </div>
                 <p className="rp-say" data-says={JSON.stringify([`saved ${replay.steps.length} steps to ${replay.file}`, replay.matched, `~ ${replay.change}`])}>
                   ~ {replay.change}
                 </p>
                 <canvas className="rp-fig" aria-hidden="true" />
                 <HoldEngine />
               </figure>
+              <canvas className="rp-wire" aria-hidden="true" />
             </div>
             <details className="qa rp-out">
               <summary>
@@ -752,7 +756,7 @@ export default function Home() {
               </div>
             </details>
             <p className="tv-cap rp-cap">
-              Recorded on an Android 17 emulator, {LANED}. Tap a step to jump to it. The <Link href="/docs/replay-in-ci/">GitHub Action</Link> replays saved runs on every
+              Recorded on an Android 17 emulator, {LANED}. Tap a stop to jump to it. The <Link href="/docs/replay-in-ci/">GitHub Action</Link> replays saved runs on every
               commit.
             </p>
             <ReplayEngine />
