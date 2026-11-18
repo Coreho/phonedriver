@@ -21,7 +21,8 @@ if (raw) {
   rmSync(data, { recursive: true, force: true });
   mkdirSync(data, { recursive: true });
   keep.forEach((name, i) => writeFileSync(join(data, name), kept[i]));
-  for (const name of readdirSync(raw)) if (/\.(txt|steps|jsonl)$/.test(name) || name === "now.png") copyFileSync(join(raw, name), join(data, name));
+  for (const name of readdirSync(raw)) if (/\.(txt|steps|jsonl)$/.test(name)) writeFileSync(join(data, name), readFileSync(join(raw, name), "utf8").replace(/\/Users\/[^/\s]+\//g, "~/"));
+    else if (name === "now.png") copyFileSync(join(raw, name), join(data, name));
   cpSync(join(raw, "screens/network"), join(data, "screens"), { recursive: true });
   rmSync(assets, { recursive: true, force: true });
   mkdirSync(assets, { recursive: true });
