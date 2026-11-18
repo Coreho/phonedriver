@@ -496,11 +496,11 @@ export default function Home() {
               A helper stays on the phone with the connection open, where <Link href="/compare/adb/">adb</Link> starts a new process on every call.
             </p>
           </div>
-          <figure className="race pane" data-slow={SLOW} data-land="" data-at=".72" data-life="" data-point="ol:not([hidden]) li:first-child .race-lane.us .race-ms" data-point-at="900">
+          <figure className="race" data-slow={SLOW} data-land="" data-at=".72" data-life="" data-point="ol:not([hidden]) li:first-child .race-lane.us .race-ms" data-point-at="900">
             <figcaption className="pane-head">
-              <div className="race-seg race-devs" role="group" aria-label="Device">
+              <div className="rp-tabs race-devs" role="group" aria-label="Device">
                 {RACES.map((r, i) => (
-                  <button type="button" className="race-btn" data-dev={r.id} aria-pressed={i === 0} key={r.id}>
+                  <button type="button" data-dev={r.id} aria-pressed={i === 0} key={r.id}>
                     {r.name}
                   </button>
                 ))}
@@ -701,9 +701,14 @@ export default function Home() {
                 <span className="rp-tag">now</span>
               </div>
             </div>
-            <p className="rp-say" data-says={JSON.stringify([`saved ${replay.steps.length} steps to ${replay.file}`, replay.matched, `Stopped at step ${replay.stops} of ${replay.steps.length}: ${replay.change}`])}>
-              Stopped at step {replay.stops} of {replay.steps.length}: {replay.change}
-            </p>
+            <div className="rp-bar">
+              <button type="button" className="ln-play rp-play" data-on="">
+                Pause
+              </button>
+              <p className="rp-say" data-says={JSON.stringify([`saved ${replay.steps.length} steps to ${replay.file}`, replay.matched, `Stopped at step ${replay.stops} of ${replay.steps.length}: ${replay.change}`])}>
+                Stopped at step {replay.stops} of {replay.steps.length}: {replay.change}
+              </p>
+            </div>
             <details className="qa rp-out">
               <summary>
                 <span>Show the output</span>

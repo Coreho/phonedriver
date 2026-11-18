@@ -37,6 +37,7 @@ export function mountReplay(el: HTMLElement): () => void {
   const says: string[] = JSON.parse(say.dataset.says!);
   const modes = tabs.map((b) => b.dataset.mode!);
   const dot = el.querySelector<HTMLElement>(".ln-tap")!;
+  const play = el.querySelector<HTMLButtonElement>(".rp-play")!;
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let pass = reduce ? 2 : 0;
   let t = reduce ? passes[2].length : 0;
@@ -131,6 +132,8 @@ export function mountReplay(el: HTMLElement): () => void {
     paint(false);
   };
   const sync = () => {
+    play.textContent = wanted ? "Pause" : "Play";
+    play.toggleAttribute("data-on", wanted);
     const go = wanted && seen && !("wait" in el.dataset);
     if (go && !off) {
       last = performance.now();
@@ -143,6 +146,11 @@ export function mountReplay(el: HTMLElement): () => void {
   };
   const pick = (e: Event) => {
     const target = e.target as HTMLElement;
+    if (target.closest(".rp-play")) {
+      wanted = !wanted;
+      sync();
+      return;
+    }
     const tab = target.closest<HTMLElement>("button[data-run]");
     const step = target.closest<HTMLElement>("button[data-step]");
     if (!tab && !step) return;
