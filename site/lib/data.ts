@@ -9,7 +9,7 @@ export const LLMS_NOTE = "phonedriver is a free, open-source (AGPL-3.0) CLI and 
 export const FAQ = [
   [
     "How do I let Claude control my Android phone?",
-    "Run `claude mcp add phonedriver -- npx -y phonedriver mcp`, turn on USB debugging, and plug the phone in."
+    "Run `npx -y phonedriver init`, turn on USB debugging, and plug the phone in."
   ],
   [
     "Does it work with an iPhone?",
@@ -44,11 +44,11 @@ export const FAQ_MORE = [
   ],
   [
     "How do I let an AI agent control my phone?",
-    "Install phonedriver, add it to your agent as an MCP server (`claude mcp add phonedriver -- npx -y phonedriver mcp` for Claude Code), connect an Android phone with USB debugging, start an emulator, or boot the iOS Simulator, and ask the agent in plain language, for example \"Open Settings and turn on dark mode.\" The agent gets a text view of the screen and tools to tap, type and swipe. See the [setup guides](/docs/)."
+    "Run `npx -y phonedriver init`, which adds phonedriver as an MCP server to Claude Code, Codex, Cursor, VS Code and Gemini CLI where it finds them, connect an Android phone with USB debugging, start an emulator, or boot the iOS Simulator, and ask the agent in plain language, for example \"Open Settings and turn on dark mode.\" The agent gets a text view of the screen and tools to tap, type and swipe. See the [setup guides](/docs/)."
   ],
   [
     "How do I let Claude control my Android phone?",
-    "Add phonedriver to Claude Code as an MCP server with `claude mcp add phonedriver -- npx -y phonedriver mcp`, then connect a phone with USB debugging on or start an emulator. Nothing is installed on the phone. It is tested on emulators (API 26 and 37) and on a HONOR X8 (Android 13). See [the Claude Code guide](/docs/claude-code/)."
+    "Run `npx -y phonedriver init`, which adds phonedriver to Claude Code as an MCP server (or add it by hand with `claude mcp add phonedriver -- npx -y phonedriver mcp`), then connect a phone with USB debugging on or start an emulator. Nothing is installed on the phone. It is tested on emulators (API 26 and 37) and on a HONOR X8 (Android 13). See [the Claude Code guide](/docs/claude-code/)."
   ],
   [
     "What is phonedriver?",
@@ -232,6 +232,7 @@ export const DEMO_CAPTION = "One real Claude Code (Opus 5.5) session on an Andro
 
 
 export const NPX = "npx -y phonedriver mcp";
+export const INIT = "npx -y phonedriver init";
 export const MCP_CONFIG = `{
   "mcpServers": {
     "phonedriver": { "command": "npx", "args": ["-y", "phonedriver", "mcp"] }

@@ -1,0 +1,23 @@
+ok launched Clock · still animating after 5966ms, read as it is now
+app com.google.android.deskclock (Clock)
+@e1 text "Timers"
+@e2 image "More options"
+@e32 text "0 hours, 0 minutes, 0 seconds"
+@e33 button "1"
+@e34 button "2"
+@e35 button "3"
+@e36 button "4"
+@e37 button "5"
+@e38 button "6"
+@e39 button "7"
+@e40 button "8"
+@e41 button "9"
+@e42 button "00"
+@e43 button "0"
+@e44 button "Backspace" disabled
+@e45 button "Start" disabled
+@e17 tab "Alarms"
+@e18 tab "World Clock"
+@e19 cell "Timers" selected
+@e20 tab "Stopwatch"
+@e21 tab "Bedtime"

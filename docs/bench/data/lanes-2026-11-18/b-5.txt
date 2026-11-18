@@ -1,0 +1,2 @@
+ok tapped @e27 "Add 1 minute"
+~ @e46 text "4 minutes 58 seconds remaining" → "5 minutes 57 seconds remaining"

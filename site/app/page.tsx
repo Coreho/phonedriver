@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { Arrow, Html, JsonLd, Pane, Star } from "@/components/Bits";
-import { DotsEngine, EndEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
+import { DotsEngine, EndEngine, LanesEngine, JourneyEngine, PalmEngine, PointEngine, RaceEngine, TabsEngine, TypeEngine, ViewsEngine } from "@/components/Engines";
 import { Hero } from "@/components/Hero";
 import { Paste } from "@/components/Paste";
 import { Route } from "@/components/Route";
-import { HARNESSES, PHONE, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, tokens, type Cell, type Harness } from "@/lib/bench";
+import { HARNESSES, PHONE, TASKS, VERSIONS, board, minutes, ms, op, ratio, short, simulator, tokens, type Cell, type Harness } from "@/lib/bench";
 import { mark, PAINT } from "@/lib/chauffeur";
-import { DEMO_CAPTION, HOME_DESC, HOME_FAQ, JOBS, MCP_CONFIG, NPX } from "@/lib/data";
+import { DEMO_CAPTION, HOME_DESC, HOME_FAQ, JOBS, INIT, MCP_CONFIG, NPX } from "@/lib/data";
 import { softwareLd } from "@/lib/ld";
 import { inline, plain } from "@/lib/md";
 import { meta } from "@/lib/meta";
+import lanes from "@/lib/lanes.json";
+import replay from "@/lib/replay.json";
 import run from "@/lib/run.json";
 import screen from "@/lib/screen.json";
-import { BOOT, PUBLISHED, PUBLISHER, REPO, raw, url } from "@/lib/site";
+import { BOOT, PUBLISHED, PUBLISHER, REPO, VERSION, raw, url } from "@/lib/site";
 import "./charts.css";
 import "./home.css";
 
@@ -22,6 +24,7 @@ const SLOW = 25;
 const UNIT = 10000;
 const CLIENTS = [
   { id: "prompt", name: "Ask your agent", say: BOOT },
+  { id: "init", name: "One command", cmd: INIT },
   { id: "claude", name: "Claude Code", cmd: `claude mcp add phonedriver -- ${NPX}` },
   { id: "codex", name: "Codex", cmd: `codex mcp add phonedriver -- ${NPX}` },
   { id: "cursor", name: "Cursor", file: "~/.cursor/mcp.json" },
@@ -33,7 +36,8 @@ const STOPS: [id: string, name: string, say: string, short?: string][] = [
   ["what-the-model-sees", "The read", "How is it that cheap?"],
   ["speed", "Speed", "And is it quick?"],
   ["asking-before-it-pays", "Approval", "Can it spend my money?"],
-  ["hidden-display", "Your screen", "Do I have to put my phone down?", "And my own phone?"],
+  ["lanes", "Lanes", "Do I have to put my phone down?", "And my own phone?"],
+  ["saved-runs", "Replay", "Do I need the model every time?", "A model every time?"],
   ["how-it-works", "How it works", "What is it made of?"],
   ["limits", "Limits", "Anything I should know?"],
   ["install", "Set up", "Fine. Set it up."],
@@ -59,7 +63,32 @@ const RACE: [string, string][] = [
   ["tap_diff", "Tap and see what changed"],
 ];
 
-const TOOLS = ["devices", "apps", "snapshot", "screenshot", "tap", "type", "swipe", "scroll", "press", "launch", "wait", "batch", "clipboard", "shell"];
+const TOOLS = ["devices", "apps", "snapshot", "screenshot", "tap", "type", "swipe", "scroll", "press", "launch", "wait", "batch", "clipboard", "shell", "setting", "logs", "replay"];
+
+const ACTION = [
+  "on: [push, pull_request]",
+  "jobs:",
+  "  android:",
+  "    runs-on: ubuntu-latest",
+  "    steps:",
+  "      - uses: actions/checkout@v4",
+  "      - run: ./gradlew assembleDebug",
+  `      - uses: hridaya423/phonedriver@v${VERSION}`,
+  "        with:",
+  "          app: app/build/outputs/apk/debug/app-debug.apk",
+  "          runs: e2e/*.steps",
+];
+
+const ALSO: [string, string, string][] = [
+  ["record start", "An MP4 of the screen, with a file of the actions done during it", "/docs/test-a-mobile-app/#keep-the-run-as-a-test"],
+  ["page", "A whole web page as text in one call, with no scrolling", "/docs/read-a-web-page/"],
+  ["snapshot --audit", "Controls a screen reader cannot name, and tap targets that are too small", "/docs/test-a-mobile-app/#accessibility"],
+  ["compare a.png b.png", "What changed between two screenshots, said in text", "/changelog/"],
+  ["logs", "The app's last lines and its last crash", "/docs/test-a-mobile-app/#permissions-crashes-and-the-screen"],
+  ["apps grant", "Give or take away a permission without opening the app", "/docs/test-a-mobile-app/#permissions-crashes-and-the-screen"],
+  ["setting find", "Change an Android 17 setting by its key, without its screen", "/changelog/"],
+  ["boot <name>", "Start an emulator or a Simulator that is off", "/docs/android-emulator/#start-an-emulator"],
+];
 
 const DEVICES: [string, React.ReactNode][] = [
   ["Android emulator", "adb"],
@@ -89,6 +118,10 @@ const strip = (top: number, height: number) => {
   return { "--ar": `${SHOT[0]} / ${SHOT[1] * tall}`, "--at": `${(top / (1 - tall)) * 100}%` } as React.CSSProperties;
 };
 
+const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
+const LANED = new Date(`${lanes.date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const LANES = [{ id: "", who: "your screen", alt: lanes.main.alt, frames: lanes.main.frames, steps: [] as (typeof lanes.lanes)[number]["steps"] }, ...lanes.lanes];
+
 export const metadata = meta({ path: "/", title: "phonedriver: MCP server for AI agents on Android and iOS phones", description: HOME_DESC, og: "/assets/og-home.png" });
 
 function Tokens({ c }: { c: Cell | null }) {
@@ -110,6 +143,7 @@ export default function Home() {
   const runs = totals.reduce((n, x) => n + x.t.runs, 0);
   const fewer = ratio(b.total("mobile-mcp").tokens / b.total("phonedriver").tokens);
   const race = RACE.map(([id, label]) => ({ label, o: op(id) }));
+  const sim = simulator();
   const read = race[0].o;
   const ld = [
     ...softwareLd(),
@@ -488,6 +522,21 @@ export default function Home() {
               <b>{ratio(PHONE.shot[1] / PHONE.shot[0])}</b> A screenshot took {Math.round(PHONE.shot[0])} ms against {ms(PHONE.shot[1])} ms.
             </dd>
           </dl>
+          <dl className="hm-phone">
+            <dt>
+              On the iOS Simulator{" "}
+              <span>
+                {sim.device}, {sim.runtime}
+              </span>
+            </dt>
+            <dd>
+              <b>{Math.round(sim.tools[0].read.medianMs)} ms</b> Reading the screen. simulator-use took {Math.round(sim.tools[1].read.medianMs)} ms on the same screen.
+            </dd>
+            <dd>
+              <b>{Math.round(sim.tools[0].tap.medianMs)} ms</b> A tap with its reply, against {Math.round(sim.tools[1].tap.medianMs)} ms.{" "}
+              <Link href="/benchmarks/#simulator">The sign-in benchmark</Link>
+            </dd>
+          </dl>
         </div>
       </section>
 
@@ -579,54 +628,212 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="stop" id="hidden-display" data-weave="thin">
+      <section className="stop" id="lanes" data-weave="thin">
         <Route n={5} say={STOPS[4][2]} short={STOPS[4][3]} />
         <div className="wrap">
-          <div className="hm-head">
-            <h2>Your screen stays yours.</h2>
-            <p className="lede">
-              On Android 13 and later, the agent can work on a hidden second screen while you keep using the phone. Set <code>PHONEDRIVER_DISPLAY=hidden</code> in the MCP
-              config.
+          <div className="hm-stat">
+            <div>
+              <h2>One phone. A screen for each agent.</h2>
+              <p className="lede">
+                On Android 13 and later, each agent works on a hidden screen of its own on the same phone. They run at the same time, and the screen in your hand
+                stays yours.
+              </p>
+            </div>
+            <p className="hm-pair" aria-hidden="true" data-land="" data-at=".07">
+              <span>
+                1<small>phone</small>
+              </span>
+              <i>→</i>
+              <b>
+                {LANES.length}
+                <small>screens in use at once</small>
+              </b>
             </p>
           </div>
-          <div className="hd" data-life="">
-            <figure>
-              <img
-                src="/assets/hidden-yours.jpg"
-                width={1280}
-                height={800}
-                alt="An Android tablet's home screen with a clock, a calendar widget and the app dock, unchanged while the agent works."
-                decoding="async"
-                loading="lazy"
-              />
-              <figcaption>Your screen</figcaption>
-            </figure>
-            <figure data-land="" data-at=".62">
-              <img
-                src="/assets/hidden-agents.jpg"
-                width={800}
-                height={300}
-                alt="A test app with the text “typed on the hidden screen” in its first field, on a screen that is not shown on the tablet."
-                decoding="async"
-                loading="lazy"
-              />
-              <figcaption>The hidden screen, same minute (its top left corner)</figcaption>
-            </figure>
+          <figure className="ln pane" data-wall={lanes.wall} data-rate={lanes.rate} data-life="">
+            <figcaption className="pane-head">
+              <span>{lanes.device}</span>
+              <div className="race-ctl" hidden>
+                <button type="button" className="race-btn race-play">
+                  Pause
+                </button>
+              </div>
+            </figcaption>
+            <div className="ln-body">
+            <ol className="ln-screens">
+              {LANES.map((l) => (
+                <li className={l.id ? "ln-s" : "ln-s yours"} data-lane={l.id || "main"} key={l.id}>
+                  <p className="ln-id">
+                    <b>{l.id ? `+${l.id}` : "main"}</b>
+                    <span>{l.who}</span>
+                  </p>
+                  <div className="ln-shot">
+                    {l.frames.map((f, i) => (
+                      <img key={f.src} src={f.src} data-t={f.t} data-on={i === l.frames.length - 1 ? "" : undefined} width={SHOT[0] / 2} height={SHOT[1] / 2} alt={i === l.frames.length - 1 ? l.alt : `${l.who}, ${(f.t / 1000).toFixed(1)} s into the run`} aria-hidden={i === l.frames.length - 1 ? undefined : true} decoding="async" loading="lazy" />
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="ln-score">
+              {LANES.map((l) => (
+                <div className={l.id ? "ln-row" : "ln-row yours"} data-lane={l.id || "main"} key={l.id}>
+                  <span className="ln-who">{l.id ? `+${l.id}` : "main"}</span>
+                  <span className="ln-track" aria-hidden="true">
+                    {l.steps.map((st) => (
+                      <b
+                        key={st.t0}
+                        data-t0={st.t0}
+                        data-t1={st.t1}
+                        data-cmd={st.cmd}
+                        data-reply={st.reply}
+                        style={{ left: `${(st.t0 / lanes.wall) * 100}%`, width: `${((st.t1 - st.t0) / lanes.wall) * 100}%` }}
+                      />
+                    ))}
+                    <i />
+                  </span>
+                  {l.id ? (
+                    <span className="ln-now" data-s="done">
+                      {l.steps[l.steps.length - 1].reply}
+                    </span>
+                  ) : (
+                    <span className="ln-now" data-s="wait">
+                      no calls, it is yours
+                    </span>
+                  )}
+                </div>
+              ))}
+              <span className="ln-head" aria-hidden="true" />
+              <input className="ln-scrub" type="range" min={0} max={lanes.wall} step={10} defaultValue={lanes.wall} aria-label="Time in the recording, in milliseconds" />
+              <p className="ln-ruler" aria-hidden="true">
+                <span>0 s</span>
+                <output className="ln-clock">{secs(lanes.wall)}</output>
+                <span>{secs(lanes.wall)}</span>
+              </p>
+            </div>
+            </div>
+            <p className="race-cap">
+              One recording on an Android 17 emulator, {LANED}. Each bar is one call, from the moment it was sent to its reply, and each screen is what that
+              display showed then. The two jobs took {secs(lanes.wall)} side by side and {secs(lanes.serial)} one after the other. It plays here at twice its speed; drag the line to move through it. <Link href="/docs/android-phone/#a-hidden-screen-for-the-agent">How to give each agent a lane</Link>
+            </p>
+            <LanesEngine />
+          </figure>
+          <div className="ln-after">
+            <div className="tw">
+              <table>
+                <caption>
+                  <code>phonedriver devices</code>, during the run
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Id</th>
+                    <th scope="col">Lease</th>
+                    <th scope="col">Display</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lanes.devices.map(([id, lease, display]) => (
+                    <tr key={id}>
+                      <th scope="row">{id}</th>
+                      <td>{lease}</td>
+                      <td>{display}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="hm-note">
-              Tested on an emulator and on a {PHONE.name} ({PHONE.os}). Typing into a web page shows the system&apos;s clipboard note, and your clipboard is put back
-              after. Both captures are from one run on a tablet emulator on 8 November 2026.
+              A device id that ends in <code>+a</code> or <code>+b</code> is a lane. One agent that only needs to stay off your screen sets{" "}
+              <code>PHONEDRIVER_DISPLAY=hidden</code>. Two lanes cannot show the same app, and typing into a web page shows the system&apos;s clipboard note. Tested
+              on an emulator and on a {PHONE.name} ({PHONE.os}).
             </p>
           </div>
         </div>
       </section>
 
-      <section className="stop" id="how-it-works">
+      <section className="stop" id="saved-runs">
         <Route n={6} say={STOPS[5][2]} short={STOPS[5][3]} />
+        <div className="wrap">
+          <div className="hm-stat">
+            <div>
+              <h2>A run that worked becomes a test.</h2>
+              <p className="lede">
+                Save what the agent did as a steps file. Replay it with no model, on your machine or on every commit. It stops at the first step that fails, or at
+                the first screen whose text changed.
+              </p>
+            </div>
+            <p className="hm-pair" aria-hidden="true" data-land="" data-at=".07">
+              <b>
+                0<small>tokens to replay a saved run</small>
+              </b>
+            </p>
+          </div>
+          <div className="rp" data-life="">
+            <figure className="pane rp-file">
+              <figcaption className="pane-head">
+                <span>{replay.file}</span>
+                <span>{replay.saved.replace(` to ${replay.file}`, "")}</span>
+              </figcaption>
+              <ol className="rp-steps">
+                {replay.steps.map((line, i) => (
+                  <li key={i} style={{ "--n": i } as React.CSSProperties} data-stop={i === replay.stops - 1 ? "" : undefined}>
+                    {line}
+                  </li>
+                ))}
+              </ol>
+            </figure>
+            <div className="rp-runs">
+            <div className="rp-run rp-first">
+              <Pane title="the first replay" note="no model" lines={replay.first} label="Output of the first phonedriver replay" />
+            </div>
+            <div className="rp-run rp-second">
+              <Pane title={replay.changed} note={`stops at step ${replay.stops}`} lines={replay.second} label="Output of the replay after the change" />
+            </div>
+            </div>
+            <figure className="rp-shots">
+              <div>
+                <img src={replay.kept.src} width={360} height={808} alt={replay.kept.alt} decoding="async" loading="lazy" />
+                <p>the screen it kept</p>
+              </div>
+              <div className="now">
+                <span className="rp-shot">
+                  <img src={replay.now.src} width={360} height={808} alt={replay.now.alt} decoding="async" loading="lazy" />
+                  <i aria-hidden="true" style={{ left: `${replay.box[0] * 100}%`, top: `${replay.box[1] * 100}%`, width: `${replay.box[2] * 100}%`, height: `${replay.box[3] * 100}%` }} />
+                </span>
+                <p>the screen it found</p>
+              </div>
+            </figure>
+            <p className="tv-cap rp-cap">
+              One run on an Android 17 emulator, {LANED}. Wi-Fi was turned off between the two replays, so the Internet row changed. Each reply is cut where its
+              list of the screen&apos;s elements starts.
+            </p>
+          </div>
+          <div className="rp-ci">
+            <div>
+              <h3>On every commit</h3>
+              <p>
+                The repository is also a GitHub Action. It starts an Android emulator or an iOS Simulator, installs your build and replays each file. A run that
+                stops fails the job, and its screen, reply and video are kept.
+              </p>
+              <p className="hm-end-links">
+                <Link href="/docs/replay-in-ci/">
+                  Replay in CI
+                  <Arrow />
+                </Link>
+              </p>
+            </div>
+            <Pane title=".github/workflows/replay.yml" lines={ACTION} label="A GitHub Actions workflow that replays saved runs" />
+          </div>
+        </div>
+      </section>
+
+      <section className="stop" id="how-it-works">
+        <Route n={7} say={STOPS[6][2]} short={STOPS[6][3]} />
         <div className="wrap">
           <div className="hm-head">
             <h2>How it works.</h2>
             <p className="lede">
-              On Android there is no app to install. phonedriver pushes its helper over adb when it connects. On iOS it builds a small XCTest runner on your Mac.
+              On Android there is no app to install. phonedriver pushes its helper over adb when it connects. On iOS it builds a small XCTest runner on your Mac, and on the Simulator a tap goes to the Simulator&apos;s own touch input.
             </p>
           </div>
           <div>
@@ -691,12 +898,26 @@ export default function Home() {
                 </p>
               </div>
             </div>
+            <div className="also">
+              <h3 className="hm-kick">Also new in {VERSION}</h3>
+              <ul>
+                {ALSO.map(([cmd, what, href]) => (
+                  <li key={cmd}>
+                    <Link href={href}>
+                      <code>{cmd}</code>
+                      <span>{what}</span>
+                      <Arrow />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="stop" id="limits" data-weave="thin">
-        <Route n={7} say={STOPS[6][2]} short={STOPS[6][3]} />
+        <Route n={8} say={STOPS[7][2]} short={STOPS[7][3]} />
         <div className="wrap hm-rail">
           <h2>Limits and questions.</h2>
           <div>
@@ -730,12 +951,12 @@ export default function Home() {
       </section>
 
       <section className="stop hm-end" id="install">
-        <Route n={8} say={STOPS[7][2]} short={STOPS[7][3]} />
+        <Route n={9} say={STOPS[8][2]} short={STOPS[8][3]} />
         <div className="wrap end">
           <div className="end-copy">
             <h2>Give your agent a phone.</h2>
             <p className="lede">
-              Paste one prompt. Your agent checks your machine, adds the server and tells you what to plug in.
+              Paste one prompt, or run one command. Either way phonedriver is added to the agents on your machine, your setup is checked, and you are told what to plug in.
             </p>
             <p className="hm-end-links">
               <Link href="/docs/">

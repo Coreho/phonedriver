@@ -1,0 +1,6 @@
+par1 21139 ms, guest load 2.02
+ser1 26798 ms, guest load 7.99
+par2 21761 ms, guest load 9.29
+ser2 27408 ms, guest load 10.39
+par3 23904 ms, guest load 8.90
+ser3 26304 ms, guest load 10.02

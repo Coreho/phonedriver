@@ -1,0 +1,41 @@
+{
+ "file": "network.steps",
+ "saved": "saved 3 steps to network.steps",
+ "steps": [
+  "launch settings",
+  "tap \"Network & internet\"",
+  "wait \"Internet\""
+ ],
+ "stops": 2,
+ "first": [
+  "$ phonedriver replay network.steps --screens screens/network",
+  "replayed 3 steps in 9.6 s",
+  "1. launched Settings",
+  "2. tapped @e4 \"Network & internet\"",
+  "3. \"Internet\" appeared after 1 tree read",
+  "kept 3 screens in screens/network; a replay with --screens screens/network compares each step's screen with them"
+ ],
+ "second": [
+  "$ phonedriver replay network.steps --screens screens/network",
+  "error: step 2 of 3 (tap \"Network & internet\") failed: its screen is not the one in screens/network/02.png",
+  "changed: 1 region, 0.7% of the screen",
+  "~ \"AndroidWifi\" → \"T-Mobile\" at 111,158",
+  "1. launched Settings",
+  "hint: If the new screen is right, delete screens/network/02.png and replay again to keep it."
+ ],
+ "changed": "after Wi-Fi was turned off",
+ "kept": {
+  "src": "/assets/replay/kept.jpg",
+  "alt": "The Network & internet page of Settings as the first replay kept it. The Internet row says AndroidWifi."
+ },
+ "now": {
+  "src": "/assets/replay/now.jpg",
+  "alt": "The same page in the later replay, with Wi-Fi off. The Internet row says T-Mobile, the text that stopped the replay."
+ },
+ "box": [
+  0.1851,
+  0.1673,
+  0.17,
+  0.018
+ ]
+}

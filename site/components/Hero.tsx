@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Clients } from "@/components/Paste";
 import { board, ratio, speed } from "@/lib/bench";
-import { MCP_CONFIG, NPX } from "@/lib/data";
+import { INIT, MCP_CONFIG, NPX } from "@/lib/data";
 import { SAY } from "@/lib/hero-engine";
 import run from "@/lib/run.json";
 import { BOOT } from "@/lib/site";
@@ -28,6 +28,7 @@ const PLAYER = JSON.stringify({
 
 const SETUP = [
   { id: "prompt", name: "Ask your agent", mark: "❯", text: BOOT, copy: BOOT },
+  { id: "init", name: "One command", mark: "$", text: INIT, copy: INIT },
   { id: "claude", name: "Claude Code", mark: "$", text: `claude mcp add phonedriver -- ${NPX}`, copy: `claude mcp add phonedriver -- ${NPX}` },
   { id: "codex", name: "Codex", mark: "$", text: `codex mcp add phonedriver -- ${NPX}`, copy: `codex mcp add phonedriver -- ${NPX}` },
   { id: "cursor", name: "Cursor", mark: "+", text: `~/.cursor/mcp.json  "phonedriver": { "command": "npx", "args": ["-y", "phonedriver", "mcp"] }`, copy: MCP_CONFIG },
@@ -56,7 +57,7 @@ export function Hero() {
                 <div className="hx-line" data-for={s.id} key={s.id}>
                   <i aria-hidden="true">{s.mark}</i>
                   <code>{s.text}</code>
-                  <button type="button" data-copy={s.copy} aria-label={`Copy the ${s.id === "prompt" ? "setup prompt" : s.id === "cursor" ? "Cursor config" : `${s.name} command`}`}>
+                  <button type="button" data-copy={s.copy} aria-label={`Copy the ${s.id === "prompt" ? "setup prompt" : s.id === "init" ? "init command" : s.id === "cursor" ? "Cursor config" : `${s.name} command`}`}>
                     Copy
                   </button>
                 </div>

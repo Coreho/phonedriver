@@ -1,0 +1,71 @@
+$ phonedriver save scratch.steps
+saved 10 steps to scratch.steps
+1. launch settings
+2. scroll down "About emulated device"
+3. tap "About emulated device"
+4. wait "Device name"
+5. launch settings
+6. scroll down "About emulated device"
+7. tap "About emulated device"
+8. wait "Device name"
+9. launch settings
+10. scroll down "About emulated device"
+the file holds one step a line: delete the line of a step that was a detour
+[exit 0]
+$ phonedriver launch settings
+ok launched Settings · new screen
+app com.android.settings (Settings)
+@e1 button "Search Settings"
+@e2 group scrollable↓
+  @e3 button "Google" "Services & preferences"
+  @e4 button "Network & internet" "Mobile, Wi‑Fi, hotspot"
+  @e5 button "Connected devices" "Bluetooth, pairing"
+  @e6 button "Apps" "Assistant, recent apps, default apps"
+  @e7 button "Notifications" "Notification history, conversations"
+  @e44 button "Sound & vibration" "Volume and haptics"
+  @e45 button "Modes" "Do Not Disturb, Bedtime, Driving"
+  @e46 button "Display & touch" "Dark theme, font size, touch"
+  @e47 button "Wallpaper & style" "Colors, themed icons, app grid"
+  @e53 button "Storage"
+[exit 0]
+$ phonedriver tap "Network & internet"
+ok tapped @e4 "Network & internet" · new screen
+app com.android.settings (Settings)
+@e18 group scrollable↑
+  @e54 group "Network & internet"
+    @e20 button "Navigate up"
+  @e55 button "Internet" "AndroidWifi"
+  @e56 button "SIMs" "T-Mobile"
+  @e53 button "Airplane mode"
+    @e57 switch off
+  @e58 button "Hotspot & tethering" "Off"
+  @e59 button "Data Saver" "Off"
+  @e60 button "VPN" "None"
+  @e61 button "Private DNS" "Automatic"
+  @e62 button "Adaptive connectivity" "On"
+  @e63 button "Mobile network security" "Network type, encryption, notification controls"
+[exit 0]
+$ phonedriver wait "Internet"
+ok "Internet" appeared after 1 tree read
+app com.android.settings (Settings)
+@e18 group scrollable↑
+  @e54 group "Network & internet"
+    @e20 button "Navigate up"
+  @e55 button "Internet" "AndroidWifi"
+  @e56 button "SIMs" "T-Mobile"
+  @e53 button "Airplane mode"
+    @e57 switch off
+  @e58 button "Hotspot & tethering" "Off"
+  @e59 button "Data Saver" "Off"
+  @e60 button "VPN" "None"
+  @e61 button "Private DNS" "Automatic"
+  @e62 button "Adaptive connectivity" "On"
+  @e63 button "Mobile network security" "Network type, encryption, notification controls"
+[exit 0]
+$ phonedriver save network.steps
+saved 3 steps to network.steps
+1. launch settings
+2. tap "Network & internet"
+3. wait "Internet"
+the file holds one step a line: delete the line of a step that was a detour
+[exit 0]

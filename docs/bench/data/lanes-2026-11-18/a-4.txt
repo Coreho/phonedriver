@@ -1,0 +1,11 @@
+ok tapped @e56 "Android version" · new screen
+app com.android.settings (Settings)
+@e18 group scrollable↑
+  @e55 group "Android version"
+    @e20 button "Navigate up"
+  @e56 button "Android version" "17"
+  @e34 button "Android security update" "August 5, 2026"
+  @e35 button "Google Play system update" " "
+  @e36 button "Baseband version" "1.0.0.0"
+  @e37 button "Kernel version" "6.12.81-android16-6-g4f69fc7b210c-ab16167562 · #1 Tue Aug 25 07:36:40 UTC 2026"
+  @e38 button "Build number" "sdk_gphone64_x86_64-userdebug 17 CE2A.260420.051.A3 16571990 dev-keys"

@@ -40,10 +40,11 @@ Three concepts were weighed. (1) One route, chosen: it reuses the hero's own dev
 | 2 | `what-the-model-sees` | How is it that cheap? | It reads the screen as text. | the snapshot pane; the read |
 | 3 | `speed` | And is it quick? | 170x faster than adb at reading the screen. | latency balls pane |
 | 4 | `asking-before-it-pays` | Can it spend my money? | It asks you before it taps Pay. | the recorded approval prompt; the raised palm |
-| 5 | `hidden-display` | Do I have to put my phone down? | Your screen stays yours. | the hidden screen capture |
-| 6 | `how-it-works` | What is it made of? | How it works. | agent, daemon, helper |
-| 7 | `limits`, `faq` | Anything I should know? | Limits and questions. | the list |
-| 8 | `install` | Fine. Set it up. | Give your agent a phone. | the setup prompt pane |
+| 5 | `lanes` | Do I have to put my phone down? | One phone. A screen for each agent. | the lanes: one recording of two agents on one phone, three screens on one clock |
+| 6 | `saved-runs` | Do I need the model every time? | A run that worked becomes a test. | the 0; the steps file, its replay, and the replay that stopped |
+| 7 | `how-it-works` | What is it made of? | How it works. | agent, daemon, helper; what else is new |
+| 8 | `limits`, `faq` | Anything I should know? | Limits and questions. | the list |
+| 9 | `install` | Fine. Set it up. | Give your agent a phone. | the setup prompt pane |
 
 Setup moves from second place to the end: the route starts with someone else's order and ends with yours. To keep the action one click away the whole way down, a dock (fixed bar) appears once the hero has left: where you are on the route, and "Copy the setup prompt".
 
@@ -65,6 +66,7 @@ Setup moves from second place to the end: the route starts with someone else's o
 - `lib/weave.ts`: one fixed WebGL canvas for all stops.
 - `lib/views-engine.ts`: the read (dither + shed) and the hover link.
 - `lib/dots-engine.ts`, `race-engine.ts`, `type-engine.ts`: unchanged roles.
+- `lib/lanes-engine.ts`: the lanes (decision D94). One clock for every lane of a recording: a ball rides each lane's dotted track, a call's bar fills while it runs, and each screen shows the frame that display had then. A range input over the tracks scrubs it.
 - Without JavaScript or with reduced motion: every stop is its final state, the spoken line is plain text above the heading, no canvas.
 
 ## Stops, desktop

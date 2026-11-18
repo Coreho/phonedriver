@@ -4,9 +4,9 @@ export const SITE_URL = (process.env.PHONEDRIVER_SITE_URL ?? "https://phonedrive
 export const REPO = "https://github.com/hridaya423/phonedriver";
 export const VERSION = "0.1.5";
 export const BOOT =
-  "Set up phonedriver so you can use my phone. Run `npx -y phonedriver doctor` and help me fix what it flags. Add its MCP server to this client (the server command is `npx -y phonedriver mcp`). Then run `npx -y phonedriver skill`, follow it, and show me what is on my phone's screen.";
-export const TODAY = "2026-11-17";
-export const HOME = "2026-11-16";
+  "Set up phonedriver so you can use my phone. Run `npx -y phonedriver init`, which adds its MCP server to the agents on this machine and checks my setup, and help me fix what it flags. Then run `npx -y phonedriver skill`, follow it, and show me what is on my phone's screen.";
+export const TODAY = "2026-11-18";
+export const HOME = "2026-11-18";
 export const PUBLISHED = "2026-11-10";
 export const ROOT = join(process.cwd(), "..");
 

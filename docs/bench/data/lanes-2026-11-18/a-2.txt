@@ -1,0 +1,7 @@
+ok scrolled down 1 time to @e53 "About emulated device"
+- @e3 @e4 @e5 @e6
+~ @e2 group scrollable↓ → scrollable↑↓
++ @e51 button "Battery" "Charged"
++ @e52 button "System" "Languages, gestures, time"
++ @e53 button "About emulated device" "sdk_gphone64_x86_64"
++ @e54 button "Security & privacy" "App security, device lock, permissions"

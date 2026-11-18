@@ -3,7 +3,7 @@ title: How to use phonedriver with VS Code and GitHub Copilot
 seo: How to let GitHub Copilot in VS Code control a phone over MCP
 nav: VS Code
 description: Add phonedriver to VS Code as an MCP server with one command or a .vscode/mcp.json entry, so GitHub Copilot can operate an Android phone or iPhone.
-updated: 2026-11-14
+updated: 2026-11-18
 date: 2026-11-14
 ---
 
@@ -42,7 +42,7 @@ Start an [Android emulator](/docs/android-emulator/), plug in an [Android phone]
 
 > Open Settings and turn on dark mode.
 
-The server has fourteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard` and `shell`. `snapshot`, `screenshot` and `wait` are marked read-only.
+The server has seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. `snapshot`, `screenshot`, `wait` and `logs` are marked read-only.
 
 ## Approval prompts
 

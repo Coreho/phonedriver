@@ -3,7 +3,7 @@ title: How to use phonedriver with Cursor and other MCP clients
 seo: How to let Cursor, Gemini CLI, Zed or Cline control a phone
 nav: Cursor and other clients
 description: Add phonedriver to Cursor, Gemini CLI, Zed, Cline or any MCP client that starts a stdio server, with the entry for each, a device setting and the tools.
-updated: 2026-11-14
+updated: 2026-11-18
 ---
 
 Any client that starts a stdio MCP server can use phonedriver: the command is `npx` with the arguments `-y phonedriver mcp`. [Codex](/docs/codex/) and [VS Code](/docs/vs-code/) have their own pages.
@@ -60,9 +60,9 @@ Use the client's own place for stdio servers, with the same `command` and `args`
 
 ## Tools
 
-The server has fourteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard` and `shell`. `apps` also installs, stops, clears and uninstalls. Each prints the same text as the CLI verb of the same name, so anything you read in these docs about the command line holds for the tools.
+The server has seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. `apps` also installs, stops, clears and uninstalls. Each prints the same text as the CLI verb of the same name, so anything you read in these docs about the command line holds for the tools.
 
-In Claude Code's wrapper the fourteen tools cost about 51 tokens each whatever their text. The first turn of a one-word `claude -p` costs 5,606 tokens with phonedriver attached ([token benchmark](/benchmarks/#tokens)).
+In Claude Code's wrapper a tool costs about 51 tokens whatever its text. Measured when the server had fourteen tools, the first turn of a one-word `claude -p` cost 5,606 tokens with phonedriver attached ([token benchmark](/benchmarks/#tokens)).
 
 ## Approval prompts need elicitation
 

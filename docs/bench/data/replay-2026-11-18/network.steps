@@ -1,0 +1,3 @@
+{"changed":true,"method":"act","params":{"action":{"app":"settings","grant":[],"kind":"launch","restart":false}},"summary":"launched Settings"}
+{"changed":true,"method":"act","params":{"action":{"count":null,"kind":"tap","long":null,"target":{"role":null,"text":"Network & internet"}}},"summary":"tapped @e4 \"Network & internet\""}
+{"method":"wait","params":{"condition":{"appears":{"role":null,"text":"Internet"}}},"summary":"\"Internet\" appeared after 1 tree read"}

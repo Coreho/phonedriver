@@ -1,0 +1,67 @@
+$ phonedriver replay about.steps --screens screens/about
+error: step 1 of 4 (launch settings) failed: its screen is not the one in screens/about\01.png
+changed: 25 regions, 0.8% of the screen
+~ "Assistant. recent apps. default apps" → "Asststant. recent apps. default apps" at 195,450
+region 96,168 32x32 (no text changed)
+region 56,184 8x8 (no text changed)
+region 184,192 8x8 (no text changed)
+region 136,280 8x8 (no text changed)
+region 176,280 24x8 (no text changed)
+region 152,336 8x8 (no text changed)
+region 184,360 8x8 (no text changed)
+region 48,456 8x8 (no text changed)
+region 96,496 80x32 (no text changed)
+region 32,504 8x8 (no text changed)
+region 232,520 48x8 (no text changed)
+and 11 more
+screen now:
+device android:emulator-5554 · sdk_gphone64_x86_64 · Android API 37 · 411x923pt · portrait
+app com.android.settings (Settings)
+@e1 button "Search Settings"
+@e2 group scrollable↓
+  @e3 button "Google" "Services & preferences"
+  @e4 button "Network & internet" "Mobile, Wi‑Fi, hotspot"
+  @e5 button "Connected devices" "Bluetooth, pairing"
+  @e6 button "Apps" "Assistant, recent apps, default apps"
+  @e7 button "Notifications" "Notification history, conversations"
+  @e39 button "Sound & vibration" "Volume and haptics"
+  @e40 button "Modes" "Do Not Disturb, Bedtime, Driving"
+  @e41 button "Display & touch" "Dark theme, font size, touch"
+  @e42 button "Wallpaper & style" "Colors, themed icons, app grid"
+  @e43 button "Storage"
+hint: If the new screen is right, delete screens/about\01.png and replay again to keep it.
+[exit 1]
+
+$ phonedriver replay about.steps --screens screens/about
+error: step 1 of 4 (launch settings) failed: its screen is not the one in screens/about\01.png
+changed: 21 regions, 0.7% of the screen
+~ "Network & intemet" → "Network & internet" at 150,265
+region 96,192 24x8 (no text changed)
+region 168,280 8x8 (no text changed)
+region 152,336 24x32 (no text changed)
+region 200,336 8x8 (no text changed)
+region 104,440 24x16 (no text changed)
+region 96,520 40x8 (no text changed)
+region 168,520 32x8 (no text changed)
+region 224,520 64x8 (no text changed)
+region 96,576 56x32 (no text changed)
+region 104,648 8x8 (no text changed)
+region 160,728 24x24 (no text changed)
+and 9 more
+screen now:
+device android:emulator-5554 · sdk_gphone64_x86_64 · Android API 37 · 411x923pt · portrait
+app com.android.settings (Settings)
+@e1 button "Search Settings"
+@e2 group scrollable↓
+  @e3 button "Google" "Services & preferences"
+  @e4 button "Network & internet" "Mobile, Wi‑Fi, hotspot"
+  @e5 button "Connected devices" "Bluetooth, pairing"
+  @e6 button "Apps" "Assistant, recent apps, default apps"
+  @e7 button "Notifications" "Notification history, conversations"
+  @e39 button "Sound & vibration" "Volume and haptics"
+  @e40 button "Modes" "Do Not Disturb, Bedtime, Driving"
+  @e41 button "Display & touch" "Dark theme, font size, touch"
+  @e42 button "Wallpaper & style" "Colors, themed icons, app grid"
+  @e43 button "Storage"
+hint: If the new screen is right, delete screens/about\01.png and replay again to keep it.
+[exit 1]

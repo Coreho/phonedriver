@@ -1,0 +1,197 @@
+{
+ "date": "2026-11-18",
+ "device": "android:emulator-5554",
+ "wall": 21761,
+ "serial": 26798,
+ "rate": 2,
+ "main": {
+  "alt": "The phone's own screen during the run: the home screen, as it was before the agents started.",
+  "frames": [
+   {
+    "t": 0,
+    "src": "/assets/lanes/main.jpg"
+   }
+  ]
+ },
+ "lanes": [
+  {
+   "id": "a",
+   "session": "one",
+   "who": "agent one, in Settings",
+   "alt": "The hidden screen of agent one at the end of the run: the Android version page of Settings, with Android version 17.",
+   "steps": [
+    {
+     "t0": 32,
+     "t1": 11346,
+     "cmd": "launch settings",
+     "reply": "ok launched Settings · still animating after 7978ms, read as it is now"
+    },
+    {
+     "t0": 11369,
+     "t1": 13065,
+     "cmd": "scroll down --until \"About emulated device\"",
+     "reply": "ok scrolled down 1 time to @e53 \"About emulated device\""
+    },
+    {
+     "t0": 13090,
+     "t1": 18944,
+     "cmd": "tap \"About emulated device\"",
+     "reply": "ok tapped @e53 \"About emulated device\" · new screen"
+    },
+    {
+     "t0": 18970,
+     "t1": 21726,
+     "cmd": "tap \"Android version\"",
+     "reply": "ok tapped @e56 \"Android version\" · new screen"
+    }
+   ],
+   "frames": [
+    {
+     "t": 4331,
+     "src": "/assets/lanes/a-004331.jpg"
+    },
+    {
+     "t": 6276,
+     "src": "/assets/lanes/a-006276.jpg"
+    },
+    {
+     "t": 7396,
+     "src": "/assets/lanes/a-007396.jpg"
+    },
+    {
+     "t": 8654,
+     "src": "/assets/lanes/a-008654.jpg"
+    },
+    {
+     "t": 12673,
+     "src": "/assets/lanes/a-012673.jpg"
+    },
+    {
+     "t": 17939,
+     "src": "/assets/lanes/a-017939.jpg"
+    },
+    {
+     "t": 19781,
+     "src": "/assets/lanes/a-019781.jpg"
+    },
+    {
+     "t": 21465,
+     "src": "/assets/lanes/a-021465.jpg"
+    }
+   ]
+  },
+  {
+   "id": "b",
+   "session": "two",
+   "who": "agent two, in Clock",
+   "alt": "The hidden screen of agent two at the end of the run: a timer in the Clock app, counting down from six minutes.",
+   "steps": [
+    {
+     "t0": 43,
+     "t1": 8475,
+     "cmd": "launch clock",
+     "reply": "ok launched Clock · still animating after 5966ms, read as it is now"
+    },
+    {
+     "t0": 8503,
+     "t1": 9390,
+     "cmd": "tap \"5\"",
+     "reply": "ok tapped @e37 \"5\""
+    },
+    {
+     "t0": 9431,
+     "t1": 10146,
+     "cmd": "tap \"00\"",
+     "reply": "ok tapped @e42 \"00\""
+    },
+    {
+     "t0": 10183,
+     "t1": 13022,
+     "cmd": "tap \"Start\"",
+     "reply": "ok tapped @e45 \"Start\""
+    },
+    {
+     "t0": 13046,
+     "t1": 15383,
+     "cmd": "tap \"Add 1 minute\"",
+     "reply": "ok tapped @e27 \"Add 1 minute\""
+    }
+   ],
+   "frames": [
+    {
+     "t": 1001,
+     "src": "/assets/lanes/b-001001.jpg"
+    },
+    {
+     "t": 1859,
+     "src": "/assets/lanes/b-001859.jpg"
+    },
+    {
+     "t": 5363,
+     "src": "/assets/lanes/b-005363.jpg"
+    },
+    {
+     "t": 7023,
+     "src": "/assets/lanes/b-007023.jpg"
+    },
+    {
+     "t": 8137,
+     "src": "/assets/lanes/b-008137.jpg"
+    },
+    {
+     "t": 9229,
+     "src": "/assets/lanes/b-009229.jpg"
+    },
+    {
+     "t": 10741,
+     "src": "/assets/lanes/b-010741.jpg"
+    },
+    {
+     "t": 12054,
+     "src": "/assets/lanes/b-012054.jpg"
+    },
+    {
+     "t": 13190,
+     "src": "/assets/lanes/b-013190.jpg"
+    },
+    {
+     "t": 15091,
+     "src": "/assets/lanes/b-015091.jpg"
+    },
+    {
+     "t": 16703,
+     "src": "/assets/lanes/b-016703.jpg"
+    },
+    {
+     "t": 19054,
+     "src": "/assets/lanes/b-019054.jpg"
+    },
+    {
+     "t": 20676,
+     "src": "/assets/lanes/b-020676.jpg"
+    },
+    {
+     "t": 21761,
+     "src": "/assets/lanes/b-023470.jpg"
+    }
+   ]
+  }
+ ],
+ "devices": [
+  [
+   "android:emulator-5554",
+   "-",
+   "main"
+  ],
+  [
+   "android:emulator-5554+a",
+   "one (idle 6s)",
+   "hidden (display 32)"
+  ],
+  [
+   "android:emulator-5554+b",
+   "two (idle 12s)",
+   "hidden (display 31)"
+  ]
+ ]
+}

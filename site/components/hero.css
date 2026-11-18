@@ -9,7 +9,7 @@
 .hx-go{display:flex;align-items:stretch;gap:12px}
 .hx-bar{flex:1;min-width:0;height:60px;background:var(--pane);color:var(--pane-fg);box-shadow:inset 0 0 0 1px var(--pane-rule)}
 .hx-line{display:none;align-items:center;gap:12px;height:100%;padding:0 8px 0 18px}
-.hx-set:has(input[value=prompt]:checked) [data-for=prompt],.hx-set:has(input[value=claude]:checked) [data-for=claude],.hx-set:has(input[value=codex]:checked) [data-for=codex],.hx-set:has(input[value=cursor]:checked) [data-for=cursor]{display:flex}
+.hx-set:has(input[value=prompt]:checked) [data-for=prompt],.hx-set:has(input[value=init]:checked) [data-for=init],.hx-set:has(input[value=claude]:checked) [data-for=claude],.hx-set:has(input[value=codex]:checked) [data-for=codex],.hx-set:has(input[value=cursor]:checked) [data-for=cursor]{display:flex}
 @supports not selector(:has(a)){.hx-line[data-for=prompt]{display:flex}.hx-tabs{display:none}}
 .hx-line i{flex:none;font:700 15px/1 var(--jb);font-style:normal;color:var(--or)}
 .hx-line code{flex:1;min-width:0;background:none;padding:0;font:500 15px/1 var(--jb);letter-spacing:-.02em;text-align:left;white-space:nowrap;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 44px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 44px),transparent)}

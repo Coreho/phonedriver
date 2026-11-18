@@ -18,6 +18,7 @@ export const DOCS = [
   "approval-guard",
   "no-telemetry",
   "shell",
+  "read-a-web-page",
   "troubleshooting",
 ];
 

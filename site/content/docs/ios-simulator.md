@@ -4,7 +4,7 @@ nav: iOS Simulator
 meta: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode. Covers the runner build and tap latency.
 description: Boot an iPhone Simulator on a Mac and let an agent drive it with phonedriver. Needs Xcode. Covers the first-run runner build and the Simulator's tap latency.
 seo: How to let an AI agent control the iOS Simulator over MCP
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 To let an AI agent control the iOS Simulator, boot a Simulator on a Mac with Xcode and add phonedriver to your agent as an MCP server. The agent reads the screen as text through an XCTest runner that phonedriver builds for you, and its taps go to the Simulator's own touch input.
@@ -17,7 +17,13 @@ A Mac with Xcode 15 or later (I use Xcode 27). There is no Android toolchain inv
 
 ## Boot a Simulator
 
-Boot one in Simulator.app, or:
+`phonedriver boot` starts a Simulator that is off and waits until it has booted:
+
+```sh
+phonedriver boot "iPhone 17"
+```
+
+You can also boot one in Simulator.app, or with `simctl`:
 
 ```sh
 xcrun simctl list devices available

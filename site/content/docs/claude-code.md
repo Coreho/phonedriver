@@ -3,7 +3,7 @@ title: How to use phonedriver with Claude Code
 seo: How to let Claude Code control an Android phone or iPhone
 nav: Claude Code
 description: Add phonedriver to Claude Code as an MCP server with one command, point it at a device and ask it to operate a phone in plain language.
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 To let Claude Code control an Android phone or an iPhone, add phonedriver as an MCP server with `claude mcp add phonedriver -- npx -y phonedriver mcp`, connect a device and ask in plain language. Claude Code is the client phonedriver is tested against: the benchmarks on this site run `claude -p` with Claude Sonnet 5.5.
@@ -57,7 +57,7 @@ ok tapped @e41 "Dark Appearance"
 
 ## What the agent gets
 
-Fourteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard` and `shell`. Each prints the same text as the CLI verb of the same name. `phonedriver skill` prints `SKILL.md`, the instructions an agent reads before it uses the tools; the MCP server carries a short version too.
+Seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. Each prints the same text as the CLI verb of the same name. `phonedriver skill` prints `SKILL.md`, the instructions an agent reads before it uses the tools; the MCP server carries a short version too.
 
 ## When Claude Code asks you something
 

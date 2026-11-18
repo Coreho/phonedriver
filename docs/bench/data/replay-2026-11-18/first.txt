@@ -1,0 +1,23 @@
+$ phonedriver replay network.steps --screens screens/network
+replayed 3 steps in 9.6 s
+1. launched Settings
+2. tapped @e4 "Network & internet"
+3. "Internet" appeared after 1 tree read
+kept 3 screens in screens/network; a replay with --screens screens/network compares each step's screen with them
+screen now:
+device android:emulator-5554 · sdk_gphone64_x86_64 · Android API 37 · 411x923pt · portrait
+app com.android.settings (Settings)
+@e18 group scrollable↑
+  @e54 group "Network & internet"
+    @e20 button "Navigate up"
+  @e55 button "Internet" "AndroidWifi"
+  @e56 button "SIMs" "T-Mobile"
+  @e53 button "Airplane mode"
+    @e57 switch off
+  @e58 button "Hotspot & tethering" "Off"
+  @e59 button "Data Saver" "Off"
+  @e60 button "VPN" "None"
+  @e61 button "Private DNS" "Automatic"
+  @e62 button "Adaptive connectivity" "On"
+  @e63 button "Mobile network security" "Network type, encryption, notification controls"
+[exit 0]

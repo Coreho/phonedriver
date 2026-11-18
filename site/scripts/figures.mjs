@@ -19,8 +19,5 @@ if (lines.filter((l) => l.ref).length !== targets.length) throw new Error("refs 
 writeFileSync(join(import.meta.dirname, "../lib/screen.json"), JSON.stringify({ width, height, nodes: tree.nodes.length, bytes: Buffer.byteLength(text.join("\n")), lines }, null, 1) + "\n");
 const jpeg = (from, name, ...ops) =>
   execFileSync("sips", [...ops, "-s", "format", "jpeg", "-s", "formatOptions", "82", from, "--out", join(import.meta.dirname, "../public/assets", name)]);
-const hidden = join(root, "docs/bench/data/hidden-display-2026-11-08");
 jpeg(join(fixtures, "real_settings_main.png"), "screen-settings.jpg", "--resampleWidth", "720");
 jpeg(join(root, ".github/assets/demo-poster.png"), "demo-poster.jpg");
-jpeg(join(hidden, "main-during.png"), "hidden-yours.jpg");
-jpeg(join(hidden, "hidden-screen.png"), "hidden-agents.jpg", "-c", "300", "800", "--cropOffset", "1", "1");

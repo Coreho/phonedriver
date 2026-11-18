@@ -4,14 +4,21 @@ nav: Android emulator
 meta: Start an Android emulator, check that phonedriver sees it, and drive it. Includes the headless flags used in my benchmarks and remote emulators.
 description: Start an Android emulator, check phonedriver sees it, and drive it. Includes the headless flags used in the benchmarks and how to use an emulator on another machine.
 seo: How to let an AI agent control an Android emulator over MCP
-updated: 2026-11-14
+updated: 2026-11-18
 ---
 
 Android emulators on API 26 and API 37 are the best-tested target: the 21-scenario device suite passes on both. phonedriver needs only adb and nothing installed in the emulator.
 
 ## Start an emulator
 
-Create an AVD in Android Studio's Device Manager, or with the command-line tools, then start it:
+Create an AVD in Android Studio's Device Manager, or with the command-line tools. Then start it and wait for it to boot with one command:
+
+```console
+$ phonedriver boot Pixel_API_37
+booted android:emulator-5554 · Pixel_API_37 · Android API 37
+```
+
+With nothing connected, any phonedriver command names the virtual devices that `boot` can start. You can also start one yourself:
 
 ```sh
 emulator -avd Pixel_API_37
