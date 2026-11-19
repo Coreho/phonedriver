@@ -647,14 +647,33 @@ impl Daemon {
         }
         if mcp {
             for session in sessions {
-                self.release_everywhere(&session).await;
+                self.forget(&session).await;
             }
         }
     }
 
-    /// Ends the leases a session holds on every device. An MCP client that exits or is killed never sends `release`,
-    /// and its lease would otherwise block the next agent until it lapses.
+    /// Ends a session that will not come back: an MCP server's name is its process id. An MCP client that exits or is
+    /// killed never sends `release`, and its lease would otherwise block the next agent until it lapses. A command
+    /// line session is kept, because each command is its own connection and `save` comes after the run.
+    async fn forget(&self, session: &str) {
+        self.send_to_all(session, || Call::Forget).await;
+        self.traces.close(session);
+        self.told
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session);
+        self.agents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session);
+    }
+
+    /// Ends the leases a session holds on every device.
     async fn release_everywhere(&self, session: &str) {
+        self.send_to_all(session, || Call::Release).await;
+    }
+
+    async fn send_to_all(&self, session: &str, call: impl Fn() -> Call) {
         let ids: Vec<String> = self
             .actors
             .lock()
@@ -664,7 +683,7 @@ impl Daemon {
             .collect();
         for id in ids {
             let _ = self
-                .send(&id, session, false, DisplayMode::Main, Call::Release)
+                .send(&id, session, false, DisplayMode::Main, call())
                 .await;
         }
     }

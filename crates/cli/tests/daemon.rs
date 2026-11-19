@@ -4839,6 +4839,52 @@ async fn a_tap_with_more_taps_or_a_longer_hold_than_a_person_makes_is_refused_an
     ok(&d, "default", "act", json!({"action": action})).await;
 }
 
+#[tokio::test]
+async fn a_closed_mcp_connection_drops_its_sessions_state_and_a_closed_cli_connection_keeps_it() {
+    for (client, kept) in [("mcp", false), ("cli", true)] {
+        let (source, _) = FakeSource::with(vec![tree(&["One"])]);
+        let (d, home) = daemon(source);
+        let path = local_socket(home.path(), "d.sock");
+        tokio::spawn(d.clone().serve(path.clone()));
+        wait_for_socket(&path).await;
+        let stream = phonedriver::daemon::socket::connect(&path).await.unwrap();
+        let (read, mut write) = tokio::io::split(stream);
+        let mut replies = BufReader::new(read).lines();
+        let hello = json!({"client": client, "version": env!("CARGO_PKG_VERSION")});
+        for (method, mut params) in [("hello", hello), ("act", tap_point(10.0, 10.0))] {
+            params["session"] = "s".into();
+            let req = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+            write
+                .write_all(format!("{req}\n").as_bytes())
+                .await
+                .unwrap();
+            let reply: Value =
+                serde_json::from_str(&replies.next_line().await.unwrap().unwrap()).unwrap();
+            assert!(reply.get("result").is_some(), "{method}: {reply}");
+        }
+        drop((write, replies));
+        for _ in 0..200 {
+            let listed = ok(&d, "other", "devices", json!({})).await;
+            if kept || listed[0]["leased_by"].is_null() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let saved = ok(&d, "s", "journal", json!({})).await;
+        assert_eq!(saved["steps"].as_array().unwrap().len(), usize::from(kept));
+        let traces = std::fs::read_dir(home.path().join("traces"))
+            .unwrap()
+            .filter(|f| {
+                std::fs::read_to_string(f.as_ref().unwrap().path())
+                    .unwrap()
+                    .contains("\"session\":\"s\"")
+            })
+            .count();
+        assert_eq!(traces, if kept { 1 } else { 2 }, "{client}");
+    }
+}
+
 #[tokio::test(start_paused = true)]
 async fn drag_presses_at_the_first_target_holds_then_moves_to_the_second_and_pinch_plays_two_fingers()
  {

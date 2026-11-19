@@ -151,6 +151,8 @@ pub enum Call {
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
+    /// `Release`, and the session's state on this device is dropped: its last screen, journal and approvals.
+    Forget,
     /// Who holds the lease, without taking it.
     Leased,
 }
@@ -581,9 +583,12 @@ impl Actor {
                 None => json!({"hidden_display": hidden_display}),
             });
         }
-        if matches!(call, Call::Release) {
+        if matches!(call, Call::Release | Call::Forget) {
             if self.lease.as_ref().is_some_and(|l| l.session == session) {
                 self.drop_lease();
+            }
+            if matches!(call, Call::Forget) {
+                self.sessions.remove(&session);
             }
             return Ok(json!({}));
         }
@@ -738,7 +743,7 @@ impl Actor {
             Call::Page(p) => self.page(p).await?,
             Call::Record(p) => self.record(p).await?,
             Call::Health => self.health().await?,
-            Call::Release | Call::Leased => json!({}),
+            Call::Release | Call::Forget | Call::Leased => json!({}),
         };
         Ok(value)
     }
