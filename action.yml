@@ -140,9 +140,14 @@ runs:
         if [ -z "$name" ]; then
           name=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone[^(]*' | sed 's/ *$//')
         fi
-        phonedriver boot "$name"
-        udid=$(xcrun simctl list devices booted | grep -m1 -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}')
-        echo "PHONEDRIVER_DEVICE=sim:$udid" >> "$GITHUB_ENV"
+        # The id of the Simulator phonedriver booted (or found on), not the first booted one: a self-hosted Mac may
+        # already run another.
+        id=$(phonedriver boot "$name" --json | grep -oE '"id":"[^"]+"' | head -1 | cut -d'"' -f4 || true)
+        if [ -z "$id" ]; then
+          echo "::error::phonedriver boot \"$name\" did not return a device id"
+          exit 1
+        fi
+        echo "PHONEDRIVER_DEVICE=$id" >> "$GITHUB_ENV"
 
     - name: Install the app
       if: inputs.app != ''
