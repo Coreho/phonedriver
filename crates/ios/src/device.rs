@@ -952,15 +952,7 @@ impl Device for IosDevice {
             AppOp::ClearData => {
                 let _ = simctl(&["terminate", &self.udid, &app.0]).await;
                 let dir = simctl(&["get_app_container", &self.udid, &app.0, "data"]).await?;
-                let dir = std::path::PathBuf::from(dir.trim());
-                for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-                    let p = entry.path();
-                    let _ = if p.is_dir() {
-                        std::fs::remove_dir_all(&p)
-                    } else {
-                        std::fs::remove_file(&p)
-                    };
-                }
+                clear_folder(Path::new(dir.trim()))?;
             }
             AppOp::Uninstall => {
                 simctl(&["uninstall", &self.udid, &app.0]).await?;
@@ -1017,6 +1009,40 @@ impl Device for IosDevice {
     }
 }
 
+fn clear_folder(dir: &Path) -> Result<()> {
+    let transport = |detail| Error::Transport { detail };
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        transport(format!(
+            "cannot read the app's data folder {}: {e}",
+            dir.display()
+        ))
+    })?;
+    let mut failed = Vec::new();
+    for entry in entries {
+        let removed = entry
+            .map_err(|e| format!("an entry ({e})"))
+            .and_then(|entry| {
+                let path = entry.path();
+                let gone = if path.is_dir() {
+                    std::fs::remove_dir_all(&path)
+                } else {
+                    std::fs::remove_file(&path)
+                };
+                gone.map_err(|e| format!("{} ({e})", entry.file_name().to_string_lossy()))
+            });
+        if let Err(what) = removed {
+            failed.push(what);
+        }
+    }
+    if failed.is_empty() {
+        return Ok(());
+    }
+    Err(transport(format!(
+        "the app's data was not fully cleared; could not remove {}",
+        failed.join(", ")
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1030,5 +1056,38 @@ mod tests {
         assert!(!nudge_is_due(s(5), s(9), false));
         assert!(!nudge_is_due(s(600), s(60), false));
         assert!(!nudge_is_due(s(5), s(10), true));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn clearing_an_app_folder_empties_it_and_names_what_it_could_not_remove() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let data = home.path().join("data");
+        std::fs::create_dir_all(data.join("Library/Caches")).unwrap();
+        std::fs::write(data.join("Library/Caches/a"), "x").unwrap();
+        std::fs::write(data.join("note"), "x").unwrap();
+        clear_folder(&data).unwrap();
+        assert_eq!(std::fs::read_dir(&data).unwrap().count(), 0);
+
+        std::fs::create_dir_all(data.join("kept")).unwrap();
+        std::fs::write(data.join("kept/a"), "x").unwrap();
+        std::fs::write(data.join("note"), "x").unwrap();
+        std::fs::set_permissions(data.join("kept"), std::fs::Permissions::from_mode(0o500))
+            .unwrap();
+        let error = clear_folder(&data).unwrap_err().to_string();
+        std::fs::set_permissions(data.join("kept"), std::fs::Permissions::from_mode(0o700))
+            .unwrap();
+        assert!(error.contains("not fully cleared"), "{error}");
+        assert!(error.contains("kept"), "{error}");
+        assert!(!data.join("note").exists());
+
+        let error = clear_folder(&home.path().join("gone"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("cannot read the app's data folder"),
+            "{error}"
+        );
     }
 }
