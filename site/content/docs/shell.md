@@ -20,12 +20,21 @@ The command runs in the agent already on the device, over the open control strea
 
 ## iOS Simulator
 
-The command runs through `simctl spawn`. For `simctl` subcommands the device is filled in for you:
+For `simctl` subcommands the device is filled in for you:
 
 ```sh
 phonedriver shell "simctl ui appearance dark"
 phonedriver shell "simctl openurl https://example.com"
 ```
+
+Anything else runs inside the Simulator through `simctl spawn`. iOS 26 Simulators have no shell, so a command there is one of the Simulator's own programs and its arguments, with no pipes, `;`, redirection or `$`:
+
+```sh
+phonedriver shell "defaults read -g AppleLocale"
+phonedriver shell "log show --last 1m --predicate 'process == \"MyApp\"'"
+```
+
+A command that needs a shell, or a program the Simulator does not have (`ls`, `grep`), is refused with a list of what it has.
 
 ## Physical devices
 

@@ -83,6 +83,7 @@ pub struct IosDevice {
     poller: JoinHandle<()>,
     recording: tokio::sync::Mutex<Option<SimRecording>>,
     simio: Option<tokio::sync::Mutex<SimIo>>,
+    system: tokio::sync::OnceCell<std::path::PathBuf>,
 }
 
 /// `xcrun simctl io <udid> recordVideo` while it runs. It finishes its file when it is interrupted, not when it
@@ -307,6 +308,7 @@ impl IosDevice {
             poller,
             recording: tokio::sync::Mutex::new(None),
             simio: simio.map(tokio::sync::Mutex::new),
+            system: tokio::sync::OnceCell::new(),
         })
     }
 
@@ -932,8 +934,12 @@ impl Device for IosDevice {
                 reason: "an iPhone or iPad has no shell for anyone to run commands in; use launch, open, type and the other verbs, or a Simulator",
             });
         }
-        let args =
-            shell_args(&self.udid, &req.command).map_err(|detail| Error::Transport { detail })?;
+        let system = self
+            .system
+            .get_or_try_init(|| crate::simulator::runtime_root(&self.udid))
+            .await?;
+        let args = shell_args(&self.udid, &req.command, system)
+            .map_err(|detail| Error::Refused { detail })?;
         let (exit, stdout, stderr, timed_out) = simctl_shell(&args, req.timeout).await?;
         Ok(ShellReply {
             exit,
