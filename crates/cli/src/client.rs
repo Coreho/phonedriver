@@ -16,9 +16,11 @@ const READY_WAIT: Duration = Duration::from_secs(3);
 
 /// The `hello` params. Only the CLI asks for progress lines, and only when its stderr is a terminal: an agent that
 /// reads the CLI's output through pipes gets none, and an MCP server keeps its streams to the protocol.
-fn hello(kind: &str) -> Value {
+/// The session goes in too: the daemon registers the session named in `hello` as an agent's, and the calls that
+/// follow carry this client's session, so the two must match.
+fn hello(kind: &str, session: &str) -> Value {
     let progress = kind == "cli" && std::io::stderr().is_terminal();
-    json!({"version": VERSION, "client": kind, "progress": progress})
+    json!({"version": VERSION, "client": kind, "progress": progress, "session": session})
 }
 
 /// Why a command failed: the daemon said so, or the CLI could not reach it.
@@ -87,7 +89,7 @@ impl Client {
                 Self::open_with_retry(&path, &session).await?
             }
         };
-        match client.call_raw("hello", hello(kind)).await {
+        match client.call_raw("hello", hello(kind, &session)).await {
             Ok(_) => Ok(client),
             Err(e) if e.code == VERSION_MISMATCH => {
                 let _ = client.call_raw("shutdown", json!({})).await;
@@ -95,7 +97,7 @@ impl Client {
                 wait_until_gone(&path).await;
                 start_daemon().await?;
                 let mut fresh = Self::open_with_retry(&path, &session).await?;
-                fresh.call_raw("hello", hello(kind)).await?;
+                fresh.call_raw("hello", hello(kind, &session)).await?;
                 Ok(fresh)
             }
             Err(e) => Err(e.into()),
@@ -111,7 +113,7 @@ impl Client {
         let mut client = Self::open(path, session)
             .await
             .map_err(|e| Failure::Local(format!("no daemon at {}: {e}", path.display())))?;
-        client.call_raw("hello", hello(kind)).await?;
+        client.call_raw("hello", hello(kind, session)).await?;
         Ok(client)
     }
 
@@ -314,11 +316,16 @@ mod tests {
 
     #[test]
     fn only_a_cli_on_a_terminal_asks_for_progress() {
-        assert_eq!(hello("mcp")["progress"], json!(false));
-        assert_eq!(hello("bench")["progress"], json!(false));
+        assert_eq!(hello("mcp", "s")["progress"], json!(false));
+        assert_eq!(hello("bench", "s")["progress"], json!(false));
         assert_eq!(
-            hello("cli")["progress"],
+            hello("cli", "s")["progress"],
             json!(std::io::stderr().is_terminal())
         );
+    }
+
+    #[test]
+    fn hello_names_the_session_the_calls_carry() {
+        assert_eq!(hello("mcp", "mcp-4242")["session"], json!("mcp-4242"));
     }
 }
