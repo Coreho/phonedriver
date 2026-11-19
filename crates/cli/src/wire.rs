@@ -126,6 +126,30 @@ pub enum Action {
     },
 }
 
+pub const MAX_TAP_COUNT: u32 = 10;
+pub const MAX_LONG_PRESS_MS: u32 = 10_000;
+
+impl Action {
+    /// Why the daemon will not run this action, when its parameters alone say so.
+    pub fn refusal(&self) -> Option<String> {
+        let Action::Tap { count, long, .. } = self else {
+            return None;
+        };
+        if count.is_some_and(|c| c > MAX_TAP_COUNT) {
+            return Some(format!(
+                "a tap can repeat at most {MAX_TAP_COUNT} times; lower `count`"
+            ));
+        }
+        if long.is_some_and(|l| l > MAX_LONG_PRESS_MS) {
+            return Some(format!(
+                "a tap can hold for at most {} seconds; lower `long`",
+                MAX_LONG_PRESS_MS / 1000
+            ));
+        }
+        None
+    }
+}
+
 impl std::fmt::Debug for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

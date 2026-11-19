@@ -55,7 +55,7 @@ type Target = {ref: string} | {point: {x: number, y: number}} | {id: string, tex
 // {id}: the one element with that resource name (Android) or accessibility identifier (iOS). When no element
 // or more than one has it, `text` and `role` find the element as a text target does. Saved steps use it.
 type Action =
-  | {kind: "tap", target: Target, count?: number, long?: number}   // long: hold ms; count taps are 80 ms apart
+  | {kind: "tap", target: Target, count?: number, long?: number}   // long: hold ms, at most 10000; count taps are 80 ms apart, at most 10
   | {kind: "type", text: string, into?: Target, mode?: "paste"|"set"|"keys", secret?: boolean, submit?: boolean, append?: boolean}
     // the CLI reads secret text from stdin or PHONEDRIVER_SECRET and sends it here over the user-only socket;
     // from then on the daemon replaces that text with ••• in every reply, error and trace line (decision D70)

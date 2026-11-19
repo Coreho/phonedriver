@@ -304,6 +304,9 @@ impl Daemon {
                                 "each finger needs at least two points: where it lands and where it lifts",
                             ));
                         }
+                        if let Some(why) = act.action.refusal() {
+                            return Err(RpcError::invalid_params(why));
+                        }
                         Call::Act(act)
                     }
                     "batch" => {
@@ -317,6 +320,14 @@ impl Daemon {
                             let step = Step::parse(raw).map_err(|why| {
                                 RpcError::invalid_params(format!("step {}: {why}", i + 1))
                             })?;
+                            if let Step::Act(action) = &step
+                                && let Some(why) = action.refusal()
+                            {
+                                return Err(RpcError::invalid_params(format!(
+                                    "step {}: {why}",
+                                    i + 1
+                                )));
+                            }
                             if let Step::Act(Action::Gesture { fingers }) = &step
                                 && (fingers.is_empty() || fingers.iter().any(|f| f.len() < 2))
                             {

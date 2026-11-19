@@ -4814,6 +4814,31 @@ async fn a_batch_with_a_malformed_step_runs_nothing_and_names_the_step() {
     assert_eq!(e.code, -32602);
 }
 
+#[tokio::test]
+async fn a_tap_with_more_taps_or_a_longer_hold_than_a_person_makes_is_refused_and_nothing_runs() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    let point = json!({"point": {"x": 10.0, "y": 10.0}});
+    for (field, value, limit) in [
+        ("count", json!(11), "10 times"),
+        ("count", json!(u32::MAX), "10 times"),
+        ("long", json!(10_001), "10 seconds"),
+        ("long", json!(u32::MAX), "10 seconds"),
+    ] {
+        let mut action = json!({"kind": "tap", "target": point});
+        action[field] = value;
+        let e = err(&d, "default", "act", json!({"action": action})).await;
+        assert_eq!(e.code, -32602, "{field}");
+        assert!(e.message.contains(limit), "{}", e.message);
+        let e = err(&d, "default", "batch", batch(json!([action]))).await;
+        assert_eq!(e.code, -32602, "{field}");
+        assert!(e.message.contains("step 1"), "{}", e.message);
+    }
+    assert!(fake.calls().is_empty());
+    let action = json!({"kind": "tap", "target": point, "count": 10, "long": 10_000});
+    ok(&d, "default", "act", json!({"action": action})).await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn drag_presses_at_the_first_target_holds_then_moves_to_the_second_and_pinch_plays_two_fingers()
  {
