@@ -824,7 +824,9 @@ impl Actor {
             s.set_last(None);
             return Ok(json!({"ok": true, "summary": summary}));
         };
-        if op != AppOp::Stop && self.physical() && !self.installed_by_us(&*device, &found.id).await?
+        if op != AppOp::Stop
+            && self.physical()
+            && !self.installed_by_us(&*device, &found.id).await?
         {
             return Err(Error::Unsupported {
                 op: Op::App,

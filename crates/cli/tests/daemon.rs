@@ -5032,7 +5032,12 @@ async fn an_app_installed_again_by_its_owner_is_no_longer_the_one_phonedriver_in
     let removed = fake
         .calls()
         .iter()
-        .filter(|c| matches!(c, Call::AppOp(phonedriver_core::device::AppOp::Uninstall, _)))
+        .filter(|c| {
+            matches!(
+                c,
+                Call::AppOp(phonedriver_core::device::AppOp::Uninstall, _)
+            )
+        })
         .count();
     assert_eq!(removed, 0);
 }

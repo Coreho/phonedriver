@@ -25,9 +25,13 @@ async fn rig(trees: Vec<RawTree>) -> Rig {
 }
 
 async fn rig_with(device: Arc<dyn phonedriver_core::device::Device>) -> Rig {
+    rig_on(Arc::new(OneDevice(device))).await
+}
+
+async fn rig_on(source: Arc<dyn phonedriver::daemon::DeviceSource>) -> Rig {
     let home = tempfile::tempdir().unwrap();
     let daemon = Daemon::new(
-        Arc::new(OneDevice(device)),
+        source,
         Config {
             home: home.path().to_path_buf(),
         },
@@ -1364,4 +1368,55 @@ fn test_socket(home: &std::path::Path, name: &str) -> std::path::PathBuf {
     } else {
         home.join("run").join(name)
     }
+}
+
+struct TwoDevices(Vec<(String, Arc<dyn phonedriver_core::device::Device>)>);
+
+#[async_trait::async_trait]
+impl phonedriver::daemon::DeviceSource for TwoDevices {
+    async fn list(
+        &self,
+    ) -> Result<Vec<phonedriver::daemon::Listed>, phonedriver_core::error::Error> {
+        Ok(self
+            .0
+            .iter()
+            .map(|(id, device)| phonedriver::daemon::Listed {
+                id: id.clone(),
+                model: "Fake".into(),
+                os: Some("FakeOS 1".into()),
+                tier: "fake".into(),
+                capabilities: device.info().capabilities,
+            })
+            .collect())
+    }
+
+    async fn connect(
+        &self,
+        id: &str,
+    ) -> Result<Arc<dyn phonedriver_core::device::Device>, phonedriver_core::error::Error> {
+        Ok(self.0.iter().find(|(d, _)| d == id).unwrap().1.clone())
+    }
+}
+
+#[tokio::test]
+async fn devices_use_sends_the_calls_that_follow_to_that_device() {
+    let rig = rig_on(Arc::new(TwoDevices(vec![
+        ("fake:1".into(), pixel_device(vec![tree(&["First"])])),
+        ("fake:2".into(), pixel_device(vec![tree(&["Second"])])),
+    ])))
+    .await;
+    let r = rig.call("snapshot", json!({})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    let r = rig.call("devices", json!({"use": "fake:2"})).await;
+    assert!(
+        texts(&r)
+            .join("\n")
+            .contains("default device: fake:2 (used when `device` is omitted)"),
+        "{r:?}"
+    );
+    let r = rig.call("snapshot", json!({})).await;
+    assert!(texts(&r).join("\n").contains("Second"), "{r:?}");
+    rig.call("devices", json!({"use": "fake:1"})).await;
+    let r = rig.call("snapshot", json!({})).await;
+    assert!(texts(&r).join("\n").contains("First"), "{r:?}");
 }

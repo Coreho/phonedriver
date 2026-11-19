@@ -34,7 +34,7 @@ struct Shot {
 pub struct Mcp {
     socket: Option<PathBuf>,
     session: String,
-    device: Option<String>,
+    device: Arc<std::sync::Mutex<Option<String>>>,
     client: Arc<Mutex<Option<Client>>>,
     ask: Vec<Category>,
     held: Arc<Mutex<Option<Held>>>,
@@ -120,6 +120,9 @@ struct DevicesArgs {
     release: Option<bool>,
     /// Start a simulator or emulator that is off, by name.
     boot: Option<String>,
+    /// Send the other tools to this device from now on.
+    #[serde(rename = "use")]
+    use_device: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -482,7 +485,7 @@ impl Mcp {
         Mcp {
             socket,
             session,
-            device: None,
+            device: Arc::default(),
             client: Arc::default(),
             ask: Vec::new(),
             held: Arc::default(),
@@ -499,7 +502,10 @@ impl Mcp {
 
     /// The same server, with every tool call that names no device sent to `device`.
     pub fn pinned(self, device: Option<String>) -> Mcp {
-        Mcp { device, ..self }
+        Mcp {
+            device: Arc::new(std::sync::Mutex::new(device)),
+            ..self
+        }
     }
 
     async fn connect(&self) -> Result<Client, Failure> {
@@ -530,7 +536,12 @@ impl Mcp {
     fn globals(&self, device: Option<String>) -> Globals {
         Globals {
             device: device
-                .or_else(|| self.device.clone())
+                .or_else(|| {
+                    self.device
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .clone()
+                })
                 .or_else(|| std::env::var("PHONEDRIVER_DEVICE").ok()),
             json: false,
             no_settle: false,
@@ -1144,7 +1155,7 @@ fn bad(message: &str) -> CallToolResult {
 #[tool_router]
 impl Mcp {
     #[tool(
-        description = "List devices (id, model, OS, holder). With several, pass an id as `device` to the other tools. `release` gives up this session's hold. `boot` starts a simulator or emulator that is off.",
+        description = "List devices (id, model, OS, holder). With several, `use` an id to send later calls to it; `device` on one call overrides. `release` gives up this session's hold. `boot` starts a simulator or emulator that is off.",
         annotations(
             title = "List devices",
             read_only_hint = false,
@@ -1159,6 +1170,9 @@ impl Mcp {
         }
         if let Some(name) = a.boot {
             return self.run(None, Verb::Boot { name: Some(name) }, None).await;
+        }
+        if let Some(id) = a.use_device {
+            *self.device.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
         }
         self.run(None, Verb::Devices, None).await
     }
