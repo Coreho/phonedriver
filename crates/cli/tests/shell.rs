@@ -184,6 +184,22 @@ async fn a_physical_device_refuses_clearly_destructive_commands_unless_forced() 
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_forced_command_is_saved_without_the_force() {
+    let (d, _fake, _home) = setup("android:R5CT123", polled(vec![tree(&["One"])]));
+    ok(
+        &d,
+        "shell",
+        json!({"command": "pm uninstall com.example.theirs", "force": true}),
+    )
+    .await;
+    let saved = ok(&d, "journal", json!({})).await;
+    assert_eq!(
+        saved["steps"],
+        json!([{"method": "shell", "params": {"command": "pm uninstall com.example.theirs"}}])
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn an_emulator_or_simulator_runs_any_command() {
     for id in ["android:emulator-5556", "sim:ABC"] {
         let (d, fake, _home) = setup(id, polled(vec![tree(&["One"])]));
