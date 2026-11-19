@@ -176,6 +176,8 @@ Each decision records the choice, the alternatives it beat, and the evidence tha
 
 **Reopen if.** An agent needs to clear the data of an app it did not install on a phone; that is a decision for the person, per app.
 
+**Amended 2026-11-19 (#18).** The record of what phonedriver installed on a physical device keeps a package only when exactly one package is new after `pm install` (none: it replaced an app; several: it names them and records none). A failed or empty `pm list packages` is an error. Entries are keyed by `ro.serialno`, not the adb serial (a phone on `adb tcpip` is `ip:5555`, which another phone can later have), hold the install's `firstInstallTime`, and that time is checked before `clear`, `uninstall`, `grant`, `revoke` and `launch --grant`, so an owner's own app later installed under the same id is not treated as ours. One lock covers the file for all device actors; it is written to a temporary file and renamed; a write that fails, or a record that cannot be read, is an error and is never replaced. A record from before (a bare package name) still counts, without the time check. Rejected: reading the package id from the APK (a zip and binary-XML parser or `aapt`, a new dependency).
+
 ## D16. Traces keep typed text only as a length, and text from the screen only with `--trace-full`
 
 **Choice.** A trace line holds the request's params, the reply's summary, `ms` and the settle time. A `type` action's text, secret or not, becomes `{"secret_len": n}` (flag set) or `{"text_len": n}`; so does the text of `clipboard set`. Text targets (`tap "Save"`, `wait gone:"Loading"`, `find`) become `{"text_len": n}` unless the daemon runs with `--trace-full` (env `PHONEDRIVER_TRACE_FULL`), which also adds the observation text. An `open` URL loses its query and fragment. `--trace-screens` (env `PHONEDRIVER_TRACE_SCREENS`) copies each `screenshot` next to the trace file. The trace directory is mode 0700 and its files 0600.
@@ -185,6 +187,8 @@ Each decision records the choice, the alternatives it beat, and the evidence tha
 **Rejected.** Recording typed text unless the actor reports `secure`: needs a new reply field and still cannot cover errors.
 
 **Reopen if.** Tuning agents (task 4.5) shows that traces without typed text cannot explain failures; then add the text under `--trace-full` only.
+
+**Amended 2026-11-19 (#15, item 12).** Replies are traced as returned: a summary (`tapped @e6 "Busy"`) or an error (`no element matches "Pay €49.99"`) can name text from the screen without `--trace-full`. Only request params and observation text follow the flag. The docs said otherwise and now say this. Reopen if traces must be safe to share without reading them first; the shape would be to record an error's `code_name` instead of its message and drop quoted labels from summaries.
 
 ## D17. Android support is a cargo feature of the CLI, on by default
 
@@ -231,6 +235,8 @@ Secrets. The trace keeps the command text (an agent's command is what it did), b
 **Rejected.** A `sim` tool for `simctl` (one more tool in `tools/list` for what a prefix does); a regex `grep` (a dependency for what `a|b` words cover; `| grep -E` still works inside the command); exit code as the CLI's own exit status (it collides with phonedriver's codes; `--json` has `exit`); prompting before destructive commands (agents cannot answer; a refusal with `force` can be retried deliberately); settling after every command (a 250 ms tax on reads).
 
 **Reopen if.** An agent needs a command that runs longer than 30 s without a stream, or interactive input (stdin is closed), or the guard blocks a command a user asked for often enough that `force` becomes habit.
+
+**Amended 2026-11-19 (#15, items 2 and 10).** On a physical device the command word is matched by its file name (`/system/bin/pm`), and `sh -c` and `bash -c` are looked inside; still a guard against slips, not a sandbox. A saved shell step does not keep `force`, so a replay on a phone is refused again where the run needed it. A `time_limit_s` over 600 (the lease's length) is refused at the daemon: `u64::MAX` overflowed a `Duration` and stopped the device's actor, and the daemon kept the dead actor, so the device answered `device_gone` until it restarted. The daemon now also starts a new actor when the old one has stopped, so any such crash costs one call, not the device.
 
 ## D22. `type --into` replaces the field's text; verification says what the field shows and why not
 
@@ -806,6 +812,8 @@ The first run is why the `shell` description no longer says to prefer it for set
 **Limits.** A replay is as deterministic as the app: a dialog that shows on one run in three is a miss on that run, and the model takes that step. No model was in the five replays, and none was measured against them, so the saving in time and tokens is not shown. The journal has every action that worked, including an agent's detours; nothing trims them. Steps saved by position hold only while the layout does, and `save` says how many there are. Typed text that was not marked secret is in the file. A step that needs approval (a payment, a deletion) stops the replay unless the caller passes the approval a typed command would. The nine bench jobs were not replayed ten times each, which is the test the research names.
 
 **Reopen if.** Replays of the bench jobs miss more than one run in twenty (then each step needs a wait for what it produced); people ask for files they can write by hand; a second app's flow shows targets that text and role cannot single out.
+
+**Amended 2026-11-19 (#13 and #15, item 5).** A `shell` step expects exit 0 on replay; a step that timed out or exited otherwise stops the replay. `save` keeps `"expect_exit": n` for a command that exited `n` (not 0) when the run was made, so replaying the same run passes; a hand-written step can set a number, or `null` for any exit. `save` reads the journal without emptying it (`journal {keep: true}`), writes a temporary file beside the target and renames it, then removes the steps it wrote (`journal {drop: n}`), so a failed write loses nothing. A `record start` that cannot clear its steps file stops the recording it began.
 
 ## D61. A Windows host reads pixels with the OCR engine Windows ships; Linux has none; OmniParser is not built in
 
@@ -1445,3 +1453,17 @@ If the helper cannot build or start, the device works as before: touches through
 Run on one device, an iPhone17,5 on iOS 26.5 over USB from Windows 11 (2026-11-20, `progress.md`): the mount, the XCTest launch of a Sideloadly-signed runner whose bundle id Sideloadly had changed, `snapshot` (184 ms), `screenshot`, `tap`, `type`, `launch` and `press back`. With Developer Mode off the device answers a mount with only `ImageMountFailed`, so `setup::mount_blocked` stops setup and the daemon before the mount and names Developer Mode.
 
 **Limits.** One device and one iOS version so far. Taps take 1.3 to 1.5 s against 316 ms on the Simulator: about 230 ms of input confirmation, a settle of 0.5 to 0.9 s on polled screenshots and 0.2 to 0.5 s of `stabilize`. On a screen with an endless spinner (Settings > Bluetooth while it scans) every action spends the full `LOADING_WAIT` of 4 s in `stabilize` (a 5.6 s tap in the trace). Off a Mac the device must be on the cable (`ios wifi on` still needs Xcode). The build without the `android` feature also needed a fix in `commands::command`, which named `pair` and `untether` for clap even when they do not exist.
+
+## D97. An MCP session ends with its connection, and Android field values are their text (2026-11-19)
+
+Fixes from an outside review of 0.1.5 (#15 and #16), recorded together because each changes a rule the code kept silently.
+
+**An MCP connection that closes takes its session's state with it.** The daemon releases its leases, drops its state on every device (last screen, journal, approvals), closes its trace file and forgets it as an agent. An MCP server's session is `mcp-<pid>` and never returns; until now its state stayed while the daemon lived. A command-line session keeps its state, because each command is its own connection and `save` comes after the run. The MCP server reconnects only after `-32603`, which only the client produces, when the daemon is gone and the state with it.
+
+**`hello` carries the session.** The MCP server's `hello` named no session, so the daemon registered `default` as the agent and the server's calls (`mcp-<pid>`) got the 30-second terminal hold instead of the agent lease (#14, fixed by the reporter in #19).
+
+**An editable Android field's value is its text.** Its state description is not read as text: Compose gives an empty field the state description "Empty", which showed as `textbox "Empty"` and made clearing a field fail verification. Non-editable nodes (switches, progress bars) keep their state description. Cost: an editable field's state description (an error state) is not shown.
+
+**A tap is at most 10 taps and a hold at most 10 seconds,** checked at the daemon for `act` and every `batch` step: larger values allocated a gesture per tap and overflowed the timing.
+
+**`devices {use: "<id>"}`** sets the MCP server's default device for the rest of the session (#16); `device` on one call still overrides.
