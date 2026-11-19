@@ -225,13 +225,18 @@ fn sanitize(method: &str, params: &Value, full: bool) -> Value {
     p
 }
 
+/// Removes files older than `age` under `dir`. A symbolic link to a folder is not followed: it may point outside
+/// phonedriver's home (a user keeping evidence), and only what is really under `dir` is ours to clean.
 pub fn clean_older_than(dir: &std::path::Path, age: Duration) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() {
             clean_older_than(&path, age);
         } else if entry
             .metadata()
@@ -242,5 +247,32 @@ pub fn clean_older_than(dir: &std::path::Path, age: Duration) {
         {
             let _ = std::fs::remove_file(path);
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod clean_tests {
+    use super::*;
+
+    #[test]
+    fn clean_does_not_follow_a_symlink_to_a_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = root.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("keep.txt"), "evidence").unwrap();
+        let tmp = root.path().join("tmp");
+        std::fs::create_dir(&tmp).unwrap();
+        std::fs::write(tmp.join("old.png"), "x").unwrap();
+        std::os::unix::fs::symlink(&outside, tmp.join("link")).unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        clean_older_than(&tmp, Duration::from_millis(1));
+        assert!(
+            outside.join("keep.txt").exists(),
+            "a file outside the cleaned folder was deleted"
+        );
+        assert!(
+            !tmp.join("old.png").exists(),
+            "an old file in the cleaned folder was kept"
+        );
     }
 }
