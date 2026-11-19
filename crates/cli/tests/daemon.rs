@@ -1661,6 +1661,33 @@ async fn plain_text_is_refused_in_the_focused_password_field_and_clearing_it_is_
     );
 }
 
+#[tokio::test(start_paused = true)]
+async fn clearing_a_field_whose_state_description_says_empty_is_verified_and_shows_no_text() {
+    let json = r#"{"windows":[{"id":1,"type":"application","package":"com.example","bounds":[0,0,360,800]}],"nodes":[
+        {"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"},
+        {"p":0,"w":1,"cls":"android.widget.EditText","text":"","sd":"Empty","b":[0,100,360,160],"f":"vVeEF","a":["tap","set_text"]}]}"#;
+    let tree = RawTree::from_android_json(json, Scale { density: 1.0 }).unwrap();
+    let (source, _) = FakeSource::with(vec![tree.clone(), tree]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "", "into": {"ref": "e1"}}}),
+    )
+    .await;
+    assert_eq!(r["verified"], true, "{r}");
+    let snapshot = ok(&d, "default", "snapshot", json!({})).await;
+    assert!(
+        snapshot["text"]
+            .as_str()
+            .unwrap()
+            .contains("@e1 textbox focused"),
+        "{snapshot}"
+    );
+}
+
 fn coded_field(label: Option<&str>, hint: Option<&str>, id: Option<&str>) -> RawTree {
     let node = json!({
         "p": 0, "w": 1, "cls": "android.widget.EditText", "text": "", "desc": label, "hint": hint, "id": id,
