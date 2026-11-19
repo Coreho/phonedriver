@@ -68,6 +68,9 @@ pub struct FakeDevice {
     recorder: Mutex<Option<Option<std::path::PathBuf>>>,
     text_shows: Mutex<Option<(Duration, Duration)>>,
     follows: bool,
+    installs: Mutex<Vec<AppId>>,
+    installed_at: Mutex<Option<String>>,
+    hardware_serial: Mutex<Option<String>>,
 }
 
 type FakeSettings = (std::sync::Arc<SettingsIndex>, Vec<(String, String)>);
@@ -120,6 +123,9 @@ impl FakeDevice {
             recorder: Mutex::new(None),
             text_shows: Mutex::new(None),
             follows: false,
+            installs: Mutex::new(vec![AppId("com.example.installed".into())]),
+            installed_at: Mutex::new(None),
+            hardware_serial: Mutex::new(None),
         }
     }
 
@@ -213,6 +219,21 @@ impl FakeDevice {
     /// The screen size `current_screen()` reports from now on, as a device that follows its own rotation does.
     pub fn rotate_to(&self, screen: Size) {
         *lock(&self.display) = Some(screen);
+    }
+
+    /// The apps an `install` adds to the device, none for a file that replaces an app.
+    pub fn set_installs(&self, ids: &[&str]) {
+        *lock(&self.installs) = ids.iter().map(|id| AppId((*id).into())).collect();
+    }
+
+    /// What `installed_at` answers for every app from now on.
+    pub fn set_installed_at(&self, stamp: &str) {
+        *lock(&self.installed_at) = Some(stamp.into());
+    }
+
+    /// What `hardware_serial` answers from now on.
+    pub fn set_hardware_serial(&self, serial: &str) {
+        *lock(&self.hardware_serial) = Some(serial.into());
     }
 
     /// The launchable apps `apps()` reports, as `(id, name)`.
@@ -533,9 +554,17 @@ impl Device for FakeDevice {
         Ok(lock(&self.foreground).clone())
     }
 
-    async fn install(&self, path: &std::path::Path) -> Result<Option<AppId>> {
+    async fn install(&self, path: &std::path::Path) -> Result<Vec<AppId>> {
         self.record(Call::Install(path.to_path_buf()))?;
-        Ok(Some(AppId("com.example.installed".into())))
+        Ok(lock(&self.installs).clone())
+    }
+
+    async fn installed_at(&self, _app: &AppId) -> Result<Option<String>> {
+        Ok(lock(&self.installed_at).clone())
+    }
+
+    async fn hardware_serial(&self) -> Result<Option<String>> {
+        Ok(lock(&self.hardware_serial).clone())
     }
 
     async fn app_op(&self, op: AppOp, app: &AppId) -> Result<()> {

@@ -910,7 +910,7 @@ impl Device for IosDevice {
         Ok(())
     }
 
-    async fn install(&self, path: &Path) -> Result<Option<AppId>> {
+    async fn install(&self, path: &Path) -> Result<Vec<AppId>> {
         self.simulator_only()?;
         let app = path.to_string_lossy().into_owned();
         if !path.is_dir() || path.extension().is_none_or(|e| e != "app") {
@@ -922,7 +922,7 @@ impl Device for IosDevice {
         simctl(&["install", &self.udid, &app]).await?;
         let plist = format!("{app}/Info.plist");
         let id = crate::simulator::plutil_extract(&plist, "CFBundleIdentifier").await?;
-        Ok(Some(AppId(id)))
+        Ok(vec![AppId(id)])
     }
 
     async fn shell(&self, req: &ShellRequest) -> Result<ShellReply> {

@@ -10,6 +10,7 @@ pub mod checkbox;
 pub mod guard;
 pub mod ios;
 pub mod journal;
+pub mod ledger;
 pub mod progress;
 pub mod rpc;
 pub mod secret_field;
@@ -133,6 +134,7 @@ pub struct Daemon {
     traces: Traces,
     told: Mutex<HashMap<String, String>>,
     secrets: Arc<secrets::Secrets>,
+    ledger: Arc<ledger::Ledger>,
     agents: Mutex<std::collections::HashSet<String>>,
     connections: AtomicUsize,
     last_activity: Mutex<Instant>,
@@ -154,6 +156,7 @@ impl Daemon {
         Arc::new(Daemon {
             source,
             traces: Traces::new(config.home.join("traces"), trace),
+            ledger: Arc::new(ledger::Ledger::new(&config.home)),
             home: config.home,
             actors: Mutex::default(),
             told: Mutex::default(),
@@ -413,6 +416,7 @@ impl Daemon {
                     self.source.clone(),
                     self.home.clone(),
                     self.secrets.clone(),
+                    self.ledger.clone(),
                 )
             })
             .clone()

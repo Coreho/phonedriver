@@ -33,6 +33,7 @@ use tokio::time::Instant;
 use super::DeviceSource;
 use super::checkbox;
 use super::journal::{self, Kept};
+use super::ledger::{Entry, Ledger};
 use super::secrets::Secrets;
 use super::session::{Resolved, Session};
 use super::shell;
@@ -172,6 +173,7 @@ pub fn spawn(
     source: Arc<dyn DeviceSource>,
     home: PathBuf,
     secrets: Arc<Secrets>,
+    ledger: Arc<Ledger>,
 ) -> mpsc::Sender<Job> {
     let (tx, rx) = mpsc::channel(32);
     let actor = Actor {
@@ -195,6 +197,7 @@ pub fn spawn(
         names: Arc::default(),
         recording: None,
         secrets,
+        ledger,
     };
     tokio::spawn(actor.run(rx));
     tx
@@ -338,6 +341,7 @@ struct Actor {
     names: Arc<Mutex<HashMap<String, String>>>,
     recording: Option<Taping>,
     secrets: Arc<Secrets>,
+    ledger: Arc<Ledger>,
 }
 
 async fn next_signal(live: &mut Option<Live>) -> Signal {
@@ -746,17 +750,35 @@ impl Actor {
                 op: Op::App,
                 reason: "install needs the path of an app file",
             })?;
-            let id = device.install(std::path::Path::new(&path)).await?;
-            if let Some(id) = &id {
-                self.ledger(|l| {
-                    if !l.contains(&id.0) {
-                        l.push(id.0.clone());
+            let added = device.install(std::path::Path::new(&path)).await?;
+            let summary = match added.as_slice() {
+                [] => "installed (it replaced an app already there)".to_string(),
+                [id] => {
+                    if self.physical() {
+                        let installed_at = device.installed_at(id).await?;
+                        let key = self.ledger_key(&*device).await?;
+                        self.ledger
+                            .update(&key, |l| {
+                                l.retain(|e| e.id != id.0);
+                                l.push(Entry {
+                                    id: id.0.clone(),
+                                    installed_at,
+                                });
+                            })
+                            .map_err(|why| Error::Transport {
+                                detail: format!("installed {}, but {why}", id.0),
+                            })?;
                     }
-                });
-            }
-            let summary = match id {
-                Some(id) => format!("installed {}", id.0),
-                None => "installed (it replaced an app already there)".to_string(),
+                    format!("installed {}", id.0)
+                }
+                several => {
+                    let names: Vec<&str> = several.iter().map(|a| a.0.as_str()).collect();
+                    format!(
+                        "installed, but {} packages are new ({}) and phonedriver cannot tell which is this app, so it records none of them",
+                        several.len(),
+                        names.join(", ")
+                    )
+                }
             };
             return Ok(json!({"ok": true, "summary": summary}));
         }
@@ -785,15 +807,11 @@ impl Actor {
                     reason: "grant and revoke need `permissions`, such as camera or location",
                 });
             }
-            if self.physical() {
-                let mut mine = false;
-                self.ledger(|l| mine = l.contains(&found.id.0));
-                if !mine {
-                    return Err(Error::Unsupported {
-                        op: Op::App,
-                        reason: "phonedriver did not install this app on this physical device, so it will not change its permissions",
-                    });
-                }
+            if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
+                return Err(Error::Unsupported {
+                    op: Op::App,
+                    reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not change its permissions",
+                });
             }
             let names = p.permissions.join(", ");
             let summary = if p.action == "grant" {
@@ -806,19 +824,21 @@ impl Actor {
             s.set_last(None);
             return Ok(json!({"ok": true, "summary": summary}));
         };
-        if op != AppOp::Stop && self.physical() {
-            let mut mine = false;
-            self.ledger(|l| mine = l.contains(&found.id.0));
-            if !mine {
-                return Err(Error::Unsupported {
-                    op: Op::App,
-                    reason: "phonedriver did not install this app on this physical device, so it will not clear or remove it",
-                });
-            }
+        if op != AppOp::Stop && self.physical() && !self.installed_by_us(&*device, &found.id).await?
+        {
+            return Err(Error::Unsupported {
+                op: Op::App,
+                reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not clear or remove it",
+            });
         }
         device.app_op(op, &found.id).await?;
-        if op == AppOp::Uninstall {
-            self.ledger(|l| l.retain(|a| *a != found.id.0));
+        if op == AppOp::Uninstall && self.physical() {
+            let key = self.ledger_key(&*device).await?;
+            self.ledger
+                .update(&key, |l| l.retain(|e| e.id != found.id.0))
+                .map_err(|why| Error::Transport {
+                    detail: format!("uninstalled {}, but {why}", found.name),
+                })?;
         }
         s.set_last(None);
         let word = match op {
@@ -837,8 +857,15 @@ impl Actor {
             "an iPhone or iPad has no shell for anyone to run commands in; use launch, open, type and the other verbs, or a Simulator",
         )?;
         if self.physical() && !p.force {
-            let mut mine = Vec::new();
-            self.ledger(|l| mine = l.clone());
+            let device = self.device()?;
+            let key = self.ledger_key(&*device).await?;
+            let mine: Vec<String> = self
+                .ledger
+                .entries(&key)
+                .map_err(|detail| Error::Transport { detail })?
+                .into_iter()
+                .map(|e| e.id)
+                .collect();
             if let Some(reason) = shell::refuse_on_physical(&p.command, &mine) {
                 return Err(Error::Unsupported {
                     op: Op::Shell,
@@ -1239,24 +1266,29 @@ impl Actor {
         }
     }
 
-    /// Reads, lets `f` change, and writes back the apps phonedriver installed on this device.
-    fn ledger(&self, f: impl FnOnce(&mut Vec<String>)) {
-        let path = self.home.join("installed.json");
-        let mut all: serde_json::Map<String, Value> = std::fs::read(&path)
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default();
-        let mut mine: Vec<String> = all
-            .get(&self.id)
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_default();
-        let before = mine.clone();
-        f(&mut mine);
-        if mine != before {
-            all.insert(self.id.clone(), json!(mine));
-            let _ = std::fs::create_dir_all(&self.home)
-                .and_then(|()| std::fs::write(&path, Value::Object(all).to_string()));
-        }
+    /// The key of this device's entries in the record: the phone's own serial number, which a change of connection
+    /// does not change, so a phone that later gets this one's address does not inherit its list.
+    async fn ledger_key(&self, device: &dyn Device) -> Result<String, Error> {
+        Ok(match device.hardware_serial().await? {
+            Some(serial) => format!("android:{serial}"),
+            None => self.id.clone(),
+        })
+    }
+
+    /// Whether phonedriver installed this app on this device and nobody has installed it again since.
+    async fn installed_by_us(&self, device: &dyn Device, app: &AppId) -> Result<bool, Error> {
+        let key = self.ledger_key(device).await?;
+        let entries = self
+            .ledger
+            .entries(&key)
+            .map_err(|detail| Error::Transport { detail })?;
+        let Some(entry) = entries.into_iter().find(|e| e.id == app.0) else {
+            return Ok(false);
+        };
+        Ok(match entry.installed_at {
+            Some(then) => device.installed_at(app).await?.as_deref() == Some(then.as_str()),
+            None => true,
+        })
     }
 
     async fn health(&mut self) -> Result<Value, Error> {
@@ -2377,15 +2409,11 @@ impl Actor {
                 self.lap("apps", t);
                 let found = find_app(&installed, &app)?;
                 if !grant.is_empty() {
-                    if self.physical() {
-                        let mut mine = false;
-                        self.ledger(|l| mine = l.contains(&found.id.0));
-                        if !mine {
-                            return Err(Error::Unsupported {
-                                op: Op::Launch,
-                                reason: "phonedriver did not install this app on this physical device, so it will not grant it permissions",
-                            });
-                        }
+                    if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
+                        return Err(Error::Unsupported {
+                            op: Op::Launch,
+                            reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not grant it permissions",
+                        });
                     }
                     device.grant(&found.id, &grant).await?;
                 }

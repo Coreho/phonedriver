@@ -4966,6 +4966,150 @@ async fn on_a_physical_device_only_apps_phonedriver_installed_can_be_cleared_or_
     assert!(home.path().join("installed.json").exists());
 }
 
+fn read_ledger(home: &tempfile::TempDir) -> Value {
+    serde_json::from_slice(&std::fs::read(home.path().join("installed.json")).unwrap()).unwrap()
+}
+
+async fn install_apk(d: &Daemon) -> Value {
+    ok(
+        d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn an_install_that_adds_several_packages_records_none_of_them_and_says_so() {
+    let (source, fake) = physical();
+    fake.set_installs(&["com.example.theirs", "com.example.installed"]);
+    let (d, home) = daemon(source);
+    let r = install_apk(&d).await;
+    let summary = r["summary"].as_str().unwrap();
+    assert!(
+        summary.contains("2 packages are new") && summary.contains("com.example.theirs"),
+        "{summary}"
+    );
+    let e = err(&d, "default", "app", app_call("clear", "Theirs")).await;
+    assert_eq!(e.code, -32011, "{}", e.message);
+    let e = err(&d, "default", "app", app_call("clear", "Mine")).await;
+    assert_eq!(e.code, -32011, "{}", e.message);
+    assert!(!home.path().join("installed.json").exists());
+}
+
+#[tokio::test]
+async fn an_install_that_replaces_an_app_records_nothing() {
+    let (source, fake) = physical();
+    fake.set_installs(&[]);
+    let (d, home) = daemon(source);
+    let r = install_apk(&d).await;
+    assert_eq!(r["summary"], "installed (it replaced an app already there)");
+    assert!(!home.path().join("installed.json").exists());
+}
+
+#[tokio::test]
+async fn an_app_installed_again_by_its_owner_is_no_longer_the_one_phonedriver_installed() {
+    let (source, fake) = physical();
+    fake.set_installed_at("2026-11-19 10:04:31");
+    let (d, _home) = daemon(source);
+    install_apk(&d).await;
+    ok(&d, "default", "app", app_call("clear", "Mine")).await;
+    fake.set_installed_at("2026-11-19 18:30:02");
+    for action in ["clear", "uninstall"] {
+        let e = err(&d, "default", "app", app_call(action, "Mine")).await;
+        assert_eq!(e.code, -32011, "{action}");
+        assert!(e.message.contains("installed again"), "{}", e.message);
+    }
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "grant", "app": "Mine", "permissions": ["camera"]}),
+    )
+    .await;
+    assert!(e.message.contains("installed again"), "{}", e.message);
+    let removed = fake
+        .calls()
+        .iter()
+        .filter(|c| matches!(c, Call::AppOp(phonedriver_core::device::AppOp::Uninstall, _)))
+        .count();
+    assert_eq!(removed, 0);
+}
+
+#[tokio::test]
+async fn a_record_written_before_installs_were_identified_still_counts() {
+    let (source, _fake) = physical();
+    let (d, home) = daemon(source);
+    std::fs::write(
+        home.path().join("installed.json"),
+        r#"{"android:R5CT123":["com.example.installed"]}"#,
+    )
+    .unwrap();
+    ok(&d, "default", "app", app_call("clear", "Mine")).await;
+    let e = err(&d, "default", "app", app_call("clear", "Theirs")).await;
+    assert_eq!(e.code, -32011);
+}
+
+#[tokio::test]
+async fn the_record_is_kept_under_the_phones_own_serial_and_not_its_connection() {
+    let (source, fake) = physical();
+    fake.set_hardware_serial("R5CT123");
+    let (d, home) = daemon(source);
+    install_apk(&d).await;
+    assert_eq!(
+        read_ledger(&home)["android:R5CT123"],
+        json!([{"id": "com.example.installed"}])
+    );
+
+    let (source, fake) = physical();
+    fake.set_hardware_serial("OTHER9");
+    let (d, home) = daemon(source);
+    std::fs::write(
+        home.path().join("installed.json"),
+        r#"{"android:R5CT123":["com.example.installed"]}"#,
+    )
+    .unwrap();
+    let e = err(&d, "default", "app", app_call("clear", "Mine")).await;
+    assert_eq!(e.code, -32011, "another phone at the same address");
+}
+
+#[tokio::test]
+async fn an_install_that_cannot_be_recorded_says_so_and_a_damaged_record_is_not_replaced() {
+    let (source, _fake) = physical();
+    let (d, home) = daemon(source);
+    std::fs::create_dir(home.path().join("installed.json")).unwrap();
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await;
+    assert!(
+        e.message.contains("installed com.example.installed")
+            && e.message.contains("installed.json"),
+        "{}",
+        e.message
+    );
+
+    let (source, _fake) = physical();
+    let (d, home) = daemon(source);
+    std::fs::write(home.path().join("installed.json"), "{not json").unwrap();
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await;
+    assert!(e.message.contains("installed.json"), "{}", e.message);
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("installed.json")).unwrap(),
+        "{not json"
+    );
+}
+
 #[tokio::test(start_paused = true)]
 async fn launch_with_grant_grants_before_it_launches_and_says_so() {
     let (source, fake) = installed();
