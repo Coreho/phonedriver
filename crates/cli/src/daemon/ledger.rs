@@ -72,7 +72,10 @@ impl Ledger {
         if let Some(folder) = self.path.parent() {
             std::fs::create_dir_all(folder).map_err(|e| self.failed("write", e))?;
         }
-        std::fs::write(&self.path, text).map_err(|e| self.failed("write", e))
+        let beside = self.path.with_extension("json.tmp");
+        std::fs::write(&beside, text)
+            .and_then(|()| std::fs::rename(&beside, &self.path))
+            .map_err(|e| self.failed("write", e))
     }
 
     fn read(&self) -> Result<BTreeMap<String, Vec<Entry>>, String> {

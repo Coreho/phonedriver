@@ -248,6 +248,7 @@ struct Live {
     frames: watch::Receiver<FrameRef>,
     events: broadcast::Receiver<DeviceEvent>,
     screen: Size,
+    ledger_key: tokio::sync::OnceCell<String>,
 }
 
 impl Live {
@@ -558,6 +559,7 @@ impl Actor {
             frames,
             events,
             screen,
+            ledger_key: tokio::sync::OnceCell::new(),
         });
         Ok(())
     }
@@ -1271,10 +1273,18 @@ impl Actor {
     /// The key of this device's entries in the record: the phone's own serial number, which a change of connection
     /// does not change, so a phone that later gets this one's address does not inherit its list.
     async fn ledger_key(&self, device: &dyn Device) -> Result<String, Error> {
-        Ok(match device.hardware_serial().await? {
-            Some(serial) => format!("android:{serial}"),
-            None => self.id.clone(),
-        })
+        let live = self.live.as_ref().ok_or_else(|| Error::DeviceGone {
+            id: self.id.clone(),
+        })?;
+        live.ledger_key
+            .get_or_try_init(|| async {
+                Ok(match device.hardware_serial().await? {
+                    Some(serial) => format!("android:{serial}"),
+                    None => self.id.clone(),
+                })
+            })
+            .await
+            .cloned()
     }
 
     /// Whether phonedriver installed this app on this device and nobody has installed it again since.
