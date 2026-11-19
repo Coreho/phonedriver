@@ -1123,18 +1123,22 @@ pub(crate) async fn execute_with(
         Verb::Save { file } => {
             let cannot =
                 |e: std::io::Error| Failure::Local(format!("cannot write {}: {e}", file.display()));
-            let mut out = std::fs::OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .write(true)
-                .open(&file)
-                .map_err(cannot)?;
-            let r = client.call("journal", with(json!({}))).await?;
+            let r = client.call("journal", with(json!({"keep": true}))).await?;
             let steps = r["steps"].as_array().cloned().unwrap_or_default();
             if !steps.is_empty() {
                 let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
-                out.set_len(0).map_err(cannot)?;
-                std::io::Write::write_all(&mut out, text.as_bytes()).map_err(cannot)?;
+                let mut beside = file.clone().into_os_string();
+                beside.push(".tmp");
+                let beside = std::path::PathBuf::from(beside);
+                std::fs::write(&beside, text)
+                    .and_then(|()| std::fs::rename(&beside, &file))
+                    .inspect_err(|_| {
+                        let _ = std::fs::remove_file(&beside);
+                    })
+                    .map_err(cannot)?;
+                client
+                    .call("journal", with(json!({"drop": steps.len()})))
+                    .await?;
             }
             if g.json {
                 return Ok(

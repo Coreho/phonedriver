@@ -1149,6 +1149,34 @@ async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
 }
 
 #[tokio::test]
+async fn a_save_that_cannot_write_leaves_the_steps_for_the_next_save() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    let rig = rig_with(fake).await;
+    rig.call("snapshot", json!({})).await;
+    rig.call("tap", json!({"target": "One"})).await;
+    let file = rig.home.path().join("run.steps");
+    let path = file.to_str().unwrap();
+    let blocked = rig.home.path().join("run.steps.tmp");
+    std::fs::create_dir(&blocked).unwrap();
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    assert!(texts(&r)[0].starts_with("cannot write "), "{r:?}");
+    assert!(!file.exists());
+
+    std::fs::remove_dir(&blocked).unwrap();
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert!(texts(&r)[0].starts_with("saved 1 step to "), "{r:?}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap().lines().count(), 1);
+    assert!(!blocked.exists());
+}
+
+#[tokio::test]
 async fn a_replayed_shell_step_that_exits_other_than_it_expects_fails_the_replay() {
     use phonedriver_core::device::ShellReply;
     let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[

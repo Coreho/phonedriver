@@ -40,7 +40,7 @@ use super::verify::{Expect, Verdict, Verify};
 use super::{guard, secret_field};
 use crate::wire::{
     ActParams, Action, ActionResult, AppParams, Approval, BatchParams, BatchResult,
-    ClipboardParams, Crashed, FindParams, Kind, LogsParams, Observation, PageParams,
+    ClipboardParams, Crashed, FindParams, JournalParams, Kind, LogsParams, Observation, PageParams,
     PinchDirection, RecordAction, RecordParams, ScreenshotParams, ScreenshotResult, SettingParams,
     ShellParams, ShellResult, SnapshotParams, Step, StepFailure, StepResult, Target, TypeMode,
     WaitCondition, WaitParams,
@@ -146,8 +146,7 @@ pub enum Call {
     Logs(LogsParams),
     Page(PageParams),
     Record(RecordParams),
-    /// The session's steps so far, taken out of it.
-    Journal,
+    Journal(JournalParams),
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
@@ -725,7 +724,14 @@ impl Actor {
                 }
                 done
             }
-            Call::Journal => s.journal.take(),
+            Call::Journal(p) => match p.drop {
+                Some(n) => {
+                    s.journal.drop_first(n);
+                    json!({})
+                }
+                None if p.keep => s.journal.peek(),
+                None => s.journal.take(),
+            },
             Call::Logs(p) => self.logs(s, p).await?,
             Call::Page(p) => self.page(p).await?,
             Call::Record(p) => self.record(p).await?,

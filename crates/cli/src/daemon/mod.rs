@@ -253,7 +253,7 @@ impl Daemon {
                     "apps" => Call::Apps,
                     "app" => Call::App(rpc::params(params)?),
                     "health" => Call::Health,
-                    "journal" => Call::Journal,
+                    "journal" => Call::Journal(rpc::params(params)?),
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
                     "shell" => Call::Shell(rpc::params(params)?),
                     "logs" => Call::Logs(rpc::params(params)?),

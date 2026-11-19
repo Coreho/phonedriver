@@ -351,6 +351,15 @@ pub struct RecordParams {
     pub path: Option<std::path::PathBuf>,
 }
 
+/// The session's steps (`docs/protocol.md`, `journal`): taken out, read in place with `keep`, or the first `drop` of them
+/// removed once the client has stored them.
+#[derive(Debug, Default, Deserialize)]
+pub struct JournalParams {
+    #[serde(default)]
+    pub keep: bool,
+    pub drop: Option<usize>,
+}
+
 /// An app's recent log lines (`docs/protocol.md`, `logs`). `app` defaults to the one in front.
 #[derive(Debug, Deserialize)]
 pub struct LogsParams {

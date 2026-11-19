@@ -27,6 +27,17 @@ impl Journal {
     pub fn take(&mut self) -> Value {
         json!({"steps": std::mem::take(&mut self.steps), "over": std::mem::take(&mut self.over)})
     }
+
+    /// The same as `take`, leaving the steps in the journal.
+    pub fn peek(&self) -> Value {
+        json!({"steps": self.steps, "over": self.over})
+    }
+
+    /// Removes the first `n` steps, the ones a client has stored after a `peek`.
+    pub fn drop_first(&mut self, n: usize) {
+        self.steps.drain(..n.min(self.steps.len()));
+        self.over = false;
+    }
 }
 
 pub fn call(method: &str, params: Value) -> Value {
