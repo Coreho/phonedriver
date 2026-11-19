@@ -232,3 +232,68 @@ async fn a_secret_command_is_never_echoed_back_in_the_summary_or_the_output() {
     assert!(!r.to_string().contains("hunter2"), "{r}");
     assert_eq!(r["output"], "failed: •••");
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_time_limit_over_the_maximum_is_refused_and_the_device_keeps_answering() {
+    let (d, fake, _home) = setup("fake:1", polled(vec![tree(&["One"])]));
+    for limit in [601, u64::MAX] {
+        let e = err(&d, json!({"command": "sleep 1", "time_limit_s": limit})).await;
+        assert_eq!(e.code, -32602, "{limit}");
+        assert!(e.message.contains("600 seconds"), "{}", e.message);
+    }
+    assert!(fake.calls().is_empty());
+    ok(
+        &d,
+        "shell",
+        json!({"command": "sleep 1", "time_limit_s": 600}),
+    )
+    .await;
+    assert_eq!(ran(&fake), ["sleep 1"]);
+}
+
+struct PanicsOnce {
+    fake: Arc<FakeDevice>,
+    connects: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait]
+impl DeviceSource for PanicsOnce {
+    async fn list(&self) -> Result<Vec<Listed>, Error> {
+        Ok(vec![Listed {
+            id: "fake:1".into(),
+            model: "Fake".into(),
+            os: None,
+            tier: "fake".into(),
+            capabilities: self.fake.info().capabilities,
+        }])
+    }
+    async fn connect(&self, _id: &str) -> Result<Arc<dyn Device>, Error> {
+        if self
+            .connects
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            == 0
+        {
+            panic!("the first connection crashes the actor");
+        }
+        Ok(self.fake.clone())
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_device_whose_actor_panicked_answers_again_on_the_next_call() {
+    let fake = Arc::new(polled(vec![tree(&["One"])]));
+    let home = tempfile::tempdir().unwrap();
+    let d = Daemon::new(
+        Arc::new(PanicsOnce {
+            fake: fake.clone(),
+            connects: Default::default(),
+        }),
+        Config {
+            home: home.path().to_path_buf(),
+        },
+    );
+    let e = err(&d, command("echo hi")).await;
+    assert_eq!(e.code, -32003, "{}", e.message);
+    ok(&d, "shell", command("echo hi")).await;
+    assert_eq!(ran(&fake), ["echo hi"]);
+}

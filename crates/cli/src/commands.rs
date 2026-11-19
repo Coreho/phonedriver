@@ -411,7 +411,7 @@ pub(crate) enum Verb {
         /// Run a command that is refused on a physical device (wipes, `rm -r` of storage, removing apps phonedriver did not install).
         #[arg(long)]
         force: bool,
-        /// Kill the command after this many seconds (default 30).
+        /// Kill the command after this many seconds (default 30, at most 600).
         #[arg(long)]
         time_limit: Option<u64>,
         /// Read the command from stdin or PHONEDRIVER_SECRET and keep it out of logs and traces.

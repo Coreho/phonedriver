@@ -45,7 +45,8 @@ tokio::task_local! {
 }
 use self::trace::{TraceOptions, Traces};
 use crate::wire::{
-    ActParams, Action, BatchParams, Common, DeviceEntry, RecordParams, SettingParams, Step, VERSION,
+    ActParams, Action, BatchParams, Common, DeviceEntry, MAX_TIME_LIMIT_S, RecordParams,
+    SettingParams, ShellParams, Step, VERSION,
 };
 
 const IDLE_EXIT: Duration = Duration::from_secs(15 * 60);
@@ -258,7 +259,15 @@ impl Daemon {
                     "health" => Call::Health,
                     "journal" => Call::Journal(rpc::params(params)?),
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
-                    "shell" => Call::Shell(rpc::params(params)?),
+                    "shell" => {
+                        let p: ShellParams = rpc::params(params)?;
+                        if p.time_limit_s.is_some_and(|s| s > MAX_TIME_LIMIT_S) {
+                            return Err(RpcError::invalid_params(format!(
+                                "a shell command can run for at most {MAX_TIME_LIMIT_S} seconds; lower `time_limit_s`"
+                            )));
+                        }
+                        Call::Shell(p)
+                    }
                     "logs" => Call::Logs(rpc::params(params)?),
                     "page" => Call::Page(rpc::params(params)?),
                     "record" => {
@@ -406,20 +415,21 @@ impl Daemon {
     }
 
     fn actor(&self, id: &str) -> mpsc::Sender<Job> {
-        self.actors
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .entry(id.to_string())
-            .or_insert_with(|| {
-                actor::spawn(
-                    id.to_string(),
-                    self.source.clone(),
-                    self.home.clone(),
-                    self.secrets.clone(),
-                    self.ledger.clone(),
-                )
-            })
-            .clone()
+        let spawn = || {
+            actor::spawn(
+                id.to_string(),
+                self.source.clone(),
+                self.home.clone(),
+                self.secrets.clone(),
+                self.ledger.clone(),
+            )
+        };
+        let mut actors = self.actors.lock().unwrap_or_else(|e| e.into_inner());
+        let tx = actors.entry(id.to_string()).or_insert_with(spawn);
+        if tx.is_closed() {
+            *tx = spawn();
+        }
+        tx.clone()
     }
 
     async fn send(

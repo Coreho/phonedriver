@@ -432,6 +432,8 @@ fn yes() -> bool {
     true
 }
 
+pub const MAX_TIME_LIMIT_S: u64 = 600;
+
 /// Run a command in the device's shell (`docs/protocol.md`, `shell`). The command may be a secret, so `Debug` omits it.
 #[derive(Deserialize)]
 pub struct ShellParams {
@@ -440,7 +442,7 @@ pub struct ShellParams {
     pub settle: bool,
     pub timeout_ms: Option<u64>,
     pub expect_change_ms: Option<u64>,
-    /// How long the command may run, in seconds; default 30.
+    /// How long the command may run, in seconds; default 30, at most `MAX_TIME_LIMIT_S`.
     pub time_limit_s: Option<u64>,
     pub grep: Option<String>,
     /// Lines of output to keep; default 40, 0 keeps all.
