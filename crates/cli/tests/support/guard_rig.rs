@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::fakes::{OneDevice, Pixels};
 use phonedriver::client::{Client, Failure};
 use phonedriver::daemon::{Config, Daemon, socket};
+use phonedriver::mcp::Mcp;
 use phonedriver_core::device::{Capabilities, Device, Gesture};
 use phonedriver_core::geometry::Scale;
 use phonedriver_core::raw::RawTree;
@@ -118,6 +119,12 @@ impl Rig {
             p["approval"] = json!(a);
         }
         c.call("act", p).await
+    }
+
+    /// An MCP server for this rig's device alone, so a `PHONEDRIVER_DEVICE` in the environment cannot send it elsewhere.
+    pub fn mcp(&self) -> Mcp {
+        Mcp::new(Some(self.socket.clone()), "mcp-guard".into())
+            .pinned(Some(self.fake.info().id.clone()))
     }
 
     pub fn gestures(&self) -> usize {
