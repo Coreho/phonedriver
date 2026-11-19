@@ -158,12 +158,26 @@ impl Env {
         } else {
             home.path().join("run").join("d.sock")
         };
+        let bin = home.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let xcrun = bin.join("xcrun");
+            std::fs::write(&xcrun, "#!/bin/sh\necho '{\"devices\":{}}'\n").unwrap();
+            std::fs::set_permissions(&xcrun, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
         Env { home, socket, adb }
     }
 
     fn cmd(&self) -> Command {
         let mut c = Command::cargo_bin("phonedriver").unwrap();
+        let path = std::env::join_paths(std::iter::once(self.home.path().join("bin")).chain(
+            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+        ))
+        .unwrap();
         c.env("PHONEDRIVER_HOME", self.home.path())
+            .env("PATH", path)
             .env("PHONEDRIVER_SOCKET", &self.socket)
             .env("ADB_SERVER_SOCKET", &self.adb)
             .env("USBMUXD_SOCKET_ADDRESS", "127.0.0.1:1")
