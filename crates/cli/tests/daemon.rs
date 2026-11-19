@@ -413,6 +413,30 @@ async fn an_mcp_session_keeps_its_device_for_the_whole_lease() {
     assert_eq!(busy.code, -32004);
 }
 
+/// The real client, as `phonedriver mcp` uses it: the session named in `hello` is the one its later calls carry, so
+/// the daemon treats the MCP server as an agent and its hold is the agent lease, not the 30 s terminal hold.
+#[tokio::test]
+async fn the_mcp_client_registers_the_session_its_calls_carry() {
+    let (source, _) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, home) = daemon(source);
+    let path = local_socket(home.path(), "d.sock");
+    let serving = tokio::spawn(d.clone().serve(path.clone()));
+    wait_for_socket(&path).await;
+    let mut client = phonedriver::client::Client::connect_to_as(&path, "mcp-4242", "mcp")
+        .await
+        .unwrap();
+    client.call("snapshot", json!({})).await.unwrap();
+    let busy = err(&d, "y", "snapshot", json!({})).await;
+    assert_eq!(busy.code, -32004);
+    assert!(
+        busy.data["expires_s"].as_u64().unwrap() > 30,
+        "an MCP client got the terminal hold: {busy:?}"
+    );
+    drop(client);
+    d.shutdown();
+    serving.await.unwrap().unwrap();
+}
+
 #[tokio::test]
 async fn a_second_session_gets_device_busy_until_release_or_share() {
     let (source, _) = FakeSource::with(vec![tree(&["One"])]);
