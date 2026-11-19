@@ -357,7 +357,7 @@ screen now:
 
 Only calls that worked are saved: actions, waits, shell commands, app installs and permission changes, and settings written by key. An element is saved by its text and role, not by its `@ref`, so the file works in a later session. Where no text singles the element out it is saved by position, and `save` says how many such steps there are. `save` lists every step it wrote, so a step that was a wrong turn can be seen and its line deleted from the file. After `save` the session's list starts again empty, so save once before a flow (to a file you throw away) and once after it.
 
-A replay stops at the first step that fails, or that changes nothing where it changed the screen when it was saved. It prints the steps that ran, the screen, and the step to go on from:
+A replay stops at the first step that fails, that changes nothing where it changed the screen when it was saved, or that is a `shell` command with an exit status other than the step expects. It prints the steps that ran, the screen, and the step to go on from:
 
 ```
 error: step 3 of 7 (tap "Intranet") failed: no element matches "Intranet"
@@ -369,6 +369,8 @@ hint: Do step 3 yourself, then replay the same file from step 4 for the 4 steps 
 $ phonedriver tap "Internet"
 $ phonedriver replay run.steps --from 4
 ```
+
+A `shell` step expects exit 0, and a command that runs past its time limit fails the step. `save` keeps `"expect_exit": 3` in the step of a command that exited 3 when it was saved, so a replay of the same run passes; add `"expect_exit": 1` by hand to a step that checks for a failure, or `"expect_exit": null` to a step that is only run for its effect and whose exit status does not matter.
 
 Text typed with `--secret` is never in the file; a replay stops at that step for you to type it. Other typed text is in the file. In MCP, `replay` takes `file`, `from` and `save: true`. Decision D60.
 

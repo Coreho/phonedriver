@@ -1149,6 +1149,83 @@ async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
 }
 
 #[tokio::test]
+async fn a_replayed_shell_step_that_exits_other_than_it_expects_fails_the_replay() {
+    use phonedriver_core::device::ShellReply;
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    let rig = rig_with(fake.clone()).await;
+    let exits = |exit, timed_out| {
+        fake.answer_shell(ShellReply {
+            exit,
+            timed_out,
+            ..ShellReply::default()
+        })
+    };
+    let file = rig.home.path().join("check.steps");
+    let path = file.to_str().unwrap();
+
+    exits(3, false);
+    rig.call("shell", json!({"command": "exit 3", "settle": false}))
+        .await;
+    rig.call("replay", json!({"file": path, "save": true}))
+        .await;
+    let saved: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(saved["expect_exit"], 3, "{saved}");
+    let r = rig.call("replay", json!({"file": path})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+
+    let write = |step: Value| std::fs::write(&file, format!("{step}\n")).unwrap();
+    let shell = json!({"method": "shell", "params": {"command": "ping -c1 host", "settle": false}});
+    let with = |extra: Value| {
+        let mut step = shell.clone();
+        step.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        step
+    };
+
+    exits(1, false);
+    write(shell.clone());
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_eq!(r.is_error, Some(true), "{text}");
+    assert!(
+        text.starts_with(
+            "step 1 of 1 (shell ping -c1 host) failed: it exited 1; the step expects 0"
+        ),
+        "{text}"
+    );
+    write(with(json!({"expect_exit": 1})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    write(with(json!({"expect_exit": null})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    write(with(json!({"expect_exit": 2})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert!(
+        text.starts_with(
+            "step 1 of 1 (shell ping -c1 host) failed: it exited 1; the step expects 2"
+        ),
+        "{text}"
+    );
+
+    exits(124, true);
+    write(with(json!({"expect_exit": 124})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_eq!(r.is_error, Some(true), "{text}");
+    assert!(
+        text.starts_with(
+            "step 1 of 1 (shell ping -c1 host) failed: it ran past its time limit and was stopped"
+        ),
+        "{text}"
+    );
+}
+
+#[tokio::test]
 async fn screenshot_with_record_starts_and_stops_a_video_and_returns_text_only() {
     let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
         "One",

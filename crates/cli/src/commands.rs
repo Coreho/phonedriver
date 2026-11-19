@@ -1952,6 +1952,10 @@ impl Replay {
                 }
                 _ => Err(refused("this is not a step this version can run")),
             };
+            let outcome = outcome.and_then(|r| match unexpected_exit(step, &r) {
+                Some(why) => Err(refused(&why)),
+                None => Ok(r),
+            });
             let outcome = match outcome {
                 Ok(r) if step["changed"] == true && r["changed"] == false => Err(refused(
                     "it changed nothing this time; when it was saved it changed the screen",
@@ -2178,6 +2182,27 @@ async fn shoot(
             )
         })?;
     Ok((png, shot.status_bar.unwrap_or(0) as f32))
+}
+
+fn unexpected_exit(step: &Value, reply: &Value) -> Option<String> {
+    if step["method"] != "shell" {
+        return None;
+    }
+    let expected = match step.get("expect_exit") {
+        None => 0,
+        Some(Value::Null) => return None,
+        Some(n) => match n.as_i64() {
+            Some(n) => n,
+            None => {
+                return Some("the step's expect_exit is neither a whole number nor null".into());
+            }
+        },
+    };
+    if reply["timed_out"] == true {
+        return Some("it ran past its time limit and was stopped".into());
+    }
+    let exit = reply["exit"].as_i64()?;
+    (exit != expected).then(|| format!("it exited {exit}; the step expects {expected}"))
 }
 
 fn refused(detail: &str) -> Failure {

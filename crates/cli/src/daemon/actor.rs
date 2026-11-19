@@ -686,14 +686,21 @@ impl Actor {
                 }
             }
             Call::Shell(p) => {
-                let step = if p.secret {
-                    journal::manual("a shell command was run here with `--secret`; run it again")
-                } else if p.force {
-                    journal::call("shell", json!({"command": p.command, "force": true}))
-                } else {
-                    journal::call("shell", json!({"command": p.command}))
-                };
+                let (command, secret, force) = (p.command.clone(), p.secret, p.force);
                 let done = self.shell(s, p).await?;
+                let step = if secret {
+                    journal::manual("a shell command was run here with `--secret`; run it again")
+                } else {
+                    let mut step = if force {
+                        journal::call("shell", json!({"command": command, "force": true}))
+                    } else {
+                        journal::call("shell", json!({"command": command}))
+                    };
+                    if done.exit != 0 {
+                        step["expect_exit"] = json!(done.exit);
+                    }
+                    step
+                };
                 s.journal.push(step);
                 to_value(done)
             }
