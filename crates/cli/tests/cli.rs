@@ -406,6 +406,25 @@ async fn doctor_probes_only_the_device_it_is_given() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn doctor_names_the_devices_it_will_start_the_agent_on_before_it_does() {
+    let env = Env::new(TWO_DEVICES).await;
+    let out = env.cmd().arg("doctor").output().unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        stderr.contains("android:emulator-5554, android:emulator-5556")
+            && stderr.contains("--device"),
+        "{stderr}"
+    );
+    let out = env
+        .cmd()
+        .args(["--device", "emulator-5556", "doctor"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(!stderr.contains("--device"), "{stderr}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn doctor_names_a_device_it_was_given_that_adb_does_not_list() {
     let env = Env::new(TWO_DEVICES).await;
     let out = env

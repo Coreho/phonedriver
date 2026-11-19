@@ -69,7 +69,7 @@ phonedriver 0.1.5
 
 Until the package is published, register the built binary with your client by its full path: `claude mcp add phonedriver -- "$PWD/target/release/phonedriver" mcp`.
 
-Run `phonedriver doctor`. It checks adb, each Android device, the agent, UiAutomation, the video stream, Xcode, the simulators, and the permissions of the daemon socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`. Without `--device` it starts the agent on every Android device the adb server lists, which replaces an agent another session is using; with `--device <id>` it probes only that one.
+Run `phonedriver doctor`. It checks adb, each Android device, the agent, UiAutomation, the video stream, Xcode, the simulators, and the permissions of the daemon socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`. Without `--device` it starts the agent on every Android device the adb server lists, which replaces an agent another session is using, and names those devices on stderr first; with `--device <id>` it probes only that one.
 
 ```console
 $ phonedriver doctor
