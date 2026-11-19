@@ -938,6 +938,7 @@ impl Actor {
                 };
                 match std::fs::remove_file(taping.steps_path()) {
                     Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                        let _ = device.record_stop().await;
                         return Err(Error::Refused {
                             detail: format!(
                                 "the steps file of an earlier recording to this path cannot be replaced: {e}"

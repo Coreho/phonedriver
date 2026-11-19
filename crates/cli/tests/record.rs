@@ -168,6 +168,21 @@ async fn a_second_start_and_a_stop_with_none_running_are_refused() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_start_that_cannot_clear_the_steps_file_leaves_nothing_recording() {
+    let (d, _fake, home) = setup(vec![tree(&["One"])], true);
+    let path = home.path().join("run.mp4");
+    let sidecar = home.path().join("run.mp4.steps.jsonl");
+    std::fs::create_dir(&sidecar).unwrap();
+    let start = json!({"action": "start", "path": path});
+    let e = err(&d, "record", start.clone()).await;
+    assert!(e.message.contains("cannot be replaced"), "{}", e.message);
+
+    std::fs::remove_dir(&sidecar).unwrap();
+    ok(&d, "record", start).await;
+    ok(&d, "record", json!({"action": "stop"})).await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_recording_the_device_lost_is_reported_with_its_file() {
     let (d, fake, _home) = setup(vec![tree(&["One"])], true);
     let started = ok(&d, "record", json!({"action": "start"})).await;
