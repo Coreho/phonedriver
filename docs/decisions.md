@@ -105,6 +105,8 @@ Each decision records the choice, the alternatives it beat, and the evidence tha
 
 **Task 2.7 correction (2026-11-05):** the stream's frame rate on a static screen is not a heartbeat. On the API 37 emulator through the tunnel the stream sent bursts of about 10 frames per second and then nothing for up to 5 s while the screen did not change, so `no frame for 1 s` made 18 of 40 screenshots of an idle screen fail. Screenshots now serve the last frame unless the video socket has ended (architecture 8). Settle is unaffected: it needs frames only when the screen changes.
 
+**Amended 2026-11-20 (#22).** The encoder's input can sit behind an OpenGL relay (`GlRelay`, adapted from scrcpy's `OpenGLRunner`, Apache-2.0): on a Galaxy A53 (One UI 8) the display HAL fails every frame of a virtual display that renders straight into the encoder, and the stream gave nothing. On for Samsung, when forced by `debug.phonedriver.gl`, and after a hardware encoder gives no output in 1.5 s. Cost: one GPU copy per frame where it is on. On the API 37 emulator with the relay forced on, the first frame came in 43 and 61 ms (101 ms without) and the screenshot matched; under heavy I/O load it gave no frame in 1 s, which is why the no-output rule leaves software encoders out.
+
 ## D11. Speak the adb server protocol directly
 
 **Choice.** A small async client in `crates/android/src/adb.rs` for the five services listed in architecture 6.1.

@@ -36,6 +36,8 @@ android-agent/src/com/genymobile/scrcpy/wrappers/WindowManager.java
 
 The video encoder settings (android-agent/src/dev/phonedriver/agent/Video.java) follow
 scrcpy's video/SurfaceEncoder.java; the gesture player and control server are new code.
+The OpenGL relay (android-agent/src/dev/phonedriver/agent/GlRelay.java) is adapted from
+scrcpy's opengl/OpenGLRunner.java and opengl/AffineOpenGLFilter.java.
 
 phonedriver includes material derived from the following projects.
 

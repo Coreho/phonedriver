@@ -36,13 +36,15 @@ final class Hidden {
     final int id;
     private final VirtualDisplay display;
     private final MediaCodec codec;
+    private final GlRelay relay;
     private final int width;
     private final int height;
 
-    private Hidden(VirtualDisplay display, MediaCodec codec, int width, int height) {
+    private Hidden(VirtualDisplay display, MediaCodec codec, GlRelay relay, int width, int height) {
         this.display = display;
         this.id = display.getDisplay().getDisplayId();
         this.codec = codec;
+        this.relay = relay;
         this.width = width;
         this.height = height;
     }
@@ -122,16 +124,28 @@ final class Hidden {
             throw unavailable("no encoder size works: " + last);
         }
         int dpi = Math.round(main.getDpi() * (float) size[0] / mainW);
+        GlRelay relay = null;
+        if (GlRelay.wanted()) {
+            try {
+                relay = GlRelay.start(size[0], size[1], surface);
+            } catch (Exception e) {
+                System.err.println("hidden display: no OpenGL relay, rendering straight to the encoder: " + e);
+            }
+        }
         VirtualDisplay display;
         try {
             display = ServiceManager.getDisplayManager().createNewVirtualDisplay(
-                    lane.isEmpty() ? "phonedriver" : "phonedriver-" + lane, size[0], size[1], dpi, surface, flags());
+                    lane.isEmpty() ? "phonedriver" : "phonedriver-" + lane, size[0], size[1], dpi,
+                    relay != null ? relay.input() : surface, flags());
         } catch (Exception e) {
             Throwable cause = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
+            if (relay != null) {
+                relay.release();
+            }
             encoder.release();
             throw unavailable("the system refused a virtual display: " + cause);
         }
-        Hidden hidden = new Hidden(display, encoder, size[0], size[1]);
+        Hidden hidden = new Hidden(display, encoder, relay, size[0], size[1]);
         // A display that shows system decorations keeps its own keyboard; otherwise the keyboard opens on the phone's screen.
         ServiceManager.getWindowManager().setDisplayImePolicy(hidden.id, WindowManager.DISPLAY_IME_POLICY_LOCAL);
         encoder.start();
@@ -142,6 +156,9 @@ final class Hidden {
     void close() {
         try {
             display.release();
+            if (relay != null) {
+                relay.release();
+            }
             codec.stop();
             codec.release();
         } catch (Exception e) {
