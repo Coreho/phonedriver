@@ -3,6 +3,7 @@
 
 use std::net::{IpAddr, SocketAddr, SocketAddrV6};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use idevice::remote_pairing::{
     PeerDevice, RemotePairingClient, RemotePairingLockdownService, RpPairingFile, RpPairingSocket,
@@ -99,10 +100,34 @@ pub async fn pair(device: &Attached, home: &Path) -> Result<(), Error> {
     write(home, &device.udid, &record)
 }
 
-/// Opens the tunnel through the remote pairing service a device announces at `addr`, and its RSD service list. It
-/// only verifies the record: a new pairing needs the cable. The software TCP stack is set up the way idevice's
-/// `CoreDeviceProxy::create_software_tunnel` sets it up for the cable.
-pub async fn tunnel(addr: SocketAddr, record: &mut RpPairingFile) -> Result<Tunnel, IdeviceError> {
+/// Opens the tunnel through the remote pairing service the device `udid` announces at `addr`, and its RSD service
+/// list, or fails after `transport::ANSWER_WITHIN`. It only verifies the record: a new pairing needs the cable.
+pub async fn open(
+    udid: &str,
+    addr: SocketAddr,
+    record: &mut RpPairingFile,
+) -> Result<Tunnel, Error> {
+    open_within(transport::ANSWER_WITHIN, udid, addr, record).await
+}
+
+async fn open_within(
+    limit: Duration,
+    udid: &str,
+    addr: SocketAddr,
+    record: &mut RpPairingFile,
+) -> Result<Tunnel, Error> {
+    let id = format!("ios:{udid}");
+    transport::answered_within(limit, udid, async {
+        tunnel(addr, record)
+            .await
+            .map_err(|e| transport::classify(&id, &e))
+    })
+    .await
+}
+
+/// The software TCP stack is set up the way idevice's `CoreDeviceProxy::create_software_tunnel` sets it up for the
+/// cable.
+async fn tunnel(addr: SocketAddr, record: &mut RpPairingFile) -> Result<Tunnel, IdeviceError> {
     let stream = TcpStream::connect(addr).await?;
     let mut client = RemotePairingClient::new(RpPairingSocket::new(stream), transport::LABEL);
     client.attempt_pair_verify().await?;
@@ -165,6 +190,28 @@ mod tests {
         forget(home.path(), "A").unwrap();
         assert!(read(home.path(), "A").is_none());
         forget(home.path(), "A").unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_device_that_takes_the_connection_and_never_answers_fails_the_tunnel_instead_of_waiting_for_good()
+     {
+        let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = silent.local_addr().unwrap();
+        let holding = tokio::spawn(async move {
+            let mut held = vec![];
+            while let Ok((stream, _)) = silent.accept().await {
+                held.push(stream);
+            }
+        });
+        let mut record = RpPairingFile::generate("phonedriver");
+        let opened = open_within(Duration::from_millis(200), "A", addr, &mut record).await;
+        holding.abort();
+        let detail = match opened {
+            Err(Error::Transport { detail }) => detail,
+            Err(e) => panic!("{e:?}"),
+            Ok(_) => panic!("a tunnel opened to a socket that never answers"),
+        };
+        assert!(detail.starts_with("ios:A did not answer"), "{detail}");
     }
 
     #[test]
