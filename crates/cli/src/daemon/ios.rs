@@ -10,6 +10,7 @@ use phonedriver_core::error::{DeviceSummary, Error};
 use phonedriver_ios::coredevice::CoreDevice;
 use phonedriver_ios::device::IosDevice;
 use phonedriver_ios::lan::Lan;
+use phonedriver_ios::setup::XCODE;
 use phonedriver_ios::simulator::Simulator;
 use phonedriver_ios::{discovery, transport};
 use tokio::sync::Mutex;
@@ -58,6 +59,13 @@ const ATTACHED_TTL: Duration = Duration::from_secs(5);
 fn starting_runner(name: &str, home: &std::path::Path) -> String {
     format!(
         "starting the iOS runner on {name} (the first run builds it; logs are in {})",
+        home.join("runner").display()
+    )
+}
+
+fn starting_installed_runner(name: &str, home: &std::path::Path) -> String {
+    format!(
+        "starting the iOS runner installed on {name} (logs are in {})",
         home.join("runner").display()
     )
 }
@@ -322,7 +330,7 @@ impl DeviceSource for PhysicalSource {
                 .find(|f| f.udid == udid)
                 .is_none_or(|f| tier_of(f.tier) == discovery::Tier::Runner)
         });
-        (runner_tier && self.team().is_err()).then_some("no signing team")
+        (XCODE && runner_tier && self.team().is_err()).then_some("no signing team")
     }
 
     async fn connect(&self, id: &str) -> Result<Arc<dyn Device>, Error> {
@@ -337,6 +345,16 @@ impl DeviceSource for PhysicalSource {
             return Ok(Arc::new(
                 CoreDevice::connect(&attached, &found.model).await?,
             ));
+        }
+        if !XCODE {
+            phonedriver_ios::setup::mount_cached(&attached, &self.home).await?;
+            let connecting = IosDevice::connect_installed(&attached, &found.model, &self.home);
+            let device = after_a_second(
+                || starting_installed_runner(&found.model, &self.home),
+                connecting,
+            )
+            .await?;
+            return Ok(Arc::new(device));
         }
         let team = self.team()?;
         let connecting = IosDevice::connect_physical(&attached, &found.model, &team, &self.home);

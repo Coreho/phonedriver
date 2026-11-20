@@ -511,13 +511,25 @@ async fn runner_answers(id: &str) -> Check {
 /// expiry of the profile that signed the local build.
 pub async fn physical(home: &Path, only: Option<&str>) -> Vec<Check> {
     use phonedriver_core::error::{Error, UserAction};
-    let Ok(attached) = crate::ios_wifi::attached(home).await else {
-        return Vec::new();
+    use phonedriver_ios::setup::XCODE;
+    let attached = match crate::ios_wifi::attached(home).await {
+        Ok(attached) => attached,
+        Err(e) if !XCODE && only.is_none_or(|o| o.starts_with("ios:")) => {
+            return vec![Check::bad(Status::Warn, "ios usbmuxd", e, USBMUXD_FIX)];
+        }
+        Err(_) => return Vec::new(),
     };
     let mut checks = Vec::new();
-    if attached
-        .iter()
-        .any(|d| wants(only, &format!("ios:{}", d.udid)))
+    if !XCODE && only.is_none_or(|o| o.starts_with("ios:")) {
+        checks.push(Check::ok(
+            "ios usbmuxd",
+            format!("answers; {} iPhone or iPad attached", attached.len()),
+        ));
+    }
+    if XCODE
+        && attached
+            .iter()
+            .any(|d| wants(only, &format!("ios:{}", d.udid)))
     {
         checks.push(match phonedriver_ios::team::signing_team() {
             Ok(team) => Check::ok("ios signing team", team),
@@ -585,7 +597,11 @@ pub async fn physical(home: &Path, only: Option<&str>) -> Vec<Check> {
                         Status::Fail,
                         format!("{name} developer disk image"),
                         "not mounted",
-                        "Run `phonedriver ios setup`; it mounts the image with Xcode's tool.",
+                        if XCODE {
+                            "Run `phonedriver ios setup`; it mounts the image with Xcode's tool."
+                        } else {
+                            "Run `phonedriver ios setup`; it mounts the image (the first time add `--download-ddi`, or `--ddi <folder>` with Xcode's files). A restart of the device unmounts it."
+                        },
                     )
                 });
             }
@@ -596,9 +612,41 @@ pub async fn physical(home: &Path, only: Option<&str>) -> Vec<Check> {
                 "Run `phonedriver ios setup`.",
             )),
         }
-        checks.push(runner_expiry(&name, home));
+        checks.push(if XCODE {
+            runner_expiry(&name, home)
+        } else {
+            runner_installed(&name, &device).await
+        });
     }
     checks
+}
+
+const USBMUXD_FIX: &str = "Install Apple Devices from the Microsoft Store (or iTunes), which runs the Apple Mobile Device Service that reaches an iPhone or iPad on the cable, then plug the device in, unlock it and tap Trust.";
+
+fn install_runner_fix() -> String {
+    format!(
+        "Download {} and install it on the device with Sideloadly (sideloadly.io), signed with your Apple ID; Sideloadly signs it again before the 7 days of a free Apple ID run out. Then turn on Developer Mode if the device asks.",
+        phonedriver_ios::runner::RUNNER_IPA
+    )
+}
+
+/// Off a Mac: whether the runner the person installs is on the device.
+async fn runner_installed(name: &str, device: &phonedriver_ios::transport::Attached) -> Check {
+    let label = format!("{name} runner");
+    let found = match device.provider().await {
+        Ok(provider) => phonedriver_ios::runner::find_installed(provider.as_ref()).await,
+        Err(e) => Err(e),
+    };
+    match found {
+        Ok(Some(bundle)) => Check::ok(label, format!("installed as {bundle}")),
+        Ok(None) => Check::bad(Status::Fail, label, "not installed", install_runner_fix()),
+        Err(e) => Check::bad(
+            Status::Fail,
+            label,
+            format!("cannot list the device's apps: {e}"),
+            "Unlock the device, then run `phonedriver doctor` again.",
+        ),
+    }
 }
 
 /// The expiry of the signing profile inside this version's device build of the runner under `home`.
@@ -649,8 +697,9 @@ async fn start_runner(id: &str) -> Result<(), Failure> {
         .map(|_| ())
 }
 
-pub fn ios_setup(home: &Path) -> bool {
+pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
     use phonedriver_core::error::{Error, UserAction};
+    use phonedriver_ios::setup::XCODE;
     let Ok(rt) = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -659,21 +708,26 @@ pub fn ios_setup(home: &Path) -> bool {
         return false;
     };
     rt.block_on(async {
-        let mut all_ok = match phonedriver_ios::team::signing_team() {
-            Ok(team) => {
-                println!("ok    signing team {team}");
-                true
-            }
-            Err(e) => {
-                println!("need  signing team: {e} {}", e.hint());
-                false
-            }
-        };
+        let mut all_ok = !XCODE
+            || match phonedriver_ios::team::signing_team() {
+                Ok(team) => {
+                    println!("ok    signing team {team}");
+                    true
+                }
+                Err(e) => {
+                    println!("need  signing team: {e} {}", e.hint());
+                    false
+                }
+            };
         let team_ok = all_ok;
         let attached = match crate::ios_wifi::attached(home).await {
             Ok(w) if !w.is_empty() => w,
             Ok(_) => {
                 println!("need  a device: plug in an iPhone or iPad, unlock it and tap Trust, then run this again");
+                return false;
+            }
+            Err(e) if !XCODE => {
+                println!("need  usbmuxd: {e}. {USBMUXD_FIX}");
                 return false;
             }
             Err(e) => {
@@ -714,7 +768,7 @@ pub fn ios_setup(home: &Path) -> bool {
             }
             if status.image_mounted {
                 println!("ok    {name} developer disk image");
-            } else {
+            } else if XCODE && ddi.is_none() {
                 println!("      {name} developer disk image: mounting with Xcode's devicectl (talks to Apple's signing server)");
                 match phonedriver_ios::setup::mount_image(&name).await {
                     Ok(()) => println!("ok    {name} developer disk image"),
@@ -724,11 +778,75 @@ pub fn ios_setup(home: &Path) -> bool {
                         continue;
                     }
                 }
+            } else {
+                let files = match (ddi, phonedriver_ios::ddi::cached(home)) {
+                    (Some(dir), _) => phonedriver_ios::ddi::in_dir(dir),
+                    (None, Some(files)) => Ok(files),
+                    (None, None) if download_ddi => {
+                        println!(
+                            "      developer disk image: downloading it from {}",
+                            phonedriver_ios::ddi::source()
+                        );
+                        phonedriver_ios::ddi::download(home).await
+                    }
+                    (None, None) => {
+                        println!(
+                            "need  {name} developer disk image: without Xcode, phonedriver needs Xcode's image files. Run `phonedriver ios setup --download-ddi` to download them once from {} (checked against pinned hashes), or `phonedriver ios setup --ddi <folder>` with the three files from a Mac's Xcode",
+                            phonedriver_ios::ddi::source()
+                        );
+                        all_ok = false;
+                        continue;
+                    }
+                };
+                let mounted = match files {
+                    Ok(_) if phonedriver_ios::setup::mount_blocked(&status).is_some() => {
+                        println!("need  {name} developer disk image: it mounts once Developer Mode is on. Run this again after the restart");
+                        all_ok = false;
+                        continue;
+                    }
+                    Ok(files) => {
+                        println!("      {name} developer disk image: mounting (asks Apple's signing server for this device's ticket)");
+                        phonedriver_ios::setup::mount_files(&device, &files).await
+                    }
+                    Err(e) => Err(e),
+                };
+                match mounted {
+                    Ok(()) => println!("ok    {name} developer disk image"),
+                    Err(e) => {
+                        println!("fail  {name} developer disk image: {} {}", e, e.hint());
+                        all_ok = false;
+                        continue;
+                    }
+                }
             }
             if !status.developer_mode || !team_ok {
                 continue;
             }
-            println!("      {name} runner: building, installing and starting it (a few minutes the first time)");
+            if XCODE {
+                println!("      {name} runner: building, installing and starting it (a few minutes the first time)");
+            } else {
+                let found = match device.provider().await {
+                    Ok(provider) => {
+                        phonedriver_ios::runner::find_installed(provider.as_ref()).await
+                    }
+                    Err(e) => Err(e),
+                };
+                match found {
+                    Ok(Some(bundle)) => {
+                        println!("      {name} runner: starting {bundle}")
+                    }
+                    Ok(None) => {
+                        println!("need  {name} runner: not installed. {}", install_runner_fix());
+                        all_ok = false;
+                        continue;
+                    }
+                    Err(e) => {
+                        println!("fail  {name} runner: cannot list the device's apps: {e}");
+                        all_ok = false;
+                        continue;
+                    }
+                }
+            }
             match start_runner(&format!("ios:{name}")).await {
                 Ok(()) => println!("ok    {name} runner"),
                 Err(e) => {
@@ -742,7 +860,7 @@ pub fn ios_setup(home: &Path) -> bool {
                     continue;
                 }
             }
-            if cabled && !remembered.contains(&name) {
+            if XCODE && cabled && !remembered.contains(&name) {
                 println!("tip   {name}: `phonedriver ios wifi on` lets you unplug the cable");
             }
         }

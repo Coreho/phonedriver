@@ -181,7 +181,11 @@ fn without_globals(cmd: clap::Command, unused: &[&'static str]) -> clap::Command
 pub fn command() -> clap::Command {
     let mut cmd = <Cli as clap::CommandFactory>::command();
     for (verb, unused) in UNUSED_GLOBALS {
-        cmd = cmd.mut_subcommand(*verb, |s| without_globals(s, unused));
+        // A build without the `android` feature has no `pair` or `untether`, and clap panics when
+        // `mut_subcommand` names a command that does not exist.
+        if cmd.find_subcommand(verb).is_some() {
+            cmd = cmd.mut_subcommand(*verb, |s| without_globals(s, unused));
+        }
     }
     cmd.build();
     cmd.mut_subcommands(own_options_only)
@@ -589,7 +593,16 @@ pub(crate) enum DaemonCommand {
 pub enum IosCommand {
     /// Check the signing team and each attached device, and do what needs no one at the device: show the Developer Mode switch, mount the
     /// developer disk image with Xcode's tool (the only step that talks to Apple). Then build, install and start the runner, so the next command answers at once. Prints `ok` for steps already done.
-    Setup,
+    ///
+    /// Without Xcode (Windows, Linux) there is no signing team: phonedriver mounts the image itself from Xcode's files and starts the runner you installed with Sideloadly.
+    Setup {
+        /// Without Xcode: download the image files once from github.com/doronz88/DeveloperDiskImage at a pinned commit, checked against pinned SHA-256 hashes.
+        #[arg(long)]
+        download_ddi: bool,
+        /// Without Xcode: mount the image from this folder, which holds Xcode's BuildManifest.plist, Image.dmg and Image.dmg.trustcache.
+        #[arg(long, value_name = "FOLDER")]
+        ddi: Option<std::path::PathBuf>,
+    },
     /// Add a device to the Apple developer account of the signing team and build the runner for it.
     ///
     /// Needed once for a device that team has never signed for; the error that asks for it says so. Xcode does the registration. An account holds 100 iPhones a year. With more than one device pass `--device ios:<udid>`.
@@ -660,9 +673,9 @@ pub fn run(cli: Cli) -> ExitCode {
             ExitCode::SUCCESS
         }
         Verb::Ios {
-            command: IosCommand::Setup,
+            command: IosCommand::Setup { download_ddi, ddi },
         } => {
-            if crate::doctor::ios_setup(&socket::home()) {
+            if crate::doctor::ios_setup(&socket::home(), download_ddi, ddi.as_deref()) {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::from(1)
