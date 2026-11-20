@@ -131,12 +131,13 @@ async fn tools_list_is_the_tools_with_short_descriptions_and_the_cli_required_ar
         ("scroll", vec!["direction"]),
         ("press", vec!["key"]),
         ("launch", vec![]),
-        ("wait", vec!["condition"]),
+        ("wait", vec![]),
         ("batch", vec!["steps"]),
         ("clipboard", vec![]),
         ("shell", vec!["command"]),
         ("setting", vec![]),
         ("logs", vec![]),
+        ("network", vec![]),
     ]
     .into_iter()
     .map(|(n, r)| (n.to_string(), r.into_iter().map(String::from).collect()))
@@ -492,7 +493,7 @@ async fn tap_says_its_reply_is_the_new_screen_and_that_tools_go_one_at_a_time() 
 }
 
 #[tokio::test]
-async fn every_tool_says_whether_it_only_reads_and_the_four_that_do_are_marked() {
+async fn every_tool_says_whether_it_only_reads_and_the_five_that_do_are_marked() {
     let rig = rig(vec![tree(&["One"])]).await;
     let tools = rig.client.list_all_tools().await.unwrap();
     let mut read_only = Vec::new();
@@ -509,7 +510,10 @@ async fn every_tool_says_whether_it_only_reads_and_the_four_that_do_are_marked()
         }
     }
     read_only.sort();
-    assert_eq!(read_only, ["logs", "screenshot", "snapshot", "wait"]);
+    assert_eq!(
+        read_only,
+        ["logs", "network", "screenshot", "snapshot", "wait"]
+    );
     let then = |name: &str| {
         let t = tools.iter().find(|t| t.name == name).unwrap();
         serde_json::to_string(&*t.input_schema)
@@ -1307,6 +1311,52 @@ async fn logs_prints_the_crash_then_the_last_lines_of_the_app_in_front() {
         texts(&r)[0].ends_with("E/Example( 222): failed to load"),
         "{r:?}"
     );
+}
+
+#[tokio::test]
+async fn network_prints_the_networks_and_wait_takes_a_vpn_state_or_a_log_line() {
+    use phonedriver_core::network::{NetworkLink, NetworkView};
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    fake.answer_networks(vec![NetworkView {
+        networks: vec![NetworkLink {
+            id: 101,
+            transports: vec!["wifi".into()],
+            default: true,
+            dns: vec!["10.0.2.3".into()],
+            ..NetworkLink::default()
+        }],
+        private_dns: Some("off".into()),
+        ..NetworkView::default()
+    }]);
+    fake.answer_log_lines(&["I/Vpn( 9): tunnel up"]);
+    let rig = rig_with(fake.clone()).await;
+    let r = rig.call("network", json!({})).await;
+    assert_eq!(
+        texts(&r),
+        ["101 wifi (default) · dns 10.0.2.3\nprivate dns off\nalways-on vpn none\nlockdown off"]
+    );
+    let r = rig.call("wait", json!({"log": "tunnel up"})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    assert!(
+        texts(&r)
+            .concat()
+            .contains("log line: I/Vpn( 9): tunnel up"),
+        "{r:?}"
+    );
+    let r = rig
+        .call("wait", json!({"vpn": "up", "timeout_ms": 1500}))
+        .await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    assert!(
+        texts(&r).concat().contains("last seen: wifi (default)"),
+        "{r:?}"
+    );
+    let r = rig.call("wait", json!({"vpn": "sideways"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    let r = rig.call("wait", json!({"vpn": "up", "log": "x"})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
 }
 
 #[tokio::test]

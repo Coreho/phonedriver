@@ -116,6 +116,8 @@ pub fn wait(condition: &WaitCondition, s: &Session) -> Value {
         WaitCondition::Settled(v) => WaitCondition::Settled(*v),
         WaitCondition::Appears(t) => WaitCondition::Appears(lasting(t, s, &mut by_position)),
         WaitCondition::Gone(t) => WaitCondition::Gone(lasting(t, s, &mut by_position)),
+        WaitCondition::Vpn(v) => WaitCondition::Vpn(*v),
+        WaitCondition::Log(l) => WaitCondition::Log(l.clone()),
     };
     call("wait", json!({"condition": condition}))
 }

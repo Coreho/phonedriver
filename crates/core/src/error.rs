@@ -191,6 +191,7 @@ pub enum Op {
     Logs,
     Record,
     Page,
+    Network,
 }
 
 impl Op {
@@ -215,6 +216,7 @@ impl Op {
             Op::Logs => "logs",
             Op::Record => "record",
             Op::Page => "page",
+            Op::Network => "network",
         }
     }
 }

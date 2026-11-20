@@ -44,7 +44,7 @@ Start an [Android emulator](/docs/android-emulator/), plug in an [Android phone]
 
 > Open Settings and turn on dark mode.
 
-The server has seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. `snapshot`, `screenshot`, `wait` and `logs` are marked read-only.
+The server has eighteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs`, `network` and `replay`. `snapshot`, `screenshot`, `wait`, `logs` and `network` are marked read-only.
 
 ## Approval prompts
 

@@ -198,6 +198,23 @@ pub enum WaitCondition {
     Settled(bool),
     Appears(Target),
     Gone(Target),
+    Vpn(VpnState),
+    Log(LogCondition),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VpnState {
+    Up,
+    Down,
+}
+
+/// A log line written after the wait began that holds `pattern` (`A|B` for either), of `app` when given.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LogCondition {
+    pub pattern: String,
+    #[serde(default)]
+    pub app: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

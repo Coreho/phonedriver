@@ -13,6 +13,7 @@ use crate::device::{
 };
 use crate::error::{Error, Op};
 use crate::geometry::{Rect, Size};
+use crate::network::{LogWait, LogWaited, NetworkView};
 use crate::raw::RawTree;
 use crate::settings::{SettingOp, SettingReply, SettingsIndex};
 
@@ -30,6 +31,7 @@ pub enum Call {
     Push(AppId, String),
     Setting(SettingOp),
     Logs(AppId, bool),
+    LogWait(Option<AppId>, Vec<String>),
     RecordStart(std::path::PathBuf),
     RecordStop,
     Install(std::path::PathBuf),
@@ -66,6 +68,8 @@ pub struct FakeDevice {
     order: Mutex<Vec<&'static str>>,
     settings: Mutex<Option<FakeSettings>>,
     logs: Mutex<Option<LogReply>>,
+    log_lines: Mutex<Option<Vec<String>>>,
+    networks: Mutex<Vec<NetworkView>>,
     recorder: Mutex<Option<Option<std::path::PathBuf>>>,
     text_shows: Mutex<Option<(Duration, Duration)>>,
     follows: bool,
@@ -121,6 +125,8 @@ impl FakeDevice {
             order: Mutex::new(Vec::new()),
             settings: Mutex::new(None),
             logs: Mutex::new(None),
+            log_lines: Mutex::new(None),
+            networks: Mutex::new(Vec::new()),
             recorder: Mutex::new(None),
             text_shows: Mutex::new(None),
             follows: false,
@@ -273,6 +279,17 @@ impl FakeDevice {
     /// What `logs()` answers from now on; without it the device has no logs.
     pub fn answer_logs(&self, reply: LogReply) {
         *lock(&self.logs) = Some(reply);
+    }
+
+    /// The lines a `log_wait` finds arriving; without them the device cannot follow its log.
+    pub fn answer_log_lines(&self, lines: &[&str]) {
+        *lock(&self.log_lines) = Some(lines.iter().map(|l| l.to_string()).collect());
+    }
+
+    /// What `network()` answers: each call takes the next view, and the last one repeats. Without any the device
+    /// cannot read its networks.
+    pub fn answer_networks(&self, views: Vec<NetworkView>) {
+        *lock(&self.networks) = views;
     }
 
     /// What `shell()` answers from now on.
@@ -510,6 +527,33 @@ impl Device for FakeDevice {
         };
         self.record(Call::Logs(req.app.clone(), req.crashes))?;
         Ok(reply)
+    }
+
+    async fn log_wait(&self, req: &LogWait) -> Result<LogWaited> {
+        let Some(lines) = lock(&self.log_lines).clone() else {
+            return Err(Error::Unsupported {
+                op: Op::Logs,
+                reason: "this fake has no log to follow",
+            });
+        };
+        self.record(Call::LogWait(req.app.clone(), req.patterns.clone()))?;
+        let at = lines.iter().position(|l| req.matches(l));
+        Ok(LogWaited {
+            line: at.map(|i| lines[i].clone()),
+            seen: at.map_or(lines.len(), |i| i + 1),
+        })
+    }
+
+    async fn network(&self) -> Result<NetworkView> {
+        let mut views = lock(&self.networks);
+        match views.len() {
+            0 => Err(Error::Unsupported {
+                op: Op::Network,
+                reason: "this fake has no networks",
+            }),
+            1 => Ok(views[0].clone()),
+            _ => Ok(views.remove(0)),
+        }
     }
 
     async fn setting(&self, op: SettingOp) -> Result<SettingReply> {

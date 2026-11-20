@@ -67,7 +67,7 @@ ok tapped @e41 "Dark Appearance"
 
 ## What the agent gets
 
-Seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. Each prints the same text as the CLI verb of the same name. `phonedriver skill` prints `SKILL.md`, the instructions an agent reads before it uses the tools; the MCP server carries a short version too.
+Eighteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs`, `network` and `replay`. Each prints the same text as the CLI verb of the same name. `phonedriver skill` prints `SKILL.md`, the instructions an agent reads before it uses the tools; the MCP server carries a short version too.
 
 ## When Claude Code asks you something
 

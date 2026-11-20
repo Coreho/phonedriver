@@ -17,6 +17,7 @@ use phonedriver_core::element::{Actions, Element, ElementState, Ref, Role, Sourc
 use phonedriver_core::error::{Category, Direction, Error, Op, ScrollEnd, UserAction};
 use phonedriver_core::geometry::{Point, Rect, Size};
 use phonedriver_core::gesture;
+use phonedriver_core::network::LogWait;
 use phonedriver_core::ocr::{merge, tree_is_hollow};
 use phonedriver_core::prune::prune;
 use phonedriver_core::raw::{NodeFlags, RawTree};
@@ -44,7 +45,7 @@ use crate::wire::{
     ClipboardParams, Crashed, FindParams, JournalParams, Kind, LogsParams, Observation, PageParams,
     PinchDirection, RecordAction, RecordParams, ScreenshotParams, ScreenshotResult, SettingParams,
     ShellParams, ShellResult, SnapshotParams, Step, StepFailure, StepResult, Target, TypeMode,
-    WaitCondition, WaitParams,
+    VpnState, WaitCondition, WaitParams,
 };
 
 pub const LEASE_TTL: Duration = Duration::from_secs(600);
@@ -57,6 +58,8 @@ const TICK: Duration = Duration::from_millis(5);
 const SETTING_LINES: usize = 12;
 const AUDIT_LINES: usize = 20;
 const LOGS_SINCE_S: u64 = 60;
+const VPN_POLL: Duration = Duration::from_secs(1);
+const LOG_LINE_CHARS: usize = 400;
 /// Added to an action's own time when its crash log is read, for the action's preparation before the clock started.
 const CRASH_MARGIN: Duration = Duration::from_secs(2);
 const SETTING_LINES_OF_MANY: usize = 4;
@@ -145,6 +148,7 @@ pub enum Call {
     Shell(ShellParams),
     Setting(SettingParams),
     Logs(LogsParams),
+    Network,
     Page(PageParams),
     Record(RecordParams),
     Journal(JournalParams),
@@ -746,6 +750,7 @@ impl Actor {
                 None => s.journal.take(),
             },
             Call::Logs(p) => self.logs(s, p).await?,
+            Call::Network => to_value(self.device()?.network().await?),
             Call::Page(p) => self.page(p).await?,
             Call::Record(p) => self.record(p).await?,
             Call::Health => self.health().await?,
@@ -3654,10 +3659,152 @@ impl Actor {
             WaitCondition::Settled(_) => self.wait_settled(s, p).await,
             WaitCondition::Appears(ref t) => self.wait_for(s, t, true, p.timeout_ms).await,
             WaitCondition::Gone(ref t) => self.wait_for(s, t, false, p.timeout_ms).await,
+            WaitCondition::Vpn(state) => self.wait_vpn(s, state, p.timeout_ms).await,
+            WaitCondition::Log(ref l) => {
+                self.wait_log(s, &l.pattern, l.app.as_deref(), p.timeout_ms)
+                    .await
+            }
         }?;
-        step["summary"] = json!(result.summary);
+        step["summary"] = json!(match condition {
+            WaitCondition::Log(_) => "a log line matched".to_string(),
+            _ => result.summary.clone(),
+        });
         s.journal.push(step);
         Ok(result)
+    }
+
+    /// The reply of a wait that is not about the screen: the summary, and the header of the screen as it is now.
+    async fn waited(&mut self, s: &mut Session, summary: String) -> Result<ActionResult, Error> {
+        let rendered = self.fresh(s).await?;
+        Ok(ActionResult {
+            at: None,
+            typed_into: None,
+            unchanged_repeats: None,
+            crashed: None,
+            ok: true,
+            summary,
+            via: None,
+            verified: None,
+            unverified: None,
+            settled: false,
+            settle_ms: 0,
+            changed: false,
+            woke: false,
+            unlocked: false,
+            observation: Observation {
+                header: rendered.header.clone(),
+                text: String::new(),
+                kind: Kind::Diff,
+                changed: false,
+                settled: false,
+                settle_ms: 0,
+                still_changing: None,
+                loading: false,
+                elements: None,
+                capture: None,
+                empty: false,
+            },
+        })
+    }
+
+    /// Waits until a VPN network is up or down, reading the platform's connectivity state once a second: the shell
+    /// has no way to be told when it changes.
+    async fn wait_vpn(
+        &mut self,
+        s: &mut Session,
+        want: VpnState,
+        timeout_ms: Option<u64>,
+    ) -> Result<ActionResult, Error> {
+        let device = self.device()?;
+        let timeout = timeout_ms.map_or(Config::action().timeout, Duration::from_millis);
+        let started = Instant::now();
+        let up = want == VpnState::Up;
+        loop {
+            let view = device.network().await?;
+            if view.vpn_up() == up {
+                let owner = view
+                    .networks
+                    .iter()
+                    .find_map(|n| n.owner.clone())
+                    .map(|o| format!(" ({o})"))
+                    .unwrap_or_default();
+                let summary = if up {
+                    format!("a VPN is up{owner}")
+                } else {
+                    "no VPN is up".to_string()
+                };
+                return self.waited(s, summary).await;
+            }
+            let left = timeout.saturating_sub(started.elapsed());
+            if left.is_zero() {
+                return Err(Error::Timeout {
+                    waited_ms: started.elapsed().as_millis() as u32,
+                    condition: format!(
+                        "the VPN to be {}; last seen: {}",
+                        if up { "up" } else { "down" },
+                        view.brief()
+                    ),
+                });
+            }
+            tokio::time::sleep(left.min(VPN_POLL)).await;
+        }
+    }
+
+    /// Waits for a log line written from now on that holds one of the `|`-separated words of `pattern`.
+    async fn wait_log(
+        &mut self,
+        s: &mut Session,
+        pattern: &str,
+        app: Option<&str>,
+        timeout_ms: Option<u64>,
+    ) -> Result<ActionResult, Error> {
+        let device = self.device()?;
+        let patterns: Vec<String> = pattern
+            .split('|')
+            .filter(|p| !p.is_empty())
+            .map(String::from)
+            .collect();
+        if patterns.is_empty() {
+            return Err(Error::Refused {
+                detail: "wait log: needs the text to look for in a log line".into(),
+            });
+        }
+        let app = match app {
+            Some(name) => Some(find_app(&device.apps().await?, name)?.id.clone()),
+            None => None,
+        };
+        let timeout = timeout_ms.map_or(Config::action().timeout, Duration::from_millis);
+        let started = Instant::now();
+        let got = tokio::time::timeout(
+            timeout + Duration::from_secs(5),
+            device.log_wait(&LogWait {
+                app,
+                patterns,
+                timeout,
+            }),
+        )
+        .await
+        .map_err(|_| Error::Timeout {
+            waited_ms: started.elapsed().as_millis() as u32,
+            condition: format!("a log line with \"{pattern}\""),
+        })??;
+        match got.line {
+            Some(line) => {
+                let line: String = line.chars().take(LOG_LINE_CHARS).collect();
+                self.waited(s, format!("log line: {line}")).await
+            }
+            None => Err(Error::Timeout {
+                waited_ms: started.elapsed().as_millis() as u32,
+                condition: format!(
+                    "a log line with \"{pattern}\" ({})",
+                    match got.seen {
+                        0 => "no line arrived".to_string(),
+                        1 => "1 line arrived, it did not match".to_string(),
+                        n => format!("{n} lines arrived, none matched"),
+                    }
+                ),
+            }),
+        }
     }
 
     /// Waits until the target is on screen (or gone). The tree is read once at the start and then once after each

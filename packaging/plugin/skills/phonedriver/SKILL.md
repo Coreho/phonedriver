@@ -28,7 +28,7 @@ A reply with a `crashed:` line means the app stopped during that action; the lin
 
 To read a web page (Android: Chrome, or a web view in a debug build), call `snapshot` with `page: true`: the page's whole text in one call, with no scrolling. Add `find` to keep only the lines with a word and the two lines after each. It reads; to act, use refs from a plain `snapshot`.
 
-Actions already wait for the screen; use `wait` when something loads later (`wait "Row 640"`, `wait gone:"Loading"`).
+Actions already wait for the screen; use `wait` when something loads later (`wait "Row 640"`, `wait gone:"Loading"`). Android also has `wait vpn:up` and `wait vpn:down`, `wait log:"text" --app Name` (a log line written from now on; `A|B` for either), and `network`, which lists the networks, a VPN's app and the user ids it carries, DNS, and always-on VPN state.
 
 A path of taps you can predict goes in one MCP call with `then`: `tap {"target":"More options","then":["Settings","Dark theme"]}` taps each text in order on the screens that follow, and `type {"text":"Paris","then":["Paris, France"]}` types and picks the suggestion. Name every step you expect, even on screens you have not seen: a missing text stops the path and returns that screen, so a wrong guess costs one call.
 
@@ -87,4 +87,4 @@ Each error has a hint that names the next step; follow it.
 
 ## Verbs
 
-`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `batch`, `clipboard`, `replay`. The command line also has `find`, `page`, `clear`, `open <url>`, `gesture`, `compare`, `boot` and `release`.
+`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `network`, `batch`, `clipboard`, `replay`. The command line also has `find`, `page`, `clear`, `open <url>`, `gesture`, `compare`, `boot` and `release`.

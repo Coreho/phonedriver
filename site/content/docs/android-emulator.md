@@ -4,7 +4,7 @@ nav: Android emulator
 meta: Start an Android emulator, check that phonedriver sees it, and drive it. Includes the headless flags used in my benchmarks and remote emulators.
 description: Start an Android emulator, check phonedriver sees it, and drive it. Includes the headless flags used in the benchmarks and how to use an emulator on another machine.
 seo: How to let an AI agent control an Android emulator over MCP
-updated: 2026-11-18
+updated: 2026-11-20
 ---
 
 Android emulators on API 26 and API 37 are the best-tested target: the 21-scenario device suite passes on both. phonedriver needs only adb and nothing installed in the emulator.
@@ -89,3 +89,15 @@ Yes. The speed benchmarks ran on an emulator started with `-no-window`, and phon
 ### Which API levels work?
 
 The 21-scenario suite passes on API 26 and API 37. Release 0.1.4 fixed screen reads on Android 12 and was tested on an API 31 emulator. The hidden screen needs API 33 or later.
+
+## Test a VPN or another network app
+
+`phonedriver network` lists what the emulator is connected to: each network and its transports, which is the default, DNS, and for a VPN its app and the user id ranges it carries, plus always-on VPN and lockdown. `phonedriver wait vpn:up` returns once a VPN is connected, `wait vpn:down` once it is gone, and `wait log:"tunnel up" --app "My VPN"` once the app writes a log line with that text from now on. A wait that times out says the last state it saw.
+
+The first time an app starts a VPN, Android asks "Connection request" in a dialog; phonedriver shows it as an alert and `tap OK` answers it. To never see it on an emulator, authorise the app first:
+
+```sh
+phonedriver shell "appops set com.example.vpn ACTIVATE_VPN allow"
+```
+
+These were run on an API 37 emulator with a small VPN app made for the test. The same reads work on a physical Android phone; they were not run on one.

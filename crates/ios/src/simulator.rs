@@ -1,6 +1,7 @@
 //! Booted iOS simulators through `xcrun simctl`.
 
 use phonedriver_core::error::{Error, Op};
+use phonedriver_core::network::{LogWait, LogWaited};
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -246,6 +247,80 @@ fn needs_shell(command: &str) -> bool {
         }
         (None, c) => "|;&<>$`*?(){}\n".contains(c),
     })
+}
+
+/// The command that streams the unified log of a Simulator, at debug level, of one app's process when `app_folder`
+/// (the `<name>.app` folder of its bundle) is given. It runs like any `shell` command.
+pub fn log_stream_command(app_folder: Option<&str>) -> std::result::Result<String, String> {
+    match app_folder {
+        None => Ok("log stream --style compact --level debug".into()),
+        Some(folder) => {
+            let plain = folder.ends_with(".app")
+                && folder
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || " ._-".contains(c));
+            if !plain {
+                return Err(format!(
+                    "the app folder {folder:?} has a name this cannot scope the log to"
+                ));
+            }
+            Ok(format!(
+                "log stream --style compact --level debug --predicate 'processImagePath CONTAINS \"/{folder}/\"'"
+            ))
+        }
+    }
+}
+
+/// Follows `xcrun simctl <args>` (a `log stream`) until a line holds one of `req`'s patterns or `req.timeout` ends.
+/// The stream's own header lines come before the first line that starts with a date and are not counted.
+pub async fn simctl_follow(args: &[String], req: &LogWait) -> Result<LogWaited> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let mut child = Command::new("xcrun")
+        .arg("simctl")
+        .args(args)
+        .env("LC_CTYPE", "UTF-8")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| Error::Transport {
+            detail: format!("cannot run xcrun simctl (is Xcode installed?): {e}"),
+        })?;
+    let mut lines = BufReader::new(child.stdout.take().ok_or_else(|| Error::Transport {
+        detail: "the log stream has no output to read".into(),
+    })?)
+    .lines();
+    let deadline = tokio::time::Instant::now() + req.timeout;
+    let (mut seen, mut started) = (0usize, false);
+    loop {
+        match tokio::time::timeout_at(deadline, lines.next_line()).await {
+            Err(_) => return Ok(LogWaited { line: None, seen }),
+            Ok(Ok(Some(line))) => {
+                started = started || line.starts_with(|c: char| c.is_ascii_digit());
+                if !started || line.is_empty() {
+                    continue;
+                }
+                seen += 1;
+                if req.matches(&line) {
+                    return Ok(LogWaited {
+                        line: Some(line),
+                        seen,
+                    });
+                }
+            }
+            Ok(Ok(None)) => {
+                return Err(Error::Transport {
+                    detail: "the Simulator's log stream ended".into(),
+                });
+            }
+            Ok(Err(e)) => {
+                return Err(Error::Transport {
+                    detail: format!("the Simulator's log stream failed: {e}"),
+                });
+            }
+        }
+    }
 }
 
 /// A few of the programs under `root`, for an error that says what can be run.
@@ -643,6 +718,39 @@ mod tests {
         assert!(e.contains("not offered") && e.contains("openurl"), "{e}");
         assert!(shell_args("U", "simctl", std::path::Path::new("/r")).is_err());
         assert!(shell_args("U", "simctl openurl 'unclosed", std::path::Path::new("/r")).is_err());
+    }
+
+    #[test]
+    fn the_log_stream_is_one_program_that_runs_with_or_without_a_shell_in_the_system() {
+        let command = log_stream_command(None).unwrap();
+        assert_eq!(command, "log stream --style compact --level debug");
+        let scoped = log_stream_command(Some("Testbed.app")).unwrap();
+        assert!(
+            scoped.ends_with("--predicate 'processImagePath CONTAINS \"/Testbed.app/\"'"),
+            "{scoped}"
+        );
+        for with_shell in [false, true] {
+            let root = system(with_shell);
+            let args = shell_args("U", &scoped, root.path()).unwrap();
+            assert_eq!(args[..2], ["spawn", "U"]);
+            assert!(
+                args.iter().any(|a| a == "--level" || a.contains("--level")),
+                "{args:?}"
+            );
+        }
+        let root = system(false);
+        let args = shell_args("U", &scoped, root.path()).unwrap();
+        assert_eq!(
+            args.last().unwrap(),
+            "processImagePath CONTAINS \"/Testbed.app/\""
+        );
+    }
+
+    #[test]
+    fn an_app_folder_that_could_end_the_predicate_is_refused() {
+        for folder in ["a'b.app", "a\"b.app", "a$b.app", "Testbed"] {
+            assert!(log_stream_command(Some(folder)).is_err(), "{folder}");
+        }
     }
 
     #[test]
