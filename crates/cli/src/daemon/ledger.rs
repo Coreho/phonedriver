@@ -43,6 +43,7 @@ impl From<Stored> for Entry {
 pub struct Ledger {
     path: PathBuf,
     held: Mutex<()>,
+    under_test: Vec<String>,
 }
 
 impl Ledger {
@@ -50,7 +51,19 @@ impl Ledger {
         Ledger {
             path: home.join("installed.json"),
             held: Mutex::new(()),
+            under_test: Vec::new(),
         }
+    }
+
+    pub fn with_apps_under_test(mut self, packages: Vec<String>) -> Ledger {
+        self.under_test = packages;
+        self
+    }
+
+    /// Whether the person listed this package as an app under test, which makes it theirs to clear, remove and
+    /// change the permissions of without phonedriver having installed it.
+    pub fn is_under_test(&self, package: &str) -> bool {
+        self.under_test.iter().any(|p| p == package)
     }
 
     pub fn entries(&self, device: &str) -> Result<Vec<Entry>, String> {

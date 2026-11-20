@@ -347,6 +347,12 @@ struct Actor {
     ledger: Arc<Ledger>,
 }
 
+macro_rules! own_app_hint {
+    () => {
+        ". For your own app under test, list its package in PHONEDRIVER_APPS_UNDER_TEST in the environment the daemon starts with (run `phonedriver daemon stop` first if it is running)"
+    };
+}
+
 async fn next_signal(live: &mut Option<Live>) -> Signal {
     let Some(l) = live else {
         return pending().await;
@@ -829,7 +835,10 @@ impl Actor {
             if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
                 return Err(Error::Unsupported {
                     op: Op::App,
-                    reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not change its permissions",
+                    reason: concat!(
+                        "phonedriver did not install this app on this physical device, or it was installed again since, so it will not change its permissions",
+                        own_app_hint!()
+                    ),
                 });
             }
             let names = p.permissions.join(", ");
@@ -849,7 +858,10 @@ impl Actor {
         {
             return Err(Error::Unsupported {
                 op: Op::App,
-                reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not clear or remove it",
+                reason: concat!(
+                    "phonedriver did not install this app on this physical device, or it was installed again since, so it will not clear or remove it",
+                    own_app_hint!()
+                ),
             });
         }
         device.app_op(op, &found.id).await?;
@@ -1306,6 +1318,9 @@ impl Actor {
 
     /// Whether phonedriver installed this app on this device and nobody has installed it again since.
     async fn installed_by_us(&self, device: &dyn Device, app: &AppId) -> Result<bool, Error> {
+        if self.ledger.is_under_test(&app.0) {
+            return Ok(true);
+        }
         let key = self.ledger_key(device).await?;
         let entries = self
             .ledger
@@ -2443,7 +2458,10 @@ impl Actor {
                     if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
                         return Err(Error::Unsupported {
                             op: Op::Launch,
-                            reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not grant it permissions",
+                            reason: concat!(
+                                "phonedriver did not install this app on this physical device, or it was installed again since, so it will not grant it permissions",
+                                own_app_hint!()
+                            ),
                         });
                     }
                     device.grant(&found.id, &grant).await?;

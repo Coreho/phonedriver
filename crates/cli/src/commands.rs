@@ -301,7 +301,7 @@ pub(crate) enum Verb {
         app: String,
         /// Grant these runtime permissions first, so their dialog never appears: `notifications`, `camera`,
         /// `location`, or a full name such as `android.permission.CAMERA` (Android); `photos`, `location` and the other
-        /// `simctl privacy` services (Simulator). A physical device only takes this for apps phonedriver installed.
+        /// `simctl privacy` services (Simulator). A physical device only takes this for apps phonedriver installed or listed in `PHONEDRIVER_APPS_UNDER_TEST`.
         #[arg(long, value_delimiter = ',')]
         grant: Vec<String>,
         /// Stop the app first, so it opens on its first screen instead of where it was left.
@@ -320,7 +320,8 @@ pub(crate) enum Verb {
     /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`, or `notify` it: send it a push
     /// notification to test how it handles one (the iOS Simulator only):
     /// `phonedriver apps notify Mail '{"aps":{"alert":"Hi"}}'` or `--file payload.json`.
-    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed.
+    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed, and the
+    /// packages in `PHONEDRIVER_APPS_UNDER_TEST` (a comma list the daemon reads when it starts).
     Apps {
         /// What to do to an app. Omit it to list apps.
         #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke", "notify"])]
@@ -2519,6 +2520,16 @@ fn stop_daemon() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The packages in a comma list such as `com.example.app, com.example.other`; blanks are dropped.
+fn apps_under_test(list: Option<&str>) -> Vec<String> {
+    list.unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 fn run_daemon(trace: TraceOptions) -> ExitCode {
     let Ok(rt) = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -2534,12 +2545,13 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
             ("sim:", Arc::new(SimSource::new(socket::home()))),
             ("ios:", Arc::new(PhysicalSource::new(socket::home()))),
         ]);
-        let daemon = Daemon::with_trace(
+        let daemon = Daemon::start(
             Arc::new(sources),
             Config {
                 home: socket::home(),
             },
             trace,
+            apps_under_test(std::env::var("PHONEDRIVER_APPS_UNDER_TEST").ok().as_deref()),
         );
         let listener = match socket::listen(&socket::socket_path()).await {
             Ok(l) => l,
@@ -2564,6 +2576,16 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_apps_under_test_list_splits_on_commas_and_drops_blanks() {
+        assert_eq!(
+            super::apps_under_test(Some(" com.example.app, ,com.example.other,")),
+            vec!["com.example.app", "com.example.other"]
+        );
+        assert!(super::apps_under_test(None).is_empty());
+        assert!(super::apps_under_test(Some("")).is_empty());
+    }
+
     use super::*;
 
     #[test]

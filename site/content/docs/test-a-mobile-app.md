@@ -25,7 +25,7 @@ Three options that help a test run:
 
 - `phonedriver launch "My App" --grant notifications,camera` grants runtime permissions first, so their dialogs never appear.
 - `phonedriver launch "My App" --restart` stops the app first, so it opens on its first screen.
-- `phonedriver apps clear "My App"` wipes the app's data, for a first-run test. On a physical device this works only for apps phonedriver installed.
+- `phonedriver apps clear "My App"` wipes the app's data, for a first-run test. On a physical device this works only for apps phonedriver installed, and for the packages you list in `PHONEDRIVER_APPS_UNDER_TEST` (for an app Gradle or Android Studio installed; set it in the MCP server's `env`, [the Claude Code page](/docs/claude-code/#an-app-you-are-developing) shows how). The agent cannot add to that list.
 
 ## Look at what the agent will see
 
