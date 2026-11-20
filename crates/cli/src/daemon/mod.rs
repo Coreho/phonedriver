@@ -14,6 +14,7 @@ pub mod ledger;
 pub mod policy;
 pub mod progress;
 pub mod rpc;
+pub mod scope;
 pub mod secret_field;
 mod secrets;
 pub mod session;
@@ -32,6 +33,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use phonedriver_core::device::{Capabilities, Device, DisplayMode, lane_of};
 use phonedriver_core::error::{DeviceSummary, Error, Op, can_be_started};
+use phonedriver_core::scope::AppScope;
 use serde_json::{Value, json};
 use tokio::io::split;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -144,6 +146,7 @@ pub struct Daemon {
     told: Mutex<HashMap<String, String>>,
     secrets: Arc<secrets::Secrets>,
     ledger: Arc<ledger::Ledger>,
+    scope: Option<Arc<AppScope>>,
     agents: Mutex<std::collections::HashSet<String>>,
     connections: AtomicUsize,
     last_activity: Mutex<Instant>,
@@ -160,17 +163,26 @@ impl Daemon {
         config: Config,
         trace: TraceOptions,
     ) -> Arc<Daemon> {
-        Self::start(source, config, trace, Vec::new(), policy::Policy::default())
+        Self::start(
+            source,
+            config,
+            trace,
+            Vec::new(),
+            policy::Policy::default(),
+            None,
+        )
     }
 
     /// `apps_under_test` are packages the person named outside the tools; on a physical device they count as theirs
     /// for `apps clear`, `uninstall`, `grant`, `revoke` and `launch --grant`, like an app phonedriver installed.
+    /// `app_scope` limits every device to those apps (decision D102).
     pub fn start(
         source: Arc<dyn DeviceSource>,
         config: Config,
         trace: TraceOptions,
         apps_under_test: Vec<String>,
         policy: policy::Policy,
+        app_scope: Option<AppScope>,
     ) -> Arc<Daemon> {
         trace::clean_older_than(&config.home.join("tmp"), TMP_MAX_AGE);
         trace::clean_older_than(&config.home.join("traces"), TRACE_MAX_AGE);
@@ -181,6 +193,7 @@ impl Daemon {
                 ledger::Ledger::new(&config.home).with_apps_under_test(apps_under_test),
             ),
             home: config.home,
+            scope: app_scope.map(Arc::new),
             actors: Mutex::default(),
             told: Mutex::default(),
             secrets: Arc::default(),
@@ -238,6 +251,23 @@ impl Daemon {
                         format!("daemon is version {VERSION}, client is {version}"),
                         json!({"code_name": "version_mismatch", "daemon_version": VERSION,
                                "hint": "The CLI restarts the daemon on a version mismatch."}),
+                    ));
+                }
+                let wanted = params["app_scope"].as_str().unwrap_or_default();
+                let held = self.scope.as_ref().map(|s| s.list());
+                if !wanted.is_empty() && held.as_deref() != Some(wanted) {
+                    return Err(RpcError::new(
+                        rpc::SCOPE_MISMATCH,
+                        match held {
+                            Some(held) => format!(
+                                "the daemon running was started with the app scope {held}, and this client asks for {wanted}"
+                            ),
+                            None => format!(
+                                "the daemon running was started without an app scope, and this client asks for {wanted}"
+                            ),
+                        },
+                        json!({"code_name": "scope_mismatch",
+                               "hint": "Run `phonedriver daemon stop`, then try again: the next command starts a daemon with the scope this client has."}),
                     ));
                 }
                 if params["client"] == "mcp" {
@@ -468,6 +498,7 @@ impl Daemon {
                 self.home.clone(),
                 self.secrets.clone(),
                 self.ledger.clone(),
+                self.scope.clone(),
             )
         };
         let mut actors = self.actors.lock().unwrap_or_else(|e| e.into_inner());

@@ -564,12 +564,14 @@ Measured in task 5.6 (`docs/bench/history/m4.md`, Mac mini M4, iPhone 17 simulat
 - The daemon socket is user-only. No network listener.
 - A device list the operator writes (environment or `<home>/devices`) keeps chosen devices out of reach of every client of the daemon, `--force` included (D101). It is the person's setting with no tool argument; an agent with a shell can start its own daemon without it.
 - Never executes agent-supplied code.
+- An app scope (`PHONEDRIVER_APP_SCOPE`, decision D102) makes the daemon wrap its device in `ScopedDevice`: reads come back without the windows of other apps and the bars, and screen, clipboard, shell, recording and other-app operations are refused while such a window is on screen. Its known gaps are in `docs/reference.md`, App scope.
 - Secret text arrives on stdin or in `PHONEDRIVER_SECRET`, never on the command line (argv is visible in `ps` and shell history). It is never logged, traced, or echoed. Typing into a `SecureField` is treated as secret even without the flag. `SecureField` values never render.
 - The Android agent's socket requires the per-launch token (section 6.2).
 - Clipboard is restored after paste on Android. On the iOS Simulator, typing never touches the pasteboard (section 7.3). The CoreDevice tier pastes through it (section 7.2) and the pasteboard holds the text afterwards; replies say so.
 
 ## 14. Known gaps in v1 (stated, not hidden)
 
+- The app scope (D102) is not a sandbox: the package of a withheld front app is named, notification icons and the keyboard's suggestions are in a screenshot, an iPhone takes no screenshot under it, and an app in the scope can hand off to another before the daemon sees it.
 - iOS runner signing requires a Mac with Xcode, or, without one (decision D96), a runner built on a macOS machine and signed and installed by the person with Sideloadly. Off a Mac a physical device is driven on the cable only.
 - iOS 17 to 26 devices have no frame stream, so settle and screenshots are slower.
 - DRM video renders black on both platforms.

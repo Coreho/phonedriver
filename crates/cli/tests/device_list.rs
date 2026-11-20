@@ -121,6 +121,7 @@ fn daemon(source: Arc<Bench>, policy: Policy) -> (Arc<Daemon>, tempfile::TempDir
         phonedriver::daemon::trace::TraceOptions::default(),
         Vec::new(),
         policy,
+        None,
     );
     (d, home)
 }

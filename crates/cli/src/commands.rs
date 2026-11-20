@@ -20,6 +20,7 @@ use crate::daemon::{Config, Daemon, socket};
 use phonedriver_core::device::DisplayMode;
 use phonedriver_core::error::{Category, span};
 use phonedriver_core::render::plural;
+use phonedriver_core::scope::AppScope;
 
 use crate::variables;
 use crate::wire::{
@@ -2820,6 +2821,17 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
         eprintln!("error: cannot start the async runtime");
         return ExitCode::from(1);
     };
+    let app_scope = match AppScope::parse(
+        &std::env::var("PHONEDRIVER_APP_SCOPE").unwrap_or_default(),
+    ) {
+        Ok(scope) => scope,
+        Err(why) => {
+            eprintln!(
+                "error: PHONEDRIVER_APP_SCOPE {why}: list packages such as com.example.app,com.example.other"
+            );
+            return ExitCode::from(1);
+        }
+    };
     rt.block_on(async {
         let sources = Sources(vec![
             #[cfg(feature = "android")]
@@ -2835,6 +2847,7 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
             trace,
             apps_under_test(std::env::var("PHONEDRIVER_APPS_UNDER_TEST").ok().as_deref()),
             crate::daemon::policy::Policy::from_env(&socket::home()),
+            app_scope,
         );
         let listener = match socket::listen(&socket::socket_path()).await {
             Ok(l) => l,
