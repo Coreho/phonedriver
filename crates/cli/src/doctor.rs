@@ -795,7 +795,7 @@ pub async fn physical(home: &Path, only: Option<&str>, scope: &Scope) -> Vec<Che
                 }
             ),
         ));
-        match phonedriver_ios::setup::status(&device).await {
+        match phonedriver_ios::setup::status(&device, home).await {
             Ok(s) => {
                 checks.push(if s.developer_mode {
                     Check::ok(format!("{name} developer mode"), "on")
@@ -832,7 +832,7 @@ pub async fn physical(home: &Path, only: Option<&str>, scope: &Scope) -> Vec<Che
         checks.push(if XCODE {
             runner_expiry(&name, home)
         } else {
-            runner_installed(&name, &device).await
+            runner_installed(&name, &device, home).await
         });
     }
     checks
@@ -848,13 +848,13 @@ fn install_runner_fix() -> String {
 }
 
 /// Off a Mac: whether the runner the person installs is on the device.
-async fn runner_installed(name: &str, device: &phonedriver_ios::transport::Attached) -> Check {
+async fn runner_installed(
+    name: &str,
+    device: &phonedriver_ios::transport::Attached,
+    home: &Path,
+) -> Check {
     let label = format!("{name} runner");
-    let found = match device.provider().await {
-        Ok(provider) => phonedriver_ios::runner::find_installed(provider.as_ref()).await,
-        Err(e) => Err(e),
-    };
-    match found {
+    match find_runner(device, home).await {
         Ok(Some(bundle)) => Check::ok(label, format!("installed as {bundle}")),
         Ok(None) => Check::bad(Status::Fail, label, "not installed", install_runner_fix()),
         Err(e) => Check::bad(
@@ -864,6 +864,18 @@ async fn runner_installed(name: &str, device: &phonedriver_ios::transport::Attac
             "Unlock the device, then run `phonedriver doctor` again.",
         ),
     }
+}
+
+/// The installed runner's bundle id, read where the device's services answer: lockdown on the cable, the remote
+/// pairing's tunnel on Wi-Fi off a Mac.
+async fn find_runner(
+    device: &phonedriver_ios::transport::Attached,
+    home: &Path,
+) -> Result<Option<String>, phonedriver_core::error::Error> {
+    let mut services = phonedriver_ios::transport::Services::open(device, home).await?;
+    phonedriver_ios::runner::find_installed(&mut services)
+        .await
+        .map_err(|e| phonedriver_ios::transport::classify(&format!("ios:{}", device.udid), &e))
 }
 
 /// The expiry of the signing profile inside this version's device build of the runner under `home`.
@@ -956,7 +968,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
         for device in attached {
             let name = device.udid.clone();
             let cabled = matches!(device.link, phonedriver_ios::transport::Link::Usb { .. });
-            let status = match phonedriver_ios::setup::status(&device).await {
+            let status = match phonedriver_ios::setup::status(&device, home).await {
                 Ok(s) => {
                     println!("ok    {name} paired");
                     s
@@ -965,6 +977,11 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
                     action: UserAction::TrustComputer,
                 }) => {
                     println!("need  {name} paired: unlock the device and tap Trust, then run this again");
+                    all_ok = false;
+                    continue;
+                }
+                Err(Error::NeedsUser { action }) => {
+                    println!("need  {name}: {} {}", action.message(), action.hint());
                     all_ok = false;
                     continue;
                 }
@@ -977,7 +994,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
             if status.developer_mode {
                 println!("ok    {name} developer mode");
             } else {
-                match phonedriver_ios::setup::reveal_developer_mode(&device).await {
+                match phonedriver_ios::setup::reveal_developer_mode(&device, home).await {
                     Ok(()) => println!("need  {name} developer mode: turn on Settings > Privacy & Security > Developer Mode, restart the device, confirm"),
                     Err(e) => println!("fail  {name} developer mode: {e:?}"),
                 }
@@ -1023,7 +1040,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
                     }
                     Ok(files) => {
                         println!("      {name} developer disk image: mounting (asks Apple's signing server for this device's ticket)");
-                        phonedriver_ios::setup::mount_files(&device, &files).await
+                        phonedriver_ios::setup::mount_files(&device, home, &files).await
                     }
                     Err(e) => Err(e),
                 };
@@ -1042,13 +1059,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
             if XCODE {
                 println!("      {name} runner: building, installing and starting it (a few minutes the first time)");
             } else {
-                let found = match device.provider().await {
-                    Ok(provider) => {
-                        phonedriver_ios::runner::find_installed(provider.as_ref()).await
-                    }
-                    Err(e) => Err(e),
-                };
-                match found {
+                match find_runner(&device, home).await {
                     Ok(Some(bundle)) => {
                         println!("      {name} runner: starting {bundle}")
                     }
@@ -1077,7 +1088,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
                     continue;
                 }
             }
-            if XCODE && cabled && !remembered.contains(&name) {
+            if cabled && !remembered.contains(&name) {
                 println!("tip   {name}: `phonedriver ios wifi on` lets you unplug the cable");
             }
         }
