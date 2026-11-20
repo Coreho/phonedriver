@@ -129,7 +129,7 @@ pub(crate) fn names(id: &str, requested: &str) -> bool {
 pub struct Daemon {
     source: Arc<dyn DeviceSource>,
     home: PathBuf,
-    actors: Mutex<HashMap<String, mpsc::Sender<Job>>>,
+    actors: Mutex<HashMap<String, actor::Handle>>,
     traces: Traces,
     told: Mutex<HashMap<String, String>>,
     secrets: Arc<secrets::Secrets>,
@@ -415,6 +415,7 @@ impl Daemon {
                     self.secrets.clone(),
                 )
             })
+            .jobs
             .clone()
     }
 
@@ -504,19 +505,15 @@ impl Daemon {
                 ids.insert(0, l.id.clone());
             }
             for id in ids {
-                let existing = self
+                let held = self
                     .actors
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .contains_key(&id);
-                let lease = if existing {
-                    self.send(&id, "", false, DisplayMode::Main, Call::Leased)
-                        .await?
-                } else {
-                    Value::Null
-                };
-                let hidden_display = lease["hidden_display"].as_u64().map(|d| d as u32);
-                if id != l.id && lease["session"].is_null() && hidden_display.is_none() {
+                    .get(&id)
+                    .map(|a| a.held.borrow().clone())
+                    .unwrap_or_default();
+                let hidden_display = held.hidden_display;
+                if id != l.id && held.session.is_none() && hidden_display.is_none() {
                     continue;
                 }
                 out.push(DeviceEntry {
@@ -525,8 +522,8 @@ impl Daemon {
                     os: l.os.clone().unwrap_or_default(),
                     tier: l.tier.clone(),
                     capabilities: l.capabilities,
-                    leased_by: lease["session"].as_str().map(str::to_string),
-                    lease_idle_s: lease["idle_s"].as_u64(),
+                    leased_by: held.session,
+                    lease_idle_s: held.last_call.map(|t| t.elapsed().as_secs()),
                     hidden_display,
                 });
             }

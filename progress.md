@@ -3217,3 +3217,32 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
   - `phonedriver snapshot`: 10.7 s with the daemon's and the runner's start (the Claude app, `loading`), then 450, 379 and 339 ms. `screenshot`: 408 ms, a 390x844 PNG, looked at: the Claude app as on the phone. `apps`: 963 ms, 151 lines through the tunnel.
   - `launch com.apple.Preferences`: `ok launched Settings · new screen`, 2,958 to 4,709 ms. `tap General`: `no element matches "General"` (the row was below the fold). `tap Battery`: `@e47 is under the Toolbar` (iOS 26's search bar at the bottom covers that row; not a Wi-Fi matter). `tap Cellular`: `ok tapped @e45 "Cellular" · new screen`, 2,690 and 2,157 ms. `press back`: `ok pressed back via nav-button`, 1,630 and 1,791 ms. `launch com.anthropic.claude` put the user back where they were.
 - Open: the remount over Wi-Fi after a restart (`mount_personalized_rsd`) has not run on a device. The spike `spikes/wifi-pairing` is deleted; its results stay in `docs/spikes/ios.md` (W1).
+
+## 2026-11-20: doctor says a locked phone plainly, and a stuck device no longer stalls `devices`
+
+What went wrong, on the user's iPhone17,5 (iOS 26.5) on Wi-Fi from Windows 11:
+- `phonedriver doctor` with the phone locked printed `fail … developer services  Transport { detail: "… does not announce its remote pairing service; unlock it …" }` with `fix: Run \`phonedriver ios setup\`.`, and the runner line's text ended `Run \`phonedriver doctor\` to check the connection.`
+- An older daemon from `~/.local/bin` (built 01:12, before the Wi-Fi work), started by another agent's MCP server, answered `snapshot` with `xcrun devicectl device info details: program not found`. Replaced that copy with the repo build (old one kept as `phonedriver-2026-11-20-0112.exe.bak`).
+- At 09:32:12 the phone dropped off (`device … disconnected`). A later call's reconnect never returned, and at 09:34 `phonedriver devices` got no reply for over 3 minutes: it asked the device's actor for the lease (`Call::Leased`) and queued behind that call. `daemon.log` had no `starting the iOS runner` line after the drop, so the reconnect stopped before the runner start, in `mount_cached` → `setup::status`; the daemon held a second TCP connection to the phone (`netstat`).
+
+Changes:
+- `doctor.rs`: `ios_failed` says an iPhone check's error in words (`{e}`, not `{e:?}`) with the error's own fix unless that fix is to run doctor, else `REACH_FIX` (unlock, same network, or the cable). Used for `reachable`, `developer services` and `runner`; `find_runner` returns the typed error. `ios setup` prints its errors the same way.
+- `daemon/actor.rs`, `daemon/mod.rs`: each actor publishes its lease and hidden display (`Held`, a `watch` channel) when a call takes the lease and after every call; `devices` reads that. `Call::Leased` is gone.
+- `ios/setup.rs`: `status` off the `devicectl` path gives up after 15 s (`STATUS_WITHIN`) with `connection error: ios:<udid> did not answer within 15 s; unlock it …`.
+- `docs/architecture.md`: the lease paragraph says how `devices` reads leases; the iOS failure table has a row for a tunnel that stalls without closing.
+
+Tests (each failed first):
+- `doctor::tests::a_locked_device_on_wifi_is_told_in_words_with_a_fix_that_names_neither_setup_nor_doctor`, `a_failure_that_needs_the_person_keeps_its_own_message_and_fix`: first run `cannot find function \`ios_failed\``.
+- `daemon.rs::devices_answers_while_a_call_waits_on_a_device_that_never_connects` (the fake source's `connect` never returns): first run `devices waited for the call that never connects: Elapsed(())`.
+- `setup::tests::a_device_that_stops_answering_fails_the_read_instead_of_waiting_for_good`: first run `cannot find function \`answered_within\``.
+
+Commands (`PHONEDRIVER_AGENT_JAR` pointed at an empty placeholder file, as before):
+- `cargo fmt --all --check`: clean. `cargo clippy --release -p phonedriver-ios -p phonedriver-core --all-targets -- -D warnings` and `cargo clippy --release -p phonedriver --no-default-features -- -D warnings`: clean.
+- `cargo test --release -p phonedriver-ios -p phonedriver-core --lib`: `ok. 227 passed`, `ok. 91 passed`. `cargo test --release -p phonedriver --no-default-features --lib --test daemon --test mcp --test lanes --test device_choice --test hidden_display --test sources --test progress`: `ok. 107`, `183`, `7`, `7`, `7`, `48`, `3`, `8 passed`.
+- `cargo build --release -p phonedriver --no-default-features`: `Finished`.
+
+Live, the same phone, release build, read-only (no taps):
+- Unlocked: first `snapshot` 12.8 s (connect 10.5 s), `devices` 22 ms.
+- The user locked it at 10:29. A poll every 20 s for 6 minutes (daemon trace): the runner kept answering the lock screen (153 to 720 ms). The phone dropped off twice (10:29:43 after 6.9 s, 10:35:08 after 3.7 s, both `device … disconnected`); the next call reconnected while locked (10.2 s, and 18.9 s at 10:35:50). All 19 `devices` calls answered in 3 to 102 ms.
+- Not seen again: the stall itself, so the 15 s limit has not fired on a device, and doctor's locked-phone lines were checked by the unit tests only.
+- Found: `doctor` printed `0 iPhone or iPad attached` at 10:28:23 (unlocked) and 10:35:48 (locked) while the daemon reached the phone seconds later. Doctor browses the network once and waits 2 s (`lan::FIRST_ANSWERS`); the daemon's browse keeps running. Open.

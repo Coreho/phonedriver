@@ -409,12 +409,27 @@ async fn agent_checks(id: &str) -> Vec<Check> {
     }
 }
 
-/// What to do about a failed probe: the error's own hint, unless that hint is to run `doctor`. Seen on a loaded
-/// Mac: a simulator's probe timed out and doctor printed ``fix: Run `phonedriver doctor` to check the connection``.
 fn fix_for(e: &Failure, otherwise: &str) -> String {
-    e.hint()
-        .filter(|h| !h.contains("phonedriver doctor"))
+    own_fix(e.hint(), otherwise)
+}
+
+/// The error's own hint, unless that hint is to run `doctor`. Seen on a loaded Mac: a simulator's probe timed out
+/// and doctor printed ``fix: Run `phonedriver doctor` to check the connection``.
+fn own_fix(hint: Option<String>, otherwise: &str) -> String {
+    hint.filter(|h| !h.contains("phonedriver doctor"))
         .unwrap_or_else(|| otherwise.into())
+}
+
+const REACH_FIX: &str = "Unlock the device. If it is on Wi-Fi, keep it on the same network as this computer, or plug it in.";
+
+/// An iPhone or iPad check that failed with `e`, said after `what`.
+fn ios_failed(name: String, what: &str, e: &phonedriver_core::error::Error) -> Check {
+    Check::bad(
+        Status::Fail,
+        name,
+        format!("{what}{e}"),
+        own_fix(Some(e.hint()), REACH_FIX),
+    )
 }
 
 fn cannot_reach_daemon(name: String, e: &Failure) -> Check {
@@ -555,12 +570,7 @@ pub async fn physical(home: &Path, only: Option<&str>) -> Vec<Check> {
                 continue;
             }
             Err(e) => {
-                checks.push(Check::bad(
-                    Status::Fail,
-                    format!("{name} reachable"),
-                    format!("{e:?}"),
-                    "Unlock the device. If it is on Wi-Fi, put it on the same network as this computer or plug it in; `phonedriver ios setup` shows what is missing.",
-                ));
+                checks.push(ios_failed(format!("{name} reachable"), "", &e));
                 continue;
             }
         };
@@ -605,12 +615,7 @@ pub async fn physical(home: &Path, only: Option<&str>) -> Vec<Check> {
                     )
                 });
             }
-            Err(e) => checks.push(Check::bad(
-                Status::Fail,
-                format!("{name} developer services"),
-                format!("{e:?}"),
-                "Run `phonedriver ios setup`.",
-            )),
+            Err(e) => checks.push(ios_failed(format!("{name} developer services"), "", &e)),
         }
         checks.push(if XCODE {
             runner_expiry(&name, home)
@@ -640,12 +645,7 @@ async fn runner_installed(
     match find_runner(device, home).await {
         Ok(Some(bundle)) => Check::ok(label, format!("installed as {bundle}")),
         Ok(None) => Check::bad(Status::Fail, label, "not installed", install_runner_fix()),
-        Err(e) => Check::bad(
-            Status::Fail,
-            label,
-            format!("cannot list the device's apps: {e}"),
-            "Unlock the device, then run `phonedriver doctor` again.",
-        ),
+        Err(e) => ios_failed(label, "cannot list the device's apps: ", &e),
     }
 }
 
@@ -769,7 +769,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
                     continue;
                 }
                 Err(e) => {
-                    println!("fail  {name}: {e:?}");
+                    println!("fail  {name}: {e} {}", own_fix(Some(e.hint()), REACH_FIX));
                     all_ok = false;
                     continue;
                 }
@@ -779,7 +779,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
             } else {
                 match phonedriver_ios::setup::reveal_developer_mode(&device, home).await {
                     Ok(()) => println!("need  {name} developer mode: turn on Settings > Privacy & Security > Developer Mode, restart the device, confirm"),
-                    Err(e) => println!("fail  {name} developer mode: {e:?}"),
+                    Err(e) => println!("fail  {name} developer mode: {e}"),
                 }
                 all_ok = false;
             }
@@ -790,7 +790,7 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
                 match phonedriver_ios::setup::mount_image(&name).await {
                     Ok(()) => println!("ok    {name} developer disk image"),
                     Err(e) => {
-                        println!("fail  {name} developer disk image: {e:?}");
+                        println!("fail  {name} developer disk image: {e}");
                         all_ok = false;
                         continue;
                     }
@@ -852,7 +852,10 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
                         continue;
                     }
                     Err(e) => {
-                        println!("fail  {name} runner: cannot list the device's apps: {e}");
+                        println!(
+                            "fail  {name} runner: cannot list the device's apps: {e} {}",
+                            own_fix(Some(e.hint()), REACH_FIX)
+                        );
                         all_ok = false;
                         continue;
                     }
@@ -934,6 +937,51 @@ mod tests {
             fix_for(&failed("Unlock the phone."), "The runner log is there."),
             "Unlock the phone."
         );
+    }
+
+    #[test]
+    fn a_locked_device_on_wifi_is_told_in_words_with_a_fix_that_names_neither_setup_nor_doctor() {
+        use phonedriver_core::error::Error;
+        let locked = Error::Transport {
+            detail: "ios:A answers on Wi-Fi but does not announce its remote pairing service; unlock it and keep it on the same network".into(),
+        };
+        for check in [
+            ios_failed("ios:A developer services".into(), "", &locked),
+            ios_failed(
+                "ios:A runner".into(),
+                "cannot list the device's apps: ",
+                &locked,
+            ),
+        ] {
+            assert!(
+                check.detail.starts_with(
+                    "cannot list the device's apps: connection error: ios:A answers on Wi-Fi"
+                ) || check
+                    .detail
+                    .starts_with("connection error: ios:A answers on Wi-Fi"),
+                "{check:?}"
+            );
+            assert!(!check.detail.contains("Transport {"), "{check:?}");
+            assert!(!check.detail.contains("phonedriver doctor"), "{check:?}");
+            let fix = check.fix.unwrap();
+            assert!(fix.starts_with("Unlock the device"), "{fix}");
+            assert!(!fix.contains("ios setup"), "{fix}");
+            assert!(!fix.contains("phonedriver doctor"), "{fix}");
+        }
+    }
+
+    #[test]
+    fn a_failure_that_needs_the_person_keeps_its_own_message_and_fix() {
+        use phonedriver_core::error::{Error, UserAction};
+        let check = ios_failed(
+            "ios:A developer services".into(),
+            "",
+            &Error::NeedsUser {
+                action: UserAction::PairForWifi,
+            },
+        );
+        assert_eq!(check.detail, UserAction::PairForWifi.message());
+        assert_eq!(check.fix.unwrap(), UserAction::PairForWifi.hint());
     }
 
     #[test]
