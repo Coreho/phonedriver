@@ -17,8 +17,10 @@ Plug in an Android phone or tablet with USB debugging on, and phonedriver can dr
 
 ```sh
 phonedriver devices
-phonedriver doctor
+phonedriver doctor --device android:<serial>
 ```
+
+`doctor` without `--device` lists the phone but does not start the agent on it.
 
 The phone appears as `android:<serial>`. The daemon pushes a small agent over adb and starts it as the shell user.
 

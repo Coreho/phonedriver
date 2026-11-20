@@ -373,3 +373,13 @@ async fn devices_that_are_not_ready_are_hidden_by_id_when_an_allow_list_does_not
     );
     assert_eq!(hidden["count"], 2);
 }
+
+#[tokio::test]
+async fn a_live_lease_is_marked_so_doctor_can_leave_the_device_alone() {
+    let bench = Bench::new(&[("android:emulator-5554", None)]);
+    let (d, _home) = daemon(bench, Policy::default());
+    ok(&d, "snapshot", json!({})).await;
+    let entries = ok(&d, "devices", json!({})).await;
+    assert_eq!(entries[0]["leased_by"], "default");
+    assert_eq!(entries[0]["lease_live"], true);
+}

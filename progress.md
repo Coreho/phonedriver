@@ -3310,3 +3310,33 @@ mobilecli.so
   No `phonedriver-agent-*.jar` and no `phonedriver-owner` on the tablet after the daemon had listed it, been asked for it by id and been asked to `shell --force` on it. With the list in the file instead (`deny EMULATOR37X2X13X0`, the value `getprop ro.serialno` gives) both emulators were hidden (`no devices` and `2 devices hidden by the device list`): the two emulators report the same `ro.serialno`, so a serial entry cannot tell emulators apart and D101 says to name them by id. A typo (`deney x`) in the file made `devices` fail with `line 1 is `deney x`, not `allow <id>` or `deny <id>`` and exit 1; removing the file brought both back on the same daemon.
 - Found while testing live: my first version reused the one-per-phone helper, which takes any adb name without a colon as its own serial, so an emulator's `ro.serialno` was never read and the serial entry did nothing. The list now always reads the property (separate cache in `AdbSource`).
 - Not covered, and said in D101: `pair`, `untether`, `ios setup`, `ios wifi` and `ios register` (run by a person on a device they name, outside the daemon); a running daemon keeps the environment it started with.
+
+## 2026-11-20: `doctor` probes only devices nobody else owns (#27, D101)
+
+- Without `--device`, `phonedriver doctor` (and `init`, which runs it) checks the host and lists every device, and starts the agent or runner only on an emulator or Simulator that no live session holds. A physical phone or tablet (Android or iOS) and any device a live session holds get one line, `not probed: <why>`, with `fix: Run `phonedriver doctor --device <id>` to probe it.` `--all-devices` probes physical devices too, still skipping held ones; `--device <id>` probes that device only, held or not. The stderr line `starting the agent on ...` now names only the devices that are probed. "Held" is the new `lease_live` on each `devices` entry (an MCP session's lease, or a command line's within `TERMINAL_HOLD` of its last call), so a lease that has already yielded does not block a probe. If the daemon cannot be asked, nothing is probed without `--device` and a `daemon` line says why. Decision in D101, text in `docs/reference.md` (doctor), `docs/protocol.md`, `site/content/docs` (install, troubleshooting, android-emulator, android-phone).
+- Tests first (they did not compile before `Scope` and `Verdict` existed; the five new `doctor::tests` then passed): a physical phone, an address over Wi-Fi and an `ios:` device are listed and not probed (and the line carries the `--device` command); an emulator and a Simulator are probed; a held device is left alone, also with `--all-devices`, while `--device` still probes it; `--all-devices` probes the physical phone; `--device` probes exactly the named device; a hidden device is not shown; without the daemon nothing is probed. `crates/cli/tests/device_list.rs` gained `a_live_lease_is_marked_so_doctor_can_leave_the_device_alone` (a command-line session's lease from a snapshot shows `lease_live: true`).
+- Workspace on the Mac mini (`cargo test --workspace --no-fail-fast`): 1,076 passed, 0 failed, 137 ignored (the live and device tests). `cargo clippy --workspace --all-targets -- -D warnings`: clean. `cargo fmt --check`: clean.
+- Live, `emulator-5554` and `emulator-5558` up (the emulators were starved, `/proc/pressure/io` avg10 between 50 and 90 for the whole session while another build ran on win-pc, so several probes timed out in UiAutomation and are not shown; the lines below are the runs that completed), `PHONEDRIVER_DENY_DEVICES=android:emulator-5560` because a third emulator that is not mine was attached:
+
+```
+$ phonedriver doctor        (both emulators, nobody holds them)
+starting the agent on android:emulator-5554, android:emulator-5558; `--device <id>` checks only one
+ok    android:emulator-5554               connected
+ok    agent android:emulator-5554         answers hello: sdk_gphone64_x86_64 on Android API 37, 26.0 s with deploy
+ok    uiautomation android:emulator-5554  connected, the screen tree reads
+ok    android:emulator-5558               connected
+ok    agent android:emulator-5558         answers hello: sdk_gphone64_x86_64 on Android API 37, 1.0 s with deploy
+ok    device list                         1 device hidden by the device list and not probed
+$ phonedriver --session other snapshot --device android:emulator-5558 >/dev/null; phonedriver doctor
+starting the agent on android:emulator-5554; `--device <id>` checks only one
+ok    android:emulator-5558               connected
+warn  agent android:emulator-5558         not probed: session other holds it, and probing would take its agent
+      fix: Run `phonedriver doctor --device android:emulator-5558` to probe it.
+$ (same, then) phonedriver doctor --all-devices          -> the same warn line for 5558; starting the agent on android:emulator-5554 only
+$ (same, then) phonedriver doctor --device android:emulator-5558
+ok    agent android:emulator-5558         answers hello: sdk_gphone64_x86_64 on Android API 37, 1.0 s with deploy
+ok    uiautomation android:emulator-5558  connected, the screen tree reads
+```
+
+- A physical phone was not touched, so `not probed: a physical device` is shown by the fake-device tests only.
+- A mistake to own: my first `doctor` with no list probed a third emulator on the shared adb server (`emulator-5560`, not one of mine), which is exactly what the new default allows for emulators nobody holds. It answered `Android's accessibility service is not running on emulator-5560` (it was still booting) and I touched it no further; my agent jar may have been pushed to it. I then denied it by id for the rest of the session.

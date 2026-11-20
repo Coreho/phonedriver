@@ -588,7 +588,7 @@ impl Actor {
             let hidden_display = self.live.as_ref().and_then(|l| l.device.hidden_display());
             return Ok(match &self.lease {
                 Some(l) => {
-                    json!({"session": l.session, "idle_s": l.last_call.elapsed().as_secs(), "hidden_display": hidden_display})
+                    json!({"session": l.session, "idle_s": l.last_call.elapsed().as_secs(), "live": !l.terminal || l.last_call.elapsed() < TERMINAL_HOLD, "hidden_display": hidden_display})
                 }
                 None => json!({"hidden_display": hidden_display}),
             });

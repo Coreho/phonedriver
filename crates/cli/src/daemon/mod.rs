@@ -587,6 +587,7 @@ impl Daemon {
                     capabilities: l.capabilities,
                     leased_by: lease["session"].as_str().map(str::to_string),
                     lease_idle_s: lease["idle_s"].as_u64(),
+                    lease_live: lease["live"].as_bool().unwrap_or(false),
                     hidden_display,
                 });
             }

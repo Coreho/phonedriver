@@ -97,7 +97,7 @@ $ phonedriver version
 phonedriver 0.1.5
 ```
 
-`phonedriver doctor` checks adb, each Android device, the agent, UiAutomation, the video stream, Xcode, the simulators and the permissions of the daemon socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`.
+`phonedriver doctor` checks adb, each Android device, the agent, UiAutomation, the video stream, Xcode, the simulators and the permissions of the daemon socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`. It starts the agent only on emulators and Simulators that no other session holds. A physical phone or tablet is listed with `not probed` and the command to probe it (`phonedriver doctor --device <id>`); `--all-devices` probes them all.
 
 ```console
 $ phonedriver doctor
