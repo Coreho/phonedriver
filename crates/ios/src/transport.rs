@@ -2,9 +2,11 @@
 //! `core::Error` and the single reconnect (architecture 7.1).
 
 use idevice::core_device_proxy::CoreDeviceProxy;
+use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use idevice::pairing_file::PairingFile;
 use idevice::provider::{IdeviceProvider, TcpProvider, UsbmuxdProvider};
@@ -268,6 +270,27 @@ fn tunnel_to(
     }
 }
 
+/// How long a device on Wi-Fi off a Mac gets to open its tunnel, and `setup::status` to read through it. Seen
+/// 2026-11-20 on an iPhone on Wi-Fi that had just dropped off: the daemon's reconnect opened a tunnel, the device
+/// never answered in it, and the call waited until the daemon was stopped. `doctor`'s three reads over Wi-Fi took
+/// 3.8 s in all.
+pub(crate) const ANSWER_WITHIN: Duration = Duration::from_secs(15);
+
+pub(crate) async fn answered_within<T>(
+    limit: Duration,
+    udid: &str,
+    read: impl Future<Output = Result<T, Error>>,
+) -> Result<T, Error> {
+    tokio::time::timeout(limit, read).await.unwrap_or_else(|_| {
+        Err(Error::Transport {
+            detail: format!(
+                "ios:{udid} did not answer within {} s; unlock it and keep it on the same network, or plug it in",
+                limit.as_secs()
+            ),
+        })
+    })
+}
+
 /// Where a device's developer services answer: lockdown on the cable, or off a Mac over Wi-Fi the tunnel of the
 /// remote pairing, because there the device closes lockdown's services after the TLS handshake (decision D97).
 pub enum Services {
@@ -283,7 +306,7 @@ impl Services {
         match tunnel_to(device, record.is_some(), crate::setup::XCODE)? {
             Some(addr) => match record.as_mut() {
                 Some(record) => Ok(Services::Tunnel(
-                    crate::remote::tunnel(addr, record).await.map_err(lost)?,
+                    crate::remote::open(&device.udid, addr, record).await?,
                 )),
                 None => Err(Error::NeedsUser {
                     action: UserAction::PairForWifi,
@@ -382,6 +405,22 @@ mod tests {
             udid: udid.to_string(),
             link: Link::Usb { mux_id },
         }
+    }
+
+    #[tokio::test]
+    async fn a_device_that_stops_answering_fails_the_read_instead_of_waiting_for_good() {
+        let e = answered_within(
+            std::time::Duration::from_millis(20),
+            "A",
+            std::future::pending::<Result<(), Error>>(),
+        )
+        .await
+        .unwrap_err();
+        let Error::Transport { detail } = &e else {
+            panic!("{e:?}")
+        };
+        assert!(detail.starts_with("ios:A did not answer"), "{detail}");
+        assert!(detail.contains("unlock it"), "{detail}");
     }
 
     #[test]

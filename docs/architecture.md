@@ -418,7 +418,7 @@ Signing: built with Xcode automatic signing for the user's team. A free Apple ID
 | Not paired | `NeedsUser(TrustComputer)` |
 | Runner's signing profile run out | The next connect builds and signs the runner again and installs it (decision D84) |
 | Tunnel dropped | Actor reconnects once, then `DeviceGone` |
-| The tunnel stalls without closing (seen 2026-11-20 off a Mac, on Wi-Fi: after the phone dropped off, the reconnect waited until the daemon was stopped) | Reading Developer Mode and the mounted images, which `doctor`, `ios setup` and every connect off a Mac do first, gives up after 15 s with a connection error that says to unlock the device (`setup::STATUS_WITHIN`; the three reads of `doctor` took 3.8 s over Wi-Fi) |
+| The tunnel stalls without closing (seen 2026-11-20 off a Mac, on Wi-Fi: after the phone dropped off, the reconnect waited until the daemon was stopped) | Opening the remote pairing's tunnel, and reading Developer Mode and the mounted images through it, each give up after 15 s with a connection error that says to unlock the device (`transport::ANSWER_WITHIN`). Every Wi-Fi path off a Mac opens its tunnel that way: `doctor`, `ios setup`, the mount and the runner's start; reading Developer Mode and the images comes first on every connect. Reads after a tunnel has opened, other than those two, have no limit of their own (the three reads of `doctor` took 3.8 s over Wi-Fi) |
 
 ## 8. Video (`phonedriver-video`)
 
