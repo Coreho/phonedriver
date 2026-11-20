@@ -152,12 +152,25 @@ impl Daemon {
         config: Config,
         trace: TraceOptions,
     ) -> Arc<Daemon> {
+        Self::start(source, config, trace, Vec::new())
+    }
+
+    /// `apps_under_test` are packages the person named outside the tools; on a physical device they count as theirs
+    /// for `apps clear`, `uninstall`, `grant`, `revoke` and `launch --grant`, like an app phonedriver installed.
+    pub fn start(
+        source: Arc<dyn DeviceSource>,
+        config: Config,
+        trace: TraceOptions,
+        apps_under_test: Vec<String>,
+    ) -> Arc<Daemon> {
         trace::clean_older_than(&config.home.join("tmp"), TMP_MAX_AGE);
         trace::clean_older_than(&config.home.join("traces"), TRACE_MAX_AGE);
         Arc::new(Daemon {
             source,
             traces: Traces::new(config.home.join("traces"), trace),
-            ledger: Arc::new(ledger::Ledger::new(&config.home)),
+            ledger: Arc::new(
+                ledger::Ledger::new(&config.home).with_apps_under_test(apps_under_test),
+            ),
             home: config.home,
             actors: Mutex::default(),
             told: Mutex::default(),

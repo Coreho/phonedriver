@@ -302,7 +302,7 @@ pub(crate) enum Verb {
         app: String,
         /// Grant these runtime permissions first, so their dialog never appears: `notifications`, `camera`,
         /// `location`, or a full name such as `android.permission.CAMERA` (Android); `photos`, `location` and the other
-        /// `simctl privacy` services (Simulator). A physical device only takes this for apps phonedriver installed.
+        /// `simctl privacy` services (Simulator). A physical device only takes this for apps phonedriver installed or listed in `PHONEDRIVER_APPS_UNDER_TEST`.
         #[arg(long, value_delimiter = ',')]
         grant: Vec<String>,
         /// Stop the app first, so it opens on its first screen instead of where it was left.
@@ -318,18 +318,25 @@ pub(crate) enum Verb {
         app: Option<String>,
     },
     /// List the apps that can be launched, or `install <path>`, `stop`, `clear` (data) or `uninstall` one by name or id,
-    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`.
-    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed.
+    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`, or `notify` it: send it a push
+    /// notification to test how it handles one (the iOS Simulator only):
+    /// `phonedriver apps notify Mail '{"aps":{"alert":"Hi"}}'` or `--file payload.json`.
+    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed, and the
+    /// packages in `PHONEDRIVER_APPS_UNDER_TEST` (a comma list the daemon reads when it starts).
     Apps {
         /// What to do to an app. Omit it to list apps.
-        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke"])]
+        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke", "notify"])]
         action: Option<String>,
         /// The app file to install (on the daemon's machine), or the app to act on.
         target: Option<String>,
         /// For `grant` and `revoke`: `notifications`, `camera`, `location`, or a full name such as
         /// `android.permission.CAMERA` (Android); `photos`, `location` and the other `simctl privacy` services
-        /// (Simulator).
+        /// (Simulator). For `notify`: the push notification as one JSON argument, such as
+        /// `'{"aps":{"alert":"Hi"}}'`.
         permissions: Vec<String>,
+        /// For `notify`: read the push notification's JSON from this file instead.
+        #[arg(long, value_name = "PATH")]
+        file: Option<std::path::PathBuf>,
     },
     /// Drag from the middle of the screen, or of `--from`, the way a finger does.
     Swipe {
@@ -1297,11 +1304,25 @@ pub(crate) async fn execute_with(
             action: Some(action),
             target,
             permissions,
+            file,
         } => {
             let target = target
                 .ok_or_else(|| Failure::Local(format!("apps {action} needs an app or a path")))?;
             let p = if action == "install" {
                 json!({"action": action, "path": target})
+            } else if action == "notify" {
+                let payload = match (file, permissions.as_slice()) {
+                    (Some(path), []) => std::fs::read_to_string(&path).map_err(|e| {
+                        Failure::Local(format!("cannot read {}: {e}", path.display()))
+                    })?,
+                    (None, [json]) => json.clone(),
+                    _ => {
+                        return Err(Failure::Local(
+                            "apps notify needs the push notification as JSON: the `payload` field over MCP, one quoted argument or `--file payload.json` on the command line".into(),
+                        ));
+                    }
+                };
+                json!({"action": action, "app": target, "payload": payload})
             } else {
                 json!({"action": action, "app": target, "permissions": permissions})
             };
@@ -2656,6 +2677,16 @@ fn stop_daemon() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The packages in a comma list such as `com.example.app, com.example.other`; blanks are dropped.
+fn apps_under_test(list: Option<&str>) -> Vec<String> {
+    list.unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 fn run_daemon(trace: TraceOptions) -> ExitCode {
     let Ok(rt) = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -2671,12 +2702,13 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
             ("sim:", Arc::new(SimSource::new(socket::home()))),
             ("ios:", Arc::new(PhysicalSource::new(socket::home()))),
         ]);
-        let daemon = Daemon::with_trace(
+        let daemon = Daemon::start(
             Arc::new(sources),
             Config {
                 home: socket::home(),
             },
             trace,
+            apps_under_test(std::env::var("PHONEDRIVER_APPS_UNDER_TEST").ok().as_deref()),
         );
         let listener = match socket::listen(&socket::socket_path()).await {
             Ok(l) => l,
@@ -2701,6 +2733,16 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_apps_under_test_list_splits_on_commas_and_drops_blanks() {
+        assert_eq!(
+            super::apps_under_test(Some(" com.example.app, ,com.example.other,")),
+            vec!["com.example.app", "com.example.other"]
+        );
+        assert!(super::apps_under_test(None).is_empty());
+        assert!(super::apps_under_test(Some("")).is_empty());
+    }
+
     use super::*;
 
     #[test]

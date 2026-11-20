@@ -852,7 +852,7 @@ async fn an_action_that_changed_the_screen_starts_the_count_of_unchanged_repeats
     assert!(r.get("unchanged_repeats").is_none(), "{r}");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_window_change_event_counts_as_the_first_change() {
     let (source, fake) = FakeSource::with(vec![tree(&["One"]), tree(&["Other"])]);
     let (d, _home) = daemon(source);
@@ -867,7 +867,7 @@ async fn a_window_change_event_counts_as_the_first_change() {
     assert_eq!(r["observation"]["kind"], "full");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_new_screen_after_an_action_leaves_the_settle_time_to_the_action_line() {
     let (source, fake) = FakeSource::with(vec![tree(&["One"]), tree(&["Other"])]);
     let (d, _home) = daemon(source);
@@ -4963,17 +4963,26 @@ async fn a_closed_mcp_connection_drops_its_sessions_state_and_a_closed_cli_conne
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        let saved = ok(&d, "s", "journal", json!({})).await;
+        let traces_of_s = || {
+            std::fs::read_dir(home.path().join("traces"))
+                .unwrap()
+                .filter(|f| {
+                    std::fs::read_to_string(f.as_ref().unwrap().path())
+                        .unwrap()
+                        .contains("\"session\":\"s\"")
+                })
+                .count()
+        };
+        let mut saved = ok(&d, "s", "journal", json!({})).await;
+        for _ in 0..200 {
+            if saved["steps"].as_array().unwrap().len() == usize::from(kept) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            saved = ok(&d, "s", "journal", json!({})).await;
+        }
         assert_eq!(saved["steps"].as_array().unwrap().len(), usize::from(kept));
-        let traces = std::fs::read_dir(home.path().join("traces"))
-            .unwrap()
-            .filter(|f| {
-                std::fs::read_to_string(f.as_ref().unwrap().path())
-                    .unwrap()
-                    .contains("\"session\":\"s\"")
-            })
-            .count();
+        let traces = traces_of_s();
         assert_eq!(traces, if kept { 1 } else { 2 }, "{client}");
     }
 }
@@ -5128,6 +5137,143 @@ async fn on_a_physical_device_only_apps_phonedriver_installed_can_be_cleared_or_
         .count();
     assert_eq!(removed, 1);
     assert!(home.path().join("installed.json").exists());
+}
+
+fn daemon_under_test(source: Arc<FakeSource>, apps: &[&str]) -> (Arc<Daemon>, tempfile::TempDir) {
+    let home = tempfile::tempdir().unwrap();
+    let d = Daemon::start(
+        source,
+        Config {
+            home: home.path().to_path_buf(),
+        },
+        phonedriver::daemon::trace::TraceOptions::default(),
+        apps.iter().map(|a| a.to_string()).collect(),
+    );
+    (d, home)
+}
+
+#[tokio::test]
+async fn a_package_the_person_lists_as_under_test_is_theirs_to_clear_grant_and_revoke_on_a_physical_device()
+ {
+    let (source, fake) = physical();
+    let (d, home) = daemon_under_test(source, &["com.example.theirs"]);
+    ok(&d, "default", "app", app_call("clear", "Theirs")).await;
+    ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "grant", "app": "Theirs", "permissions": ["camera"]}),
+    )
+    .await;
+    ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "revoke", "app": "Theirs", "permissions": ["camera"]}),
+    )
+    .await;
+    ok(
+        &d,
+        "default",
+        "act",
+        act_with(json!({"kind": "launch", "app": "Theirs", "grant": ["camera"]})),
+    )
+    .await;
+    ok(&d, "default", "app", app_call("uninstall", "Theirs")).await;
+    let calls = fake.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::AppOp(phonedriver_core::device::AppOp::ClearData, a) if a.0 == "com.example.theirs")),
+        "{calls:?}"
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::Grant(a, _) if a.0 == "com.example.theirs"))
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::Revoke(a, _) if a.0 == "com.example.theirs"))
+    );
+    assert!(calls.iter().any(|c| matches!(c, Call::AppOp(phonedriver_core::device::AppOp::Uninstall, a) if a.0 == "com.example.theirs")));
+    assert!(
+        !home.path().join("installed.json").exists(),
+        "a listed package is not written to the install record"
+    );
+}
+
+#[tokio::test]
+async fn a_package_outside_the_under_test_list_is_refused_and_the_refusal_names_the_variable() {
+    let (source, fake) = physical();
+    let (d, _home) = daemon_under_test(source, &["com.example.other"]);
+    for e in [
+        err(&d, "default", "app", app_call("clear", "Theirs")).await,
+        err(&d, "default", "app", app_call("uninstall", "Theirs")).await,
+        err(
+            &d,
+            "default",
+            "app",
+            json!({"action": "grant", "app": "Theirs", "permissions": ["camera"]}),
+        )
+        .await,
+        err(
+            &d,
+            "default",
+            "app",
+            json!({"action": "revoke", "app": "Theirs", "permissions": ["camera"]}),
+        )
+        .await,
+        err(
+            &d,
+            "default",
+            "act",
+            act_with(json!({"kind": "launch", "app": "Theirs", "grant": ["camera"]})),
+        )
+        .await,
+    ] {
+        assert_eq!(e.code, -32011);
+        assert!(e.message.contains("did not install"), "{}", e.message);
+        assert!(
+            e.message.contains("PHONEDRIVER_APPS_UNDER_TEST"),
+            "{}",
+            e.message
+        );
+    }
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+}
+
+#[tokio::test]
+async fn listing_an_app_under_test_leaves_the_install_record_behaving_as_before() {
+    let (source, fake) = physical();
+    let (d, home) = daemon_under_test(source, &["com.example.theirs"]);
+    ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await;
+    ok(&d, "default", "app", app_call("clear", "Mine")).await;
+    assert_eq!(
+        read_ledger(&home)["android:R5CT123"][0]["id"],
+        "com.example.installed"
+    );
+    ok(&d, "default", "app", app_call("uninstall", "Mine")).await;
+    let e = err(&d, "default", "app", app_call("uninstall", "Mine")).await;
+    assert_eq!(e.code, -32011, "the record still ends with the uninstall");
+    let removed = fake
+        .calls()
+        .iter()
+        .filter(|c| {
+            matches!(
+                c,
+                Call::AppOp(phonedriver_core::device::AppOp::Uninstall, _)
+            )
+        })
+        .count();
+    assert_eq!(removed, 1);
 }
 
 fn read_ledger(home: &tempfile::TempDir) -> Value {
@@ -5389,6 +5535,43 @@ async fn apps_grant_and_revoke_change_an_apps_permissions_without_launching_it()
             Call::Revoke(settings, vec!["camera".into()]),
         ]
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn apps_notify_hands_the_payload_to_the_device_and_says_which_app_got_it() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let payload = r#"{"aps":{"alert":"Hi"}}"#;
+    let r = ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "notify", "app": "Settings", "payload": payload}),
+    )
+    .await;
+    assert_eq!(r["summary"], "sent a push notification to Settings");
+    assert_eq!(
+        fake.calls(),
+        vec![Call::Push(
+            AppId("com.android.settings".into()),
+            payload.into()
+        )]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn apps_notify_without_a_payload_says_what_it_needs() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "notify", "app": "Settings"}),
+    )
+    .await;
+    assert!(e.message.contains("`payload`"), "{}", e.message);
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
 }
 
 #[tokio::test(start_paused = true)]

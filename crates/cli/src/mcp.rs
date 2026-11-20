@@ -88,6 +88,8 @@ struct AppsArgs {
     action: Option<String>,
     app: Option<String>,
     permissions: Option<Vec<String>>,
+    /// For `notify`: the push notification as JSON text, such as `{"aps":{"alert":"Hi"}}`.
+    payload: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -1317,7 +1319,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`).",
+        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`), or notify (send the app a push notification, JSON in `payload`; iOS Simulator only).",
         annotations(
             title = "Apps",
             read_only_hint = false,
@@ -1327,10 +1329,15 @@ impl Mcp {
         )
     )]
     async fn apps(&self, Parameters(a): Parameters<AppsArgs>) -> CallToolResult {
+        let permissions = match (a.action.as_deref(), a.payload) {
+            (Some("notify"), Some(payload)) => vec![payload],
+            _ => a.permissions.unwrap_or_default(),
+        };
         let verb = Verb::Apps {
             action: a.action,
             target: a.app,
-            permissions: a.permissions.unwrap_or_default(),
+            permissions,
+            file: None,
         };
         self.run(a.device, verb, None).await
     }

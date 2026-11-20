@@ -437,9 +437,50 @@ pub fn privacy_service(name: &str) -> Result<&'static str> {
         })
 }
 
+pub const PHYSICAL_PUSH: &str = "a physical iPhone takes pushes only from Apple's push service with the app's own certificate, which phonedriver does not hold; the Simulator can be sent one with `apps notify`";
+
+/// Refuses a push payload that is not a JSON object with an `aps` object, which is what APNs and `simctl push` need.
+pub fn check_push_payload(payload: &str) -> Result<()> {
+    let value: serde_json::Value = serde_json::from_str(payload).map_err(|e| Error::Refused {
+        detail: format!("the push payload is not valid JSON ({e}); nothing was sent"),
+    })?;
+    let Some(object) = value.as_object() else {
+        return Err(Error::Refused {
+            detail: "the push payload must be a JSON object such as {\"aps\": {\"alert\": \"Hello\"}}; nothing was sent".into(),
+        });
+    };
+    if !object.get("aps").is_some_and(serde_json::Value::is_object) {
+        return Err(Error::Refused {
+            detail: "the push payload needs an `aps` object, such as {\"aps\": {\"alert\": \"Hello\"}}; nothing was sent".into(),
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::privacy_service;
+    use super::{check_push_payload, privacy_service};
+
+    fn why(payload: &str) -> String {
+        match check_push_payload(payload).unwrap_err() {
+            phonedriver_core::error::Error::Refused { detail } => detail,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_push_payload_must_be_json_with_an_aps_object() {
+        check_push_payload(r#"{"aps":{"alert":{"title":"Hi"},"badge":1},"order":"7"}"#).unwrap();
+        assert!(
+            why("{\"aps\": ").contains("not valid JSON"),
+            "{}",
+            why("{\"aps\": ")
+        );
+        assert!(why("[1]").contains("object"), "{}", why("[1]"));
+        assert!(why(r#"{"alert":"Hi"}"#).contains("`aps`"));
+        assert!(why(r#"{"aps":"Hi"}"#).contains("`aps`"));
+        assert!(why(r#"{"aps":"Hi"}"#).contains("object"));
+    }
 
     #[test]
     fn a_privacy_service_maps_and_notifications_and_camera_do_not() {

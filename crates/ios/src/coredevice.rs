@@ -434,6 +434,13 @@ impl Device for CoreDevice {
         &self.info
     }
 
+    async fn push(&self, _app: &AppId, _payload: &str) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::App,
+            reason: crate::simulator::PHYSICAL_PUSH,
+        })
+    }
+
     /// No tree without the runner: one window and no nodes, so the session reads the screen with OCR.
     async fn tree(&self) -> Result<RawTree> {
         Ok(RawTree {

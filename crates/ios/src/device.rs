@@ -30,7 +30,8 @@ use crate::map;
 use crate::runner::{Client, Runner};
 use crate::simio::{Frames, Seen, SimIo};
 use crate::simulator::{
-    Simulator, privacy_service, shell_args, simctl, simctl_shell, simctl_with_input,
+    PHYSICAL_PUSH, Simulator, check_push_payload, privacy_service, shell_args, simctl,
+    simctl_shell, simctl_with_input,
 };
 use crate::transport::Link;
 
@@ -973,6 +974,18 @@ impl Device for IosDevice {
             let service = privacy_service(name)?;
             simctl(&["privacy", &self.udid, "grant", service, &app.0]).await?;
         }
+        Ok(())
+    }
+
+    async fn push(&self, app: &AppId, payload: &str) -> Result<()> {
+        if !matches!(self.host, Host::Simulator) {
+            return Err(Error::Unsupported {
+                op: Op::App,
+                reason: PHYSICAL_PUSH,
+            });
+        }
+        check_push_payload(payload)?;
+        simctl_with_input(&["push", &self.udid, &app.0, "-"], Some(payload)).await?;
         Ok(())
     }
 

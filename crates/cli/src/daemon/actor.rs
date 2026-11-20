@@ -347,6 +347,12 @@ struct Actor {
     ledger: Arc<Ledger>,
 }
 
+macro_rules! own_app_hint {
+    () => {
+        ". For your own app under test, list its package in PHONEDRIVER_APPS_UNDER_TEST in the environment the daemon starts with (run `phonedriver daemon stop` first if it is running)"
+    };
+}
+
 async fn next_signal(live: &mut Option<Live>) -> Signal {
     let Some(l) = live else {
         return pending().await;
@@ -793,11 +799,11 @@ impl Actor {
             "stop" => Some(AppOp::Stop),
             "clear" => Some(AppOp::ClearData),
             "uninstall" => Some(AppOp::Uninstall),
-            "grant" | "revoke" => None,
+            "grant" | "revoke" | "notify" => None,
             _ => {
                 return Err(Error::Unsupported {
                     op: Op::App,
-                    reason: "the app action is install, stop, clear, uninstall, grant or revoke",
+                    reason: "the app action is install, stop, clear, uninstall, grant, revoke or notify",
                 });
             }
         };
@@ -808,6 +814,18 @@ impl Actor {
         let installed = device.apps().await?;
         let found = find_app(&installed, &query)?.clone();
         let Some(op) = op else {
+            if p.action == "notify" {
+                let payload = p.payload.ok_or(Error::Unsupported {
+                    op: Op::App,
+                    reason: "notify needs the push notification as a JSON `payload`, such as {\"aps\": {\"alert\": \"Hello\"}}",
+                })?;
+                device.push(&found.id, &payload).await?;
+                s.set_last(None);
+                return Ok(json!({
+                    "ok": true,
+                    "summary": format!("sent a push notification to {}", found.name),
+                }));
+            }
             if p.permissions.is_empty() {
                 return Err(Error::Unsupported {
                     op: Op::App,
@@ -817,7 +835,10 @@ impl Actor {
             if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
                 return Err(Error::Unsupported {
                     op: Op::App,
-                    reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not change its permissions",
+                    reason: concat!(
+                        "phonedriver did not install this app on this physical device, or it was installed again since, so it will not change its permissions",
+                        own_app_hint!()
+                    ),
                 });
             }
             let names = p.permissions.join(", ");
@@ -837,7 +858,10 @@ impl Actor {
         {
             return Err(Error::Unsupported {
                 op: Op::App,
-                reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not clear or remove it",
+                reason: concat!(
+                    "phonedriver did not install this app on this physical device, or it was installed again since, so it will not clear or remove it",
+                    own_app_hint!()
+                ),
             });
         }
         device.app_op(op, &found.id).await?;
@@ -1294,6 +1318,9 @@ impl Actor {
 
     /// Whether phonedriver installed this app on this device and nobody has installed it again since.
     async fn installed_by_us(&self, device: &dyn Device, app: &AppId) -> Result<bool, Error> {
+        if self.ledger.is_under_test(&app.0) {
+            return Ok(true);
+        }
         let key = self.ledger_key(device).await?;
         let entries = self
             .ledger
@@ -2431,7 +2458,10 @@ impl Actor {
                     if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
                         return Err(Error::Unsupported {
                             op: Op::Launch,
-                            reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not grant it permissions",
+                            reason: concat!(
+                                "phonedriver did not install this app on this physical device, or it was installed again since, so it will not grant it permissions",
+                                own_app_hint!()
+                            ),
                         });
                     }
                     device.grant(&found.id, &grant).await?;

@@ -24,6 +24,8 @@ I test with Claude Code. I have not run a session in Cursor, Gemini CLI, Zed or 
 }
 ```
 
+To let the agent clear, remove or change the permissions of an app you are developing on a physical Android phone (an app Gradle installed, not phonedriver), add `"PHONEDRIVER_APPS_UNDER_TEST": "com.example.app,com.example.other"` to `env`, and run `phonedriver daemon stop` once if a daemon is running.
+
 The first start downloads the binary once. On Windows, some clients cannot start `npx` directly: use `"command": "cmd"` and `"args": ["/c", "npx", "-y", "phonedriver", "mcp"]`. If you installed phonedriver yourself, use `"command": "phonedriver"` with `"args": ["mcp"]`, or the full path. `PHONEDRIVER_DEVICE` is optional when one device is connected.
 
 ## Cursor

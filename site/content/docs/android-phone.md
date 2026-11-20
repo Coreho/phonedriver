@@ -58,7 +58,7 @@ phonedriver keeps the phone awake while it is in use: for 10 minutes after each 
 
 ## Safety on a real phone
 
-A physical Android device refuses wipes and removing apps phonedriver did not install, unless the command passes `--force`. The [approval guard](/docs/approval-guard/) is on by default, which matters more on a phone with real accounts than on an emulator. Do not hand an agent a phone with a payment app signed in until you have read what the guard does not catch.
+A physical Android device refuses wipes and removing apps phonedriver did not install, unless the command passes `--force`. For an app you are developing, name its package in `PHONEDRIVER_APPS_UNDER_TEST` in the environment the daemon starts with, and `apps clear`, `uninstall`, `grant` and `revoke` work on it ([how](/docs/claude-code/#an-app-you-are-developing)). The [approval guard](/docs/approval-guard/) is on by default, which matters more on a phone with real accounts than on an emulator. Do not hand an agent a phone with a payment app signed in until you have read what the guard does not catch.
 
 ## Questions
 

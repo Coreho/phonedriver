@@ -27,6 +27,7 @@ pub enum Call {
     Launch(AppId),
     Grant(AppId, Vec<String>),
     Revoke(AppId, Vec<String>),
+    Push(AppId, String),
     Setting(SettingOp),
     Logs(AppId, bool),
     RecordStart(std::path::PathBuf),
@@ -455,6 +456,10 @@ impl Device for FakeDevice {
 
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.record(Call::Revoke(app.clone(), permissions.to_vec()))
+    }
+
+    async fn push(&self, app: &AppId, payload: &str) -> Result<()> {
+        self.record(Call::Push(app.clone(), payload.to_string()))
     }
 
     async fn record_start(&self, path: &std::path::Path) -> Result<()> {
