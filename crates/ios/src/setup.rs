@@ -7,6 +7,10 @@ use phonedriver_core::error::{Error, UserAction};
 
 use crate::transport::{self, Attached, Link, lockdown_service};
 
+/// On a Mac, Xcode mounts the developer disk image and builds, signs and starts the runner on a physical device.
+/// Elsewhere phonedriver mounts the image itself and starts a runner the person installed (architecture 7.3).
+pub const XCODE: bool = cfg!(target_os = "macos");
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Status {
     pub developer_mode: bool,
@@ -123,6 +127,40 @@ pub async fn mount_image(udid: &str) -> Result<(), Error> {
                 String::from_utf8_lossy(&out.stderr).trim()
             ),
         })
+    }
+}
+
+/// Mounts the personalized image from `files` without Xcode. idevice asks Apple's signing server for this device's
+/// ticket, the one request to Apple (decision D9), then uploads and mounts the image.
+pub async fn mount_files(device: &Attached, files: &crate::ddi::Files) -> Result<(), Error> {
+    let id = format!("ios:{}", device.udid);
+    let lost = |e| transport::classify(&id, &e);
+    let image = files.read(crate::ddi::IMAGE)?;
+    let trust_cache = files.read(crate::ddi::TRUST_CACHE)?;
+    let manifest = files.read(crate::ddi::MANIFEST)?;
+    let provider = device.provider().await.map_err(lost)?;
+    let provider = provider.as_ref();
+    let chip = transport::unique_chip_id(provider).await.map_err(lost)?;
+    let socket = lockdown_service(provider, ImageMounter::service_name())
+        .await
+        .map_err(lost)?;
+    ImageMounter::new(socket)
+        .mount_personalized(provider, image, trust_cache, &manifest, None, chip)
+        .await
+        .map_err(lost)
+}
+
+/// On a computer without Xcode, mounts the image from the files `phonedriver ios setup` downloaded when it is not
+/// mounted: a restart of the device unmounts it.
+pub async fn mount_cached(device: &Attached, home: &std::path::Path) -> Result<(), Error> {
+    if status(device).await?.image_mounted {
+        return Ok(());
+    }
+    match crate::ddi::cached(home) {
+        Some(files) => mount_files(device, &files).await,
+        None => Err(Error::NeedsUser {
+            action: UserAction::MountDeveloperImage,
+        }),
     }
 }
 

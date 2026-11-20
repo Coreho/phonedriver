@@ -2,6 +2,8 @@
 
 <h3 align="center">Give your AI agent a phone.</h3>
 
+_Last updated: 2026-11-20_
+
 <p align="center"><b>6.9x fewer tokens than mobile-mcp.</b></p>
 
 <p align="center">
@@ -213,12 +215,27 @@ The model can't type plain text into a password field or a one-time code field. 
 | Android phone or tablet | adb and USB debugging |
 | iOS Simulator | a Mac with Xcode |
 | iPhone or iPad | a Mac with Xcode and an Apple Development certificate ([setup](docs/reference.md#iphone-or-ipad)) |
+| iPhone or iPad from Windows (this fork) | Apple Devices, Sideloadly and a free Apple ID ([below](#iphone-from-windows)) |
 
 On Android there is no app to install. phonedriver pushes its helper over adb when it connects. On iOS it builds a small XCTest runner on your Mac. For a real iPhone, plug it in and run `phonedriver ios setup`. It reads the signing team from your certificate, checks the phone, and builds, installs and starts the runner, so there is no team ID to look up. A free Apple ID works; its signature lasts 7 days, and the next command after that signs the runner again by itself.
 
 The cable can come off after setup. For an iPhone, run `phonedriver ios wifi on` and unplug it; it stays in `phonedriver devices` while it shares a Wi-Fi network with the Mac. For an Android phone, `phonedriver pair` or `phonedriver untether` does the same ([Android over Wi-Fi](docs/reference.md#android-over-wi-fi)). When the phone is far away, on a tunnel or a mobile network, phonedriver sends a smaller screen stream and compressed screen trees. On a link shaped to 3G, the median tap on an emulator took 1.4 s, down from 2.8 s.
 
 On Android 13 and later, the agent can work on a hidden second screen, so your own screen stays yours. Set `PHONEDRIVER_DISPLAY=hidden` in the MCP config, or pass `--display hidden` to the CLI. It has been tested on an emulator and on a HONOR X8 (Android 13). The phone has to be unlocked: while it is locked the hidden screen shows the lock screen too, so phonedriver says the phone is locked and leaves it asleep. While the agent works, phonedriver keeps the phone's own screen on, so it does not lock under the agent; `phonedriver release` lets it sleep again. Several agents can share one phone the same way: give each a device id that ends in `+a`, `+b` and so on, and each works on a hidden screen of its own ([how](docs/reference.md#several-agents-on-one-android-phone)). Typing into an app's own fields leaves no trace on your screen. Typing into a web page shows the system's clipboard note, and your clipboard is put back after.
+
+### iPhone from Windows
+
+This fork ([Coreho/phonedriver](https://github.com/Coreho/phonedriver)) drives an iPhone or iPad on iOS 17 or later from Windows, with no Mac. On a Mac, Xcode builds and signs phonedriver's XCTest runner. On Windows:
+
+1. Install **Apple Devices** from the Microsoft Store (or iTunes). Its Apple Mobile Device Service is how Windows reaches the phone on the cable. Plug the phone in, unlock it and tap Trust.
+2. Download [`PhonedriverRunner.ipa`](https://github.com/Coreho/phonedriver/releases/download/runner/PhonedriverRunner.ipa). GitHub's macOS machines build it unsigned from this repository (`.github/workflows/runner-ipa.yml`).
+3. Install it with [Sideloadly](https://sideloadly.io), signed with your Apple ID. A free Apple ID's signature lasts 7 days, and Sideloadly can sign it again for you. phonedriver never sees your Apple ID.
+4. Turn on Settings > Privacy & Security > Developer Mode when the phone asks, and restart it.
+5. Build phonedriver: `cargo build --release -p phonedriver --no-default-features`. The Android helper needs the Android build tools, so leave it out unless you have them.
+6. Run `phonedriver ios setup --download-ddi`. It downloads Xcode 27.2's developer disk image once from [doronz88/DeveloperDiskImage](https://github.com/doronz88/DeveloperDiskImage) at a pinned commit, checks each file's SHA-256, and mounts it. Mounting asks Apple's signing server for your phone's ticket, as Xcode does. With files from a Mac, use `--ddi <folder>` instead. Then it finds the installed runner and starts it.
+7. `claude mcp add phonedriver -- <path>\phonedriver.exe mcp`, then ask Claude to use the phone.
+
+After the phone restarts, the next command mounts the image again from the downloaded files. `phonedriver doctor` shows what is missing. Over Wi-Fi or without the cable this path does not work yet; an iPhone on iOS 27 can also use the no-install CoreDevice tier with `PHONEDRIVER_IOS_TIER=coredevice`.
 
 ## Limits
 
@@ -232,6 +249,8 @@ On Android 13 and later, the agent can work on a hidden second screen, so your o
 **How do I let Claude control my Android phone?** Run `claude mcp add phonedriver -- npx -y phonedriver mcp`, turn on USB debugging, and plug the phone in.
 
 **Does it work with an iPhone?** Yes, from a Mac with Xcode, on the Simulator or on an iPhone or iPad. `phonedriver ios setup` signs the runner with your Apple developer team, and `phonedriver ios wifi on` lets you unplug the cable.
+
+**Can I control an iPhone from Windows?** In this fork, yes: see [iPhone from Windows](#iphone-from-windows). The runner is built on GitHub's macOS machines and you sign it with Sideloadly.
 
 **Why does an iPhone need a Mac, and why does the signing expire?** Apple lets a computer drive an iPhone only through its developer tools: a small test app (the runner) that Xcode builds and signs with your Apple ID. A free Apple ID's signature lasts 7 days and a paid developer account's a year; when it has run out, the next phonedriver command signs the runner again by itself, with the phone attached and unlocked. The Simulator needs no signing. phonedriver never enters a passcode and can't pass Face ID on a real phone, on purpose: unlock it yourself, and it stays awake while the agent works.
 
