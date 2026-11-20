@@ -50,21 +50,23 @@ pub fn manual(what: &str) -> Value {
 }
 
 /// An action about to run, in the form it is kept in: every `@ref` replaced by what finds the same element in a
-/// later run (`lasting`): its id, its text and role, or its centre (`by_position`). A typed secret is not kept at all.
+/// later run (`lasting`): its id, its text and role, or its centre (`by_position`). A typed secret is kept without
+/// its text: `save` names the environment variable a replay reads it from.
 pub struct Kept {
-    action: Option<Action>,
+    action: Action,
     by_position: bool,
+    secret: bool,
 }
 
 impl Kept {
     pub fn of(action: &Action, s: &Session) -> Kept {
-        if matches!(action, Action::Type { secret: true, .. }) {
-            return Kept {
-                action: None,
-                by_position: false,
-            };
-        }
+        let secret = matches!(action, Action::Type { secret: true, .. });
         let mut action = action.clone();
+        if let Action::Type { text, .. } = &mut action
+            && secret
+        {
+            text.clear();
+        }
         let mut by_position = false;
         let mut keep = |t: &mut Target| *t = lasting(t, s, &mut by_position);
         match &mut action {
@@ -84,17 +86,20 @@ impl Kept {
             Action::Launch { .. } | Action::Open { .. } | Action::Press { .. } => {}
         }
         Kept {
-            action: Some(action),
+            action,
             by_position,
+            secret,
         }
     }
 
     /// The step for this action once it has worked. `changed` lets a replay tell a step that did nothing this time.
     pub fn step(self, result: &ActionResult) -> Value {
-        let Some(action) = self.action else {
-            return manual("a secret was typed here; type it with `type --secret`");
-        };
-        let mut step = call("act", json!({"action": action}));
+        let mut step = call("act", json!({"action": self.action}));
+        if self.secret {
+            step["params"]["action"]
+                .as_object_mut()
+                .map(|a| a.remove("text"));
+        }
         step["summary"] = json!(result.summary);
         step["changed"] = json!(result.changed);
         if self.by_position {

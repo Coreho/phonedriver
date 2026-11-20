@@ -21,6 +21,7 @@ use phonedriver_core::device::DisplayMode;
 use phonedriver_core::error::{Category, span};
 use phonedriver_core::render::plural;
 
+use crate::variables;
 use crate::wire::{
     ActionResult, Approval, BatchResult, DeviceEntry, Kind, Observation, ScreenshotResult,
     ShellResult, VERSION,
@@ -436,6 +437,11 @@ pub(crate) enum Verb {
         /// whose text changed. A step with no screenshot there keeps its own. The status bar is left out.
         #[arg(long, value_name = "DIR")]
         screens: Option<PathBuf>,
+        /// A value for `{{name}}` in the file's text, such as `--var user=ada`; repeat it for more. `{{run}}` is a
+        /// short id new in every replay. A variable is not a secret: a secret is read from the environment variable
+        /// the file names (`PHONEDRIVER_SECRET_1`, ...).
+        #[arg(long = "var", value_name = "NAME=VALUE", value_parser = parse_var)]
+        vars: Vec<(String, String)>,
     },
     /// Record the screen to an MP4 file (Android and the iOS Simulator): `record start`, the actions to show, then `record stop`, which
     /// prints the file and, beside it, a `.steps.jsonl` file of the actions done meanwhile with their times.
@@ -1124,7 +1130,8 @@ pub(crate) async fn execute_with(
             let cannot =
                 |e: std::io::Error| Failure::Local(format!("cannot write {}: {e}", file.display()));
             let r = client.call("journal", with(json!({"keep": true}))).await?;
-            let steps = r["steps"].as_array().cloned().unwrap_or_default();
+            let mut steps = r["steps"].as_array().cloned().unwrap_or_default();
+            name_secrets(&mut steps);
             if !steps.is_empty() {
                 let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
                 let mut beside = file.clone().into_os_string();
@@ -1155,6 +1162,7 @@ pub(crate) async fn execute_with(
             file,
             from,
             screens,
+            vars,
         } => {
             let text = std::fs::read_to_string(&file)
                 .map_err(|e| Failure::Local(format!("cannot read {}: {e}", file.display())))?;
@@ -1172,11 +1180,24 @@ pub(crate) async fn execute_with(
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let mut values: std::collections::BTreeMap<String, String> = vars.into_iter().collect();
+            if values.contains_key(variables::RUN) {
+                return Err(Failure::Local(format!(
+                    "`{}` is filled in by phonedriver, with a new id for each replay; choose another name",
+                    variables::RUN
+                )));
+            }
+            let id = variables::run_id();
+            values.insert(variables::RUN.into(), id.clone());
+            let name = file.display().to_string();
+            let (steps, used) = variables::fill(&steps, from, &values)
+                .map_err(|missing| missing_variables(&name, &missing))?;
             let run = Replay {
-                file: file.display().to_string(),
+                file: name,
                 steps,
                 from,
                 screens,
+                run: used.contains(variables::RUN).then_some(id),
             };
             run.play(client, &act, &with, g.json).await
         }
@@ -1815,6 +1836,119 @@ pub(crate) const EMPTY_SCREEN: &str = "hint: this screen gives no element list; 
 /// in every replay.
 const SAVED_STEP_CHARS: usize = 60;
 
+/// `--var name=value`.
+fn parse_var(text: &str) -> Result<(String, String), String> {
+    match text.split_once('=') {
+        Some((name, value)) if variables::is_name(name) => Ok((name.into(), value.into())),
+        _ => Err("expected NAME=VALUE, where NAME has letters, digits, `_`, `-` or `.`".into()),
+    }
+}
+
+/// A file's `{{name}}`s that no `--var` gave, refused before any step runs.
+fn missing_variables(file: &str, missing: &[String]) -> Failure {
+    let Failure::Rpc(mut error) = refused(&format!(
+        "{file} needs {} nobody gave: {}",
+        plural(missing.len() as u64, "variable"),
+        missing.join(", ")
+    )) else {
+        unreachable!()
+    };
+    let give: Vec<String> = missing.iter().map(|n| format!("--var {n}=VALUE")).collect();
+    if let Some(data) = error.data.as_object_mut() {
+        data.insert("hint".into(), json!(format!(
+            "Add {} (MCP: vars). {{{{{}}}}} is filled in by phonedriver; variables are not secrets, so they may show in replies.",
+            give.join(" "),
+            variables::RUN
+        )));
+    }
+    Failure::Rpc(error)
+}
+
+/// Why a saved secret cannot be typed, and what to do about it.
+enum NoSecret {
+    NoVariable,
+    NotAllowed(String),
+    Unset(String),
+}
+
+impl NoSecret {
+    fn message(&self) -> String {
+        match self {
+            NoSecret::NoVariable => {
+                "this step types a secret but names no environment variable".into()
+            }
+            NoSecret::NotAllowed(name) => format!(
+                "{name} is not a variable a replay may type: its name must begin {}",
+                variables::SECRET_PREFIX
+            ),
+            NoSecret::Unset(name) => format!("{name} is not set"),
+        }
+    }
+}
+
+/// The action of a saved step with the secret it names filled in from this process's environment. A `type` that
+/// is not a secret is returned as it is.
+fn with_secret(action: &Value) -> Result<Value, NoSecret> {
+    let mut action = action.clone();
+    if action["kind"] != "type" || action["secret"] != true {
+        return Ok(action);
+    }
+    let name = action["secret_env"]
+        .as_str()
+        .ok_or(NoSecret::NoVariable)?
+        .to_string();
+    if !name.starts_with(variables::SECRET_PREFIX) {
+        return Err(NoSecret::NotAllowed(name));
+    }
+    let text = std::env::var(&name)
+        .ok()
+        .filter(|t| !t.is_empty())
+        .ok_or(NoSecret::Unset(name))?;
+    if let Some(fields) = action.as_object_mut() {
+        fields.remove("secret_env");
+        fields.insert("text".into(), json!(text));
+    }
+    Ok(action)
+}
+
+fn secret_hint(why: &NoSecret, n: usize, total: usize) -> String {
+    let first = match why {
+        NoSecret::NoVariable => format!(
+            "Add \"secret_env\": \"{}1\" to the step and set it",
+            variables::SECRET_PREFIX
+        ),
+        NoSecret::NotAllowed(_) => format!(
+            "Rename the variable in the file to start with {} and set it",
+            variables::SECRET_PREFIX
+        ),
+        NoSecret::Unset(name) => format!("Set {name} and replay again"),
+    };
+    let rest = if n < total {
+        format!(
+            "then replay the same file from step {} for the {} left.",
+            n + 1,
+            plural((total - n) as u64, "step")
+        )
+    } else {
+        "it is the last step.".into()
+    };
+    let sep = if n < total { "," } else { ";" };
+    format!("{first}, or type the secret yourself with `type --secret`{sep} {rest}")
+}
+
+/// Gives each typed secret of the steps about to be saved the name of the environment variable a replay reads it
+/// from: `PHONEDRIVER_SECRET_1`, `_2`, ... in order. A person may rename them in the file.
+fn name_secrets(steps: &mut [Value]) {
+    let mut n = 0;
+    for step in steps {
+        let action = &mut step["params"]["action"];
+        if action["kind"] == "type" && action["secret"] == true && action["secret_env"].is_null() {
+            n += 1;
+            action["secret_env"] = json!(format!("{}{n}", variables::SECRET_PREFIX));
+        }
+    }
+}
+
 /// `save`: the steps that went into the file, one line each, and how many of them a replay cannot be sure of.
 pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
     if steps.is_empty() {
@@ -1841,6 +1975,16 @@ pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
             "\n{by_position} of them tap a position, because no text singles out the element: they hold only while the layout does"
         ));
     }
+    let names: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s["params"]["action"]["secret_env"].as_str())
+        .collect();
+    if !names.is_empty() {
+        out.push_str(&format!(
+            "\nthe secret text is not in the file: set {} before replaying (rename a variable in the file if you like)",
+            names.join(", ")
+        ));
+    }
     let manual = count("manual");
     if manual > 0 {
         out.push_str(&format!(
@@ -1862,6 +2006,7 @@ pub(crate) struct Replay {
     pub steps: Vec<Value>,
     pub from: usize,
     pub screens: Option<PathBuf>,
+    pub run: Option<String>,
 }
 
 /// The screen after a replayed step against the screenshot kept for it.
@@ -1895,10 +2040,11 @@ impl Replay {
                     .find_map(|f| action[*f].as_str())
                     .map(|v| format!(" {v}"))
                     .unwrap_or_default();
-                let typed = action["text"]
-                    .as_str()
-                    .map(|t| format!(" \"{t}\""))
-                    .unwrap_or_default();
+                let typed = match (action["secret_env"].as_str(), action["text"].as_str()) {
+                    (Some(name), _) => format!(" secret ${name}"),
+                    (None, Some(t)) => format!(" \"{t}\""),
+                    (None, None) => String::new(),
+                };
                 let on = ["target", "into", "until", "from", "at"]
                     .iter()
                     .map(|f| target(&action[*f]))
@@ -1944,13 +2090,16 @@ impl Replay {
         let mut done = Vec::new();
         let (mut kept, mut same) = (0u64, 0u64);
         for (i, step) in self.steps.iter().enumerate().skip(self.from - 1) {
+            let mut hint = None;
             let outcome = match (step["manual"].as_str(), step["method"].as_str()) {
                 (Some(what), _) => Err(refused(what)),
-                (None, Some("act")) => {
-                    client
-                        .call("act", act(step["params"]["action"].clone()))
-                        .await
-                }
+                (None, Some("act")) => match with_secret(&step["params"]["action"]) {
+                    Ok(action) => client.call("act", act(action)).await,
+                    Err(why) => {
+                        hint = Some(secret_hint(&why, i + 1, total));
+                        Err(refused(&why.message()))
+                    }
+                },
                 (None, Some(method @ ("wait" | "shell" | "setting" | "app"))) => {
                     client.call(method, with(step["params"].clone())).await
                 }
@@ -1976,7 +2125,7 @@ impl Replay {
                 ),
                 Err(failure) => {
                     return Err(self
-                        .stopped(client, with, i + 1, &done, failure, None)
+                        .stopped(client, with, i + 1, &done, failure, hint)
                         .await);
                 }
             };
@@ -2004,13 +2153,21 @@ impl Replay {
         let ms = started.elapsed().as_millis() as u64;
         if json {
             let mut out = json!({"ok": true, "steps": ran, "ms": ms});
+            if let Some(run) = &self.run {
+                out["run"] = json!(run);
+            }
             if self.screens.is_some() {
                 out["screens"] = json!({"same": same, "kept": kept});
             }
             return Ok(out.to_string());
         }
+        let run = self
+            .run
+            .as_ref()
+            .map(|id| format!(" (run {id})"))
+            .unwrap_or_default();
         let mut out = format!(
-            "replayed {} in {:.1} s\n{}",
+            "replayed {} in {:.1} s{run}\n{}",
             plural(ran, "step"),
             ms as f64 / 1000.0,
             done.join("\n")

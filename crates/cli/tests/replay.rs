@@ -151,7 +151,7 @@ async fn an_element_its_text_does_not_single_out_is_saved_by_position_and_marked
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_typed_secret_is_a_step_for_a_person_and_its_text_is_not_kept() {
+async fn a_typed_secret_is_a_step_with_its_text_left_out() {
     let (d, _fake, _home) = setup(vec![field(""), field(""), field("hunter2")]);
     ok(&d, "snapshot", json!({})).await;
     ok(
@@ -163,11 +163,12 @@ async fn a_typed_secret_is_a_step_for_a_person_and_its_text_is_not_kept() {
     let saved = ok(&d, "journal", json!({})).await;
     assert!(!saved.to_string().contains("hunter2"), "{saved}");
     let step = &saved["steps"][0];
-    assert!(step.get("method").is_none(), "{step}");
-    assert!(
-        step["manual"].as_str().unwrap().contains("secret"),
-        "{step}"
-    );
+    assert_eq!(step["method"], "act", "{step}");
+    let action = &step["params"]["action"];
+    assert_eq!(action["kind"], "type", "{step}");
+    assert_eq!(action["secret"], true, "{step}");
+    assert!(action.get("text").is_none(), "{step}");
+    assert_eq!(action["into"]["text"], "Field", "{step}");
 }
 
 #[tokio::test(start_paused = true)]

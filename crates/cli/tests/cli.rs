@@ -633,3 +633,261 @@ async fn snapshot_audit_adds_the_screens_accessibility_problems() {
         "{out}"
     );
 }
+
+async fn cli_with(
+    home: &tempfile::TempDir,
+    socket: &PathBuf,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> std::process::Output {
+    let mut c = Command::cargo_bin("phonedriver").unwrap();
+    c.env("PHONEDRIVER_HOME", home.path())
+        .env("PHONEDRIVER_SOCKET", socket)
+        .env_remove("PHONEDRIVER_SESSION")
+        .env_remove("PHONEDRIVER_DEVICE")
+        .env_remove("PHONEDRIVER_SECRET")
+        .envs(env.iter().copied())
+        .args(args);
+    tokio::task::spawn_blocking(move || c.output().unwrap())
+        .await
+        .unwrap()
+}
+
+fn everything_under(dir: &std::path::Path) -> String {
+    let mut all = String::new();
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            all += &everything_under(&path);
+        } else if let Ok(text) = std::fs::read_to_string(&path) {
+            all += &text;
+        }
+    }
+    all
+}
+
+fn typing_trees(value: &str) -> Vec<phonedriver_core::raw::RawTree> {
+    let mut trees = vec![fakes::field_tree("", false), fakes::field_tree("", false)];
+    trees.extend(std::iter::repeat_n(fakes::field_tree(value, false), 20));
+    trees
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_saved_secret_names_a_variable_and_a_replay_types_what_the_environment_holds() {
+    let (home, socket) = fake_daemon(typing_trees("hunter2-test")).await;
+    cli(&home, &socket, &["snapshot"]).await;
+    let typed = cli_with(
+        &home,
+        &socket,
+        &["type", "--secret", "--into", "Field"],
+        &[("PHONEDRIVER_SECRET", "hunter2-test")],
+    )
+    .await;
+    assert!(typed.status.success(), "{typed:?}");
+    let steps = home.path().join("login.steps");
+    let file = steps.to_str().unwrap();
+    let saved = cli(&home, &socket, &["save", file]).await;
+    assert!(
+        saved.contains("1. type secret $PHONEDRIVER_SECRET_1 into \"Field\""),
+        "{saved}"
+    );
+    assert!(
+        saved.contains("set PHONEDRIVER_SECRET_1 before replaying"),
+        "{saved}"
+    );
+    let kept = std::fs::read_to_string(&steps).unwrap();
+    assert!(
+        kept.contains(r#""secret_env":"PHONEDRIVER_SECRET_1""#),
+        "{kept}"
+    );
+    assert!(!kept.contains("hunter2-test"), "{kept}");
+
+    let (home, socket) = fake_daemon(typing_trees("hunter3-test")).await;
+    let replayed = cli_with(
+        &home,
+        &socket,
+        &["replay", file],
+        &[("PHONEDRIVER_SECRET_1", "hunter3-test")],
+    )
+    .await;
+    let shown = format!(
+        "{}{}",
+        String::from_utf8_lossy(&replayed.stdout),
+        String::from_utf8_lossy(&replayed.stderr)
+    );
+    assert!(replayed.status.success(), "{shown}");
+    assert!(shown.starts_with("replayed 1 step in "), "{shown}");
+    assert!(!shown.contains("hunter3-test"), "{shown}");
+    let traces = everything_under(&home.path().join("traces"));
+    assert!(traces.contains("\"secret_len\":12"), "{traces}");
+    assert!(!traces.contains("hunter3-test"), "{traces}");
+    assert!(!traces.contains("hunter2-test"), "{traces}");
+    assert!(!std::fs::read_to_string(&steps).unwrap().contains("hunter3"));
+    assert!(!everything_under(home.path()).contains("hunter3-test"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_replay_stops_at_a_secret_whose_variable_is_not_set_and_names_it() {
+    let (home, socket) = fake_daemon(typing_trees("x")).await;
+    let steps = home.path().join("login.steps");
+    let step = json!({"method": "act", "params": {"action": {"kind": "type", "secret": true, "secret_env": "PHONEDRIVER_SECRET_APP_PASSWORD", "into": {"text": "Field"}, "submit": false, "append": false}}});
+    let tap = json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "Field"}}}});
+    std::fs::write(&steps, format!("{tap}\n{step}\n{tap}\n")).unwrap();
+    let file = steps.to_str().unwrap();
+    let out = cli_with(&home, &socket, &["replay", file], &[]).await;
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(!out.status.success(), "{err}");
+    assert!(
+        err.contains("step 2 of 3 (type secret $PHONEDRIVER_SECRET_APP_PASSWORD into \"Field\") failed: PHONEDRIVER_SECRET_APP_PASSWORD is not set"),
+        "{err}"
+    );
+    assert!(err.contains("\n1. tapped @e1 \"Field\""), "{err}");
+    assert!(
+        err.contains("hint: Set PHONEDRIVER_SECRET_APP_PASSWORD and replay again, or type the secret yourself with `type --secret`, then replay the same file from step 3 for the 1 step left."),
+        "{err}"
+    );
+    let empty = cli_with(
+        &home,
+        &socket,
+        &["replay", file],
+        &[("PHONEDRIVER_SECRET_APP_PASSWORD", "")],
+    )
+    .await;
+    assert!(String::from_utf8_lossy(&empty.stderr).contains("is not set"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_secret_may_only_come_from_a_variable_that_begins_phonedriver_secret() {
+    let (home, socket) = fake_daemon(typing_trees("x")).await;
+    let steps = home.path().join("login.steps");
+    let step = json!({"method": "act", "params": {"action": {"kind": "type", "secret": true, "secret_env": "HOME", "into": {"text": "Field"}}}});
+    std::fs::write(&steps, format!("{step}\n")).unwrap();
+    let out = cli_with(
+        &home,
+        &socket,
+        &["replay", steps.to_str().unwrap()],
+        &[("HOME", "/somewhere/private")],
+    )
+    .await;
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(!out.status.success(), "{err}");
+    assert!(err.contains("must begin PHONEDRIVER_SECRET_"), "{err}");
+    assert!(!err.contains("/somewhere/private"), "{err}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_old_secret_step_still_stops_the_replay_for_a_person() {
+    let (home, socket) = fake_daemon(typing_trees("x")).await;
+    let steps = home.path().join("old.steps");
+    let old = json!({"manual": "a secret was typed here; type it with `type --secret`"});
+    std::fs::write(&steps, format!("{old}\n")).unwrap();
+    let out = cli_with(
+        &home,
+        &socket,
+        &["replay", steps.to_str().unwrap()],
+        &[("PHONEDRIVER_SECRET_1", "hunter2-test")],
+    )
+    .await;
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(!out.status.success(), "{err}");
+    assert!(
+        err.contains("step 1 of 1 (a secret was typed here; type it with `type --secret`) failed"),
+        "{err}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn var_fills_double_brace_names_and_run_is_new_in_every_replay() {
+    let (home, socket) = fake_daemon(vec![fakes::tree(&["One", "Two"])]).await;
+    let steps = home.path().join("signup.steps");
+    let tap = |text: &str| json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": text}}}});
+    std::fs::write(
+        &steps,
+        format!("{}\n{}\n", tap("{{which}}"), tap("test+{{run}}@{{domain}}")),
+    )
+    .unwrap();
+    let file = steps.to_str().unwrap();
+    let mut runs = Vec::new();
+    for _ in 0..2 {
+        let out = cli_with(
+            &home,
+            &socket,
+            &[
+                "replay",
+                file,
+                "--var",
+                "domain=example.com",
+                "--var",
+                "which=Two",
+            ],
+            &[],
+        )
+        .await;
+        let err = String::from_utf8_lossy(&out.stderr).to_string();
+        assert!(!out.status.success(), "{err}");
+        assert!(
+            err.contains("step 2 of 2 (tap \"test+") && err.contains("@example.com\") failed"),
+            "{err}"
+        );
+        assert!(err.contains("\n1. tapped @e2 \"Two\""), "{err}");
+        let run = err
+            .split("test+")
+            .nth(1)
+            .unwrap()
+            .split('@')
+            .next()
+            .unwrap();
+        assert!(
+            run.len() >= 6 && run.chars().all(|c| c.is_ascii_alphanumeric()),
+            "{run}"
+        );
+        runs.push(run.to_string());
+    }
+    assert_ne!(runs[0], runs[1]);
+    assert!(
+        std::fs::read_to_string(&steps)
+            .unwrap()
+            .contains("{{run}}@{{domain}}")
+    );
+
+    let typed = home.path().join("typed.steps");
+    let step = json!({"method": "act", "params": {"action": {"kind": "type", "text": "u-{{run}}", "into": {"text": "Field"}}}});
+    std::fs::write(&typed, format!("{step}\n")).unwrap();
+    let (home, socket) = fake_daemon(typing_trees("u")).await;
+    let out = cli(&home, &socket, &["replay", typed.to_str().unwrap()]).await;
+    let first = out.lines().next().unwrap();
+    assert!(
+        first.starts_with("replayed 1 step in ")
+            && first.ends_with(')')
+            && first.contains(" (run "),
+        "{out}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_variable_nobody_gave_is_refused_before_the_first_step_and_every_one_is_named() {
+    let (home, socket) = fake_daemon(typing_trees("x")).await;
+    let steps = home.path().join("signup.steps");
+    let tap = json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "Field"}}}});
+    let typed = json!({"method": "act", "params": {"action": {"kind": "type", "text": "{{user}}", "into": {"text": "Field"}}}});
+    let open = json!({"method": "act", "params": {"action": {"kind": "open", "url": "https://{{host}}/{{user}}/{{run}}"}}});
+    let shell = json!({"method": "shell", "params": {"command": "echo {{token}}"}});
+    std::fs::write(&steps, format!("{tap}\n{typed}\n{open}\n{shell}\n")).unwrap();
+    let file = steps.to_str().unwrap();
+    let out = cli_with(&home, &socket, &["replay", file, "--var", "token=t"], &[]).await;
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(!out.status.success(), "{err}");
+    assert!(
+        err.starts_with(&format!(
+            "error: {file} needs 2 variables nobody gave: host, user\n"
+        )),
+        "{err}"
+    );
+    assert!(
+        err.contains("hint: Add --var host=VALUE --var user=VALUE (MCP: vars). {{run}} is filled in by phonedriver; variables are not secrets, so they may show in replies."),
+        "{err}"
+    );
+    assert!(!err.contains("tapped"), "{err}");
+    let bad = cli_with(&home, &socket, &["replay", file, "--var", "run=1"], &[]).await;
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("`run` is filled in by phonedriver"));
+}

@@ -1420,3 +1420,28 @@ async fn devices_use_sends_the_calls_that_follow_to_that_device() {
     let r = rig.call("snapshot", json!({})).await;
     assert!(texts(&r).join("\n").contains("First"), "{r:?}");
 }
+
+#[tokio::test]
+async fn replay_takes_vars_and_refuses_a_file_whose_variables_are_not_all_given() {
+    let rig = rig(vec![tree(&["One", "Two"])]).await;
+    let file = rig.home.path().join("vars.steps");
+    let path = file.to_str().unwrap();
+    let tap = json!({"method": "act", "params": {"action": {"kind": "tap", "target": {"text": "{{which}}"}}}});
+    std::fs::write(&file, format!("{tap}\n")).unwrap();
+
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_eq!(r.is_error, Some(true), "{text}");
+    assert!(
+        text.contains("needs 1 variable nobody gave: which"),
+        "{text}"
+    );
+    assert!(text.contains("Add --var which=VALUE"), "{text}");
+
+    let r = rig
+        .call("replay", json!({"file": path, "vars": {"which": "Two"}}))
+        .await;
+    let text = texts(&r).join("\n");
+    assert_ne!(r.is_error, Some(true), "{text}");
+    assert!(text.contains("1. tapped @e2 \"Two\""), "{text}");
+}
