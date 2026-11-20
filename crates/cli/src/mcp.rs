@@ -88,7 +88,7 @@ struct AppsArgs {
     action: Option<String>,
     app: Option<String>,
     permissions: Option<Vec<String>>,
-    /// For `notify`: the push notification as JSON text, such as `{"aps":{"alert":"Hi"}}`.
+    /// For `notify`: JSON, such as `{"aps":{"alert":"Hi"}}`.
     payload: Option<String>,
 }
 
@@ -153,8 +153,7 @@ struct ReplayArgs {
     save: Option<bool>,
     /// Start at this step.
     from: Option<u32>,
-    /// Values for `{{name}}` in the file's text. Not secrets: a secret step reads the environment variable its
-    /// line names, from the MCP server's environment.
+    /// Values for `{{name}}`. Not for secrets.
     vars: Option<std::collections::BTreeMap<String, String>>,
 }
 
@@ -325,11 +324,11 @@ struct LaunchArgs {
 struct WaitArgs {
     device: Option<String>,
     condition: Option<String>,
-    /// `up` or `down`: wait for a VPN network to come up or go away.
+    /// `up` or `down`.
     vpn: Option<String>,
-    /// Wait for a log line written from now on with this text (`A|B` for either).
+    /// Text of a log line written from now on.
     log: Option<String>,
-    /// With `log`: only this app's lines.
+    /// With `log`: this app's lines only.
     app: Option<String>,
     /// Default 5000.
     timeout_ms: Option<u64>,
@@ -1281,7 +1280,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "The device's networks: Wi-Fi, cellular, VPN (its app and the user ids it carries), which is the default, DNS, always-on VPN and lockdown. Fields the platform did not give are named. Android.",
+        description = "The networks: Wi-Fi, cellular, VPN (its app and user ids), the default, DNS, always-on VPN, lockdown. Android.",
         annotations(
             title = "Read the networks",
             read_only_hint = true,
@@ -1364,7 +1363,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`), or notify (send the app a push notification, JSON in `payload`; iOS Simulator only).",
+        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`), or notify (push `payload`; iOS Simulator).",
         annotations(
             title = "Apps",
             read_only_hint = false,
