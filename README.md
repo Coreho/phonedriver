@@ -234,8 +234,11 @@ This fork ([Coreho/phonedriver](https://github.com/Coreho/phonedriver)) drives a
 5. Build phonedriver: `cargo build --release -p phonedriver --no-default-features`. The Android helper needs the Android build tools, so leave it out unless you have them.
 6. Run `phonedriver ios setup --download-ddi`. It downloads Xcode 27.2's developer disk image once from [doronz88/DeveloperDiskImage](https://github.com/doronz88/DeveloperDiskImage) at a pinned commit, checks each file's SHA-256, and mounts it. Mounting asks Apple's signing server for your phone's ticket, as Xcode does. With files from a Mac, use `--ddi <folder>` instead. Then it finds the installed runner and starts it.
 7. `claude mcp add phonedriver -- <path>\phonedriver.exe mcp`, then ask Claude to use the phone.
+8. Optional, to unplug the cable: with the phone still plugged in and unlocked, run `phonedriver ios wifi on`. It also pairs this PC with the phone for Wi-Fi, the way Xcode's "Connect via network" does, and nothing shows on the phone. Unplug it. The phone stays in `phonedriver devices` while both are on the same network and the phone is awake. `phonedriver ios wifi off` undoes it and deletes the pairing record.
 
-Tested on an iPhone 16e (iPhone17,5) on iOS 26.5 from Windows 11: setup, `snapshot`, `screenshot`, `tap` and `press back` all work. After the phone restarts, the next command mounts the image again from the downloaded files. `phonedriver doctor` shows what is missing. Over Wi-Fi or without the cable this path does not work yet; an iPhone on iOS 27 can also use the no-install CoreDevice tier with `PHONEDRIVER_IOS_TIER=coredevice`.
+Tested on an iPhone 16e (iPhone17,5) on iOS 26.5 from Windows 11. On the cable: setup, `snapshot`, `screenshot`, `tap` and `press back` all work. Over Wi-Fi with the cable out: `doctor`, `snapshot` (about 0.35 s once the runner runs; the first one, which starts it, took 10.7 s), `screenshot`, `apps`, `launch`, `tap` and `press back` all work. After the phone restarts, the next command mounts the image again from the downloaded files. Over Wi-Fi that remount has not been tried yet. `phonedriver doctor` shows what is missing. An iPhone on iOS 27 can also use the no-install CoreDevice tier with `PHONEDRIVER_IOS_TIER=coredevice` (cable only).
+
+Wi-Fi from Windows uses a small addition to idevice, the library phonedriver talks to the phone with: starting the runner through the Wi-Fi tunnel. Until idevice has it, phonedriver builds against [Coreho/idevice](https://github.com/Coreho/idevice/tree/xctest-over-rsd) at a fixed commit.
 
 ## Limits
 
@@ -250,7 +253,7 @@ Tested on an iPhone 16e (iPhone17,5) on iOS 26.5 from Windows 11: setup, `snapsh
 
 **Does it work with an iPhone?** Yes, from a Mac with Xcode, on the Simulator or on an iPhone or iPad. `phonedriver ios setup` signs the runner with your Apple developer team, and `phonedriver ios wifi on` lets you unplug the cable.
 
-**Can I control an iPhone from Windows?** In this fork, yes: see [iPhone from Windows](#iphone-from-windows). The runner is built on GitHub's macOS machines and you sign it with Sideloadly.
+**Can I control an iPhone from Windows?** In this fork, yes, on the cable or over Wi-Fi: see [iPhone from Windows](#iphone-from-windows). The runner is built on GitHub's macOS machines and you sign it with Sideloadly.
 
 **Why does an iPhone need a Mac, and why does the signing expire?** Apple lets a computer drive an iPhone only through its developer tools: a small test app (the runner) that Xcode builds and signs with your Apple ID. A free Apple ID's signature lasts 7 days and a paid developer account's a year; when it has run out, the next phonedriver command signs the runner again by itself, with the phone attached and unlocked. The Simulator needs no signing. phonedriver never enters a passcode and can't pass Face ID on a real phone, on purpose: unlock it yourself, and it stays awake while the agent works.
 
