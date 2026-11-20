@@ -44,6 +44,9 @@ jobs:
           # image, never a mix of that version and this Xcode's. Appium leaves the same folder out of its unsigned
           # WebDriverAgent for devices (appium/WebDriverAgent Scripts/ci/build-real.sh).
           rm -rf "$app/Frameworks"
+          # build-for-testing leaves the test bundle's debug symbols in PlugIns, where the device expects only plug-ins.
+          find "$app" -name '*.dSYM' -prune -exec rm -rf {} +
+          test -z "$(find "$app" -name '*.dSYM')"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/PhonedriverRunner.ipa" Payload)
