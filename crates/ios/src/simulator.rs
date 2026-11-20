@@ -513,37 +513,26 @@ mod tests {
     #[test]
     fn a_command_runs_one_program_by_its_path_in_the_simulators_system() {
         let root = system(false);
-        let r = root.path().display();
+        let args = shell_args("U", "defaults read -g 'Apple Locale'", root.path()).unwrap();
+        assert_eq!(args[..2], ["spawn", "U"]);
         assert_eq!(
-            shell_args("U", "defaults read -g 'Apple Locale'", root.path()).unwrap(),
-            [
-                "spawn".to_string(),
-                "U".into(),
-                format!("{r}/usr/bin/defaults"),
-                "read".into(),
-                "-g".into(),
-                "Apple Locale".into()
-            ]
+            std::path::Path::new(&args[2]),
+            root.path().join("usr/bin/defaults")
         );
+        assert_eq!(args[3..], ["read", "-g", "Apple Locale"]);
         assert_eq!(
-            shell_args("U", "/bin/df -h", root.path()).unwrap()[2],
-            format!("{r}/bin/df")
+            std::path::Path::new(&shell_args("U", "/bin/df -h", root.path()).unwrap()[2]),
+            root.path().join("bin/df")
         );
     }
 
     #[test]
     fn a_system_with_a_shell_runs_the_command_in_it() {
         let root = system(true);
-        assert_eq!(
-            shell_args("U", "defaults read x | head -1", root.path()).unwrap(),
-            [
-                "spawn".to_string(),
-                "U".into(),
-                format!("{}/bin/sh", root.path().display()),
-                "-c".into(),
-                "defaults read x | head -1".into()
-            ]
-        );
+        let args = shell_args("U", "defaults read x | head -1", root.path()).unwrap();
+        assert_eq!(args[..2], ["spawn", "U"]);
+        assert_eq!(std::path::Path::new(&args[2]), root.path().join("bin/sh"));
+        assert_eq!(args[3..], ["-c", "defaults read x | head -1"]);
     }
 
     #[test]
