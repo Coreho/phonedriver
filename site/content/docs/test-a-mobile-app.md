@@ -73,7 +73,7 @@ While the agent works, `phonedriver record start` and `record stop` save a video
 
 ## Permissions, crashes and the screen
 
-`phonedriver apps grant <app> camera` and `apps revoke <app> location` change a permission without opening the app. On Android an action during which the app crashed says so in its reply, with the exception and the line that threw it, and `phonedriver logs` prints the app's last lines. `press landscape` and `press portrait` turn the screen, and on an emulator or a Simulator `press fingerprint` and `press wrong-fingerprint` answer a fingerprint or Face ID prompt.
+`phonedriver apps grant <app> camera` and `apps revoke <app> location` change a permission without opening the app. `phonedriver apps notify <app> '{"aps":{"alert":"Hi"}}'` (or `--file payload.json`) sends the app a push notification, so you can test what it does with one. It works on the iOS Simulator, which delivers it the way Apple's push service would; the app must have asked for notification permission, and a payload without an `aps` object is refused. A physical iPhone and an Android phone cannot be sent one this way, and the reply says why. On Android an action during which the app crashed says so in its reply, with the exception and the line that threw it, and `phonedriver logs` prints the app's last lines. `press landscape` and `press portrait` turn the screen, and on an emulator or a Simulator `press fingerprint` and `press wrong-fingerprint` answer a fingerprint or Face ID prompt.
 
 ## Accessibility
 

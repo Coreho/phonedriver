@@ -5401,6 +5401,43 @@ async fn apps_grant_and_revoke_change_an_apps_permissions_without_launching_it()
 }
 
 #[tokio::test(start_paused = true)]
+async fn apps_notify_hands_the_payload_to_the_device_and_says_which_app_got_it() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let payload = r#"{"aps":{"alert":"Hi"}}"#;
+    let r = ok(
+        &d,
+        "default",
+        "app",
+        json!({"action": "notify", "app": "Settings", "payload": payload}),
+    )
+    .await;
+    assert_eq!(r["summary"], "sent a push notification to Settings");
+    assert_eq!(
+        fake.calls(),
+        vec![Call::Push(
+            AppId("com.android.settings".into()),
+            payload.into()
+        )]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn apps_notify_without_a_payload_says_what_it_needs() {
+    let (source, fake) = installed();
+    let (d, _home) = daemon(source);
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "notify", "app": "Settings"}),
+    )
+    .await;
+    assert!(e.message.contains("`payload`"), "{}", e.message);
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+}
+
+#[tokio::test(start_paused = true)]
 async fn apps_grant_without_permissions_says_what_it_needs() {
     let (source, fake) = installed();
     let (d, _home) = daemon(source);

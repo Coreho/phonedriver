@@ -357,6 +357,14 @@ pub trait Device: Send + Sync {
             reason: "this device cannot revoke permissions",
         })
     }
+    /// Delivers a push notification with this JSON `payload` to an installed app, as the platform's push service
+    /// would, so the app's handling of it can be tested.
+    async fn push(&self, _app: &AppId, _payload: &str) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::App,
+            reason: "this device cannot be sent a push notification to test an app with",
+        })
+    }
     /// Starts writing the screen's video to an MP4 file at `path`, from the picture now on screen.
     async fn record_start(&self, _path: &std::path::Path) -> Result<()> {
         Err(Error::Unsupported {

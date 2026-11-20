@@ -417,6 +417,13 @@ impl Device for AndroidDevice {
         self.pm_permissions("grant", app, permissions).await
     }
 
+    async fn push(&self, _app: &AppId, _payload: &str) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::App,
+            reason: "an Android app's push messages reach it through Google Play services, which only that service may send, and the shell cannot stand in for it; `cmd notification post` can show a notification, but from the shell's package and not from the app, so it does not test the app. Send the push from the Firebase console or its HTTP API, or call a receiver your debug build exposes with `shell`",
+        })
+    }
+
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.pm_permissions("revoke", app, permissions).await
     }

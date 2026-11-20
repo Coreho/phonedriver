@@ -15,7 +15,7 @@ Change a setting, send an intent or press a key without tapping through screens.
 - `shell` for everything else, and where `setting` answers unsupported (older Android, the Simulator). One call returns the exit code, the output and what changed on screen.
 - Android: `cmd uimode night yes`, `settings put system screen_brightness 20`, `am start -a android.intent.action.VIEW -d <url>`, `input keyevent 3`, `dumpsys window | grep mCurrentFocus`. Jank: `dumpsys gfxinfo <package> reset`, act, then `dumpsys gfxinfo <package>` with grep `Janky|percentile`.
 - Android emulator: `emu geo fix <lon> <lat>` (a location), `emu sms send <number> <text>`, `emu power capacity 15` go to its console.
-- iOS Simulator: `simctl ui appearance dark`, `simctl openurl <url>`, `simctl privacy grant photos <bundle id>`, `simctl location set <lat>,<lon>`, `simctl push <bundle id> <payload.json>` (a push notification).
+- iOS Simulator: `simctl ui appearance dark`, `simctl openurl <url>`, `simctl privacy grant photos <bundle id>`, `simctl location set <lat>,<lon>`. To push a notification to an app, use `apps notify <app> '<json with an aps object>'` (the app has to have asked for notification permission first).
 - A physical iPhone has no shell. A physical Android refuses wipes and removing apps phonedriver did not install; pass `force` only when the user asked for exactly that.
 
 ## App UI: the loop

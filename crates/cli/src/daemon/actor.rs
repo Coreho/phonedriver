@@ -793,11 +793,11 @@ impl Actor {
             "stop" => Some(AppOp::Stop),
             "clear" => Some(AppOp::ClearData),
             "uninstall" => Some(AppOp::Uninstall),
-            "grant" | "revoke" => None,
+            "grant" | "revoke" | "notify" => None,
             _ => {
                 return Err(Error::Unsupported {
                     op: Op::App,
-                    reason: "the app action is install, stop, clear, uninstall, grant or revoke",
+                    reason: "the app action is install, stop, clear, uninstall, grant, revoke or notify",
                 });
             }
         };
@@ -808,6 +808,18 @@ impl Actor {
         let installed = device.apps().await?;
         let found = find_app(&installed, &query)?.clone();
         let Some(op) = op else {
+            if p.action == "notify" {
+                let payload = p.payload.ok_or(Error::Unsupported {
+                    op: Op::App,
+                    reason: "notify needs the push notification as a JSON `payload`, such as {\"aps\": {\"alert\": \"Hello\"}}",
+                })?;
+                device.push(&found.id, &payload).await?;
+                s.set_last(None);
+                return Ok(json!({
+                    "ok": true,
+                    "summary": format!("sent a push notification to {}", found.name),
+                }));
+            }
             if p.permissions.is_empty() {
                 return Err(Error::Unsupported {
                     op: Op::App,

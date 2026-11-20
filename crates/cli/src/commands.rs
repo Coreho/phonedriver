@@ -317,18 +317,24 @@ pub(crate) enum Verb {
         app: Option<String>,
     },
     /// List the apps that can be launched, or `install <path>`, `stop`, `clear` (data) or `uninstall` one by name or id,
-    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`.
+    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`, or `notify` it: send it a push
+    /// notification to test how it handles one (the iOS Simulator only):
+    /// `phonedriver apps notify Mail '{"aps":{"alert":"Hi"}}'` or `--file payload.json`.
     /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed.
     Apps {
         /// What to do to an app. Omit it to list apps.
-        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke"])]
+        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke", "notify"])]
         action: Option<String>,
         /// The app file to install (on the daemon's machine), or the app to act on.
         target: Option<String>,
         /// For `grant` and `revoke`: `notifications`, `camera`, `location`, or a full name such as
         /// `android.permission.CAMERA` (Android); `photos`, `location` and the other `simctl privacy` services
-        /// (Simulator).
+        /// (Simulator). For `notify`: the push notification as one JSON argument, such as
+        /// `'{"aps":{"alert":"Hi"}}'`.
         permissions: Vec<String>,
+        /// For `notify`: read the push notification's JSON from this file instead.
+        #[arg(long, value_name = "PATH")]
+        file: Option<std::path::PathBuf>,
     },
     /// Drag from the middle of the screen, or of `--from`, the way a finger does.
     Swipe {
@@ -1276,11 +1282,25 @@ pub(crate) async fn execute_with(
             action: Some(action),
             target,
             permissions,
+            file,
         } => {
             let target = target
                 .ok_or_else(|| Failure::Local(format!("apps {action} needs an app or a path")))?;
             let p = if action == "install" {
                 json!({"action": action, "path": target})
+            } else if action == "notify" {
+                let payload = match (file, permissions.as_slice()) {
+                    (Some(path), []) => std::fs::read_to_string(&path).map_err(|e| {
+                        Failure::Local(format!("cannot read {}: {e}", path.display()))
+                    })?,
+                    (None, [json]) => json.clone(),
+                    _ => {
+                        return Err(Failure::Local(
+                            "apps notify needs the push notification as JSON: the `payload` field over MCP, one quoted argument or `--file payload.json` on the command line".into(),
+                        ));
+                    }
+                };
+                json!({"action": action, "app": target, "payload": payload})
             } else {
                 json!({"action": action, "app": target, "permissions": permissions})
             };
