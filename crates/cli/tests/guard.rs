@@ -574,7 +574,7 @@ fn point(y: f64) -> Value {
     json!({"kind": "tap", "target": {"point": {"x": 180.0, "y": y}}})
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn point_taps_in_a_row_read_the_screen_once_until_the_screen_is_reshaped() {
     let rig = rig().await;
     rig.act(point(700.0), None).await.unwrap();
@@ -597,6 +597,7 @@ async fn point_taps_in_a_row_read_the_screen_once_until_the_screen_is_reshaped()
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     rig.act(point(700.0), None).await.unwrap();
     assert_eq!(rig.fake.tree_reads(), 2);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     rig.fake.emit(DeviceEvent::WindowChanged { package: None });
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     rig.act(point(700.0), None).await.unwrap();

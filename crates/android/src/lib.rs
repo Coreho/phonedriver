@@ -9,5 +9,6 @@ pub mod device;
 mod devtools;
 mod logs;
 pub mod map;
+mod network;
 mod settings;
 pub mod wireless;

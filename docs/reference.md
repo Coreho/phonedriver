@@ -64,7 +64,7 @@ That binary has no Android support (`phonedriver doctor` skips the Android check
 
 ```console
 $ target/release/phonedriver version
-phonedriver 0.1.5
+phonedriver 0.1.6
 ```
 
 Until the package is published, register the built binary with your client by its full path: `claude mcp add phonedriver -- "$PWD/target/release/phonedriver" mcp`.
@@ -158,6 +158,7 @@ Tested on an iPhone 13 Pro Max (iOS 27.0.1) on one network. An iPhone 14 Plus (i
 | `PHONEDRIVER_IOS_TIER` | `runner` | `coredevice` selects the CoreDevice tier on iOS 27 devices. Experimental. |
 | `PHONEDRIVER_GUARD` | on | `off` stops phonedriver asking the human before a tap that spends money or cannot be undone (`Place order`, `Pay`, `Delete account`). Set it for `phonedriver mcp` or the CLI only when you grant the agent full autonomy. |
 | `PHONEDRIVER_ASK` | none | A comma list of more kinds of tap to ask the human about, besides payments and account deletion: `send` (Send, Reply, Post, Share), `delete` (Delete, Remove, Erase, Clear all) and `install` (Install, Uninstall). For example `PHONEDRIVER_ASK=send,delete`. Read by `phonedriver mcp` and the CLI; a name that is not one of these stops the command with exit code 2. `PHONEDRIVER_GUARD=off` and `autonomous: true` skip these questions too. |
+| `PHONEDRIVER_APPS_UNDER_TEST` | none | A comma list of package names, such as `com.example.app,com.example.other`: apps of yours that Gradle or Android Studio installed, not phonedriver. On a physical Android phone `apps clear`, `uninstall`, `grant`, `revoke` and `launch --grant` touch only apps phonedriver installed; the packages listed here count as installed by you. The daemon reads it when it starts, so set it in the environment of the command that starts it (for an MCP client, the server's `env`; see [Claude Code](/docs/claude-code/#an-app-you-are-developing)) and run `phonedriver daemon stop` first if a daemon is running. It is the person's setting and there is no tool argument for it, so an agent cannot add an app to the list. |
 | `PHONEDRIVER_SECRET` | none | The text for `type --secret`, instead of stdin. The daemon shows it as `•••` wherever it later appears on a screen it reads or in a command's output, until the daemon stops; a screenshot still shows what the phone shows. |
 | `PHONEDRIVER_TRACE_FULL` | off | `1` keeps observation text and the text of text targets in the traced requests (the daemon reads it at start). Replies are traced as returned either way: a summary or an error can name an element, as in `tapped @e6 "Busy"` or `no element matches "Pay"`. |
 | `PHONEDRIVER_TRACE_SCREENS` | off | `1` copies every screenshot next to its trace file. |
@@ -279,6 +280,33 @@ hint: `phonedriver logs dev.phonedriver.testbed` prints its last log lines
 
 iOS devices and the Simulator answer that logs cannot be read. Decision D58.
 
+### Networks, VPNs and waiting on a log line
+
+On Android, `phonedriver network` prints what the device is connected to, read-only and with no approval:
+
+```
+100 cellular on eth0 · dns 10.0.2.3
+101 wifi (default) on wlan0 · dns 10.0.2.3
+102 wifi+vpn of dev.example.vpn on tun0 for uids 0-99999 over 101 · dns 10.77.0.1
+always-on vpn none
+lockdown off
+not given: private DNS
+```
+
+Each line is a network the platform lists as connected: its id, transports (`wifi`, `cellular`, `vpn`, ...), the system default, and its interface and DNS servers. A VPN names the package that owns it, the user id ranges whose traffic it carries and the network it runs over. Below them come the always-on VPN app and its lockdown setting and the private DNS mode, from the secure and global settings. A field the platform did not give is listed after `not given:` and is not guessed; an emulator with `private_dns_mode` never set says so. The default is the system's default network: with a VPN up it stays the Wi-Fi or cellular network under it, and the VPN's `uids` say whose traffic goes through the VPN. `phonedriver --json network` and the `network` tool return the same as fields (decision D99). The read works the same on a physical Android phone; it was only run on an emulator.
+
+`wait` also waits on the VPN and on the log:
+
+```
+phonedriver wait vpn:up                          # a VPN network is connected
+phonedriver wait vpn:down
+phonedriver wait log:"tunnel up|handshake" --app "My VPN"   # a log line written from now on, of that app
+```
+
+`vpn:up` and `vpn:down` read the network state once a second. `log:` follows the log from the moment the wait begins (a line that was already written does not count) and returns the first line that holds one of the `|`-separated words, ignoring case; `--app` (the MCP `app`) keeps only that app's lines. The reply quotes the line: `ok log line: I/pd016   ( 5750): pd-016-check`. Lines can hold secrets, so the reply is masked like every other (decision D70). On a timeout the error says what was last seen: `timed out after 3189 ms waiting for the VPN to be up; last seen: cellular, wifi (default)`, or `waiting for a log line with "x" (164 lines arrived, none matched)`. Matching is on the whole line, so a pattern that also appears in a command line `adbd` logs (the `shell` that wrote the line) matches that first. Android follows `logcat`; the iOS Simulator follows `log stream` at debug level, run the way `shell` runs programs, with `--app` scoped to the app's process; a physical iPhone or iPad answers that its log cannot be followed. On iOS `network` and `wait vpn:` answer that the device's networks cannot be read.
+
+A VPN app asks for consent the first time it starts a connection: a "Connection request" dialog from `com.android.vpndialogs`, which phonedriver reports like any system dialog (`alert com.android.vpndialogs: "Connection request"`) and `tap OK` answers. On an emulator you can skip it: `phonedriver shell "appops set <package> ACTIVATE_VPN allow"` pre-authorises the app, so the dialog never appears (checked on an API 37 emulator: with `default` the dialog came up, after `allow` the VPN connected with no dialog). `appops set <package> ACTIVATE_VPN default` takes it back.
+
 ### Screens with no element list
 
 A web view with accessibility off, a Flutter screen or a game gives no list of elements. phonedriver then reads the screenshot's text on the machine the daemon runs on and adds the lines it finds, marked `(ocr)`; `tap "Send"` taps one. `snapshot --pixels` asks for this on any screen. macOS and Windows use the text recognition the system ships. Linux uses Tesseract when the `tesseract` program is on the `PATH` (`apt install tesseract-ocr`); without it, `--pixels` answers that pixels cannot be read and names the package. Decisions D61, D64 and D65.
@@ -372,7 +400,31 @@ $ phonedriver replay run.steps --from 4
 
 A `shell` step expects exit 0, and a command that runs past its time limit fails the step. `save` keeps `"expect_exit": 3` in the step of a command that exited 3 when it was saved, so a replay of the same run passes; add `"expect_exit": 1` by hand to a step that checks for a failure, or `"expect_exit": null` to a step that is only run for its effect and whose exit status does not matter. A step is saved without `--force`, so a replay on a physical phone is refused again at a command that needs it.
 
-Text typed with `--secret` is never in the file; a replay stops at that step for you to type it. Other typed text is in the file. In MCP, `replay` takes `file`, `from` and `save: true`. Decision D60.
+Text typed with `--secret` is never in the file. `save` writes the step with the name of an environment variable instead, numbered in order, and says which to set:
+
+```
+$ phonedriver save login.steps
+saved 3 steps to login.steps
+1. tap "Sign in"
+2. type secret $PHONEDRIVER_SECRET_1 into "Password"
+3. tap "Continue"
+the secret text is not in the file: set PHONEDRIVER_SECRET_1 before replaying (rename a variable in the file if you like)
+$ PHONEDRIVER_SECRET_1=hunter2-test phonedriver replay login.steps
+```
+
+The line in the file is `{"method":"act","params":{"action":{"kind":"type","secret":true,"secret_env":"PHONEDRIVER_SECRET_1","into":{...}}}}`. `replay` reads the variable from the environment of the process that runs it (the `phonedriver` command, or for MCP the MCP server, so set it in the server's `env`, never in a tool argument), and types it as a secret: masked in replies and traces, never in an error, a log or a file (D70). The name may be changed in the file, but it must begin `PHONEDRIVER_SECRET_`, so an edited file cannot make a replay type another variable of the process. When the variable is not set (or is empty) the replay stops at that step as before, and the hint names it. A file saved by an earlier version, whose secret step has no variable, still stops there for you to type it. Other typed text is in the file.
+
+#### Variables in a saved run
+
+`{{name}}` in a step's text (what is typed, an `open` URL, a `shell` command, a target's text) is filled in when the file is replayed. `save` never writes one; edit them into the file:
+
+```
+$ phonedriver replay signup.steps --var plan=pro
+replayed 6 steps in 14.2 s (run 3fa91c07)
+1. typed into @e4
+```
+
+`--var name=value` is repeatable (MCP: `vars: {"name": "value"}`). `{{run}}` is built in: a short id, new in every replay and the same in all its steps, for data that must be fresh, such as `test+{{run}}@example.com`; the reply names the run when the file uses it. A name used in the steps that run but not given is refused before the first step, naming every one missing. A name is letters, digits, `_`, `-` and `.`; anything else between braces is typed as it is, and a value is not read for names again, so `--var x='{{x}}'` types the braces. Variables are not secrets: they are in replies and failure messages. Use the environment variable above for a secret. In MCP, `replay` takes `file`, `from`, `vars` and `save: true`. Decisions D60 and D98.
 
 `--screens <dir>` checks what each step left on the screen. The first replay keeps a screenshot after every step in the folder (`01.png`, `02.png`, ...); later replays compare each step's screen with its screenshot, as `compare` does, and stop at the first step whose text changed:
 
@@ -403,14 +455,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./gradlew assembleDebug
-      - uses: hridaya423/phonedriver@v0.1.5
+      - uses: hridaya423/phonedriver@v0.1.6
         with:
           app: app/build/outputs/apk/debug/app-debug.apk
           runs: e2e/*.steps
           record: true
 ```
 
-Inputs: `runs` (paths or globs, one a line), `platform` (`android` or `ios`), `app`, `api-level` (default 35), `device` (a Simulator name; default the first iPhone), `record`, `screens` (a folder with a subfolder of kept screens for each run, named as its steps file; a run with no subfolder keeps its screens in the artifact under `screens/`), `version` (default `latest`), `binary` (a phonedriver already on the runner) and `artifact` (the artifact's name). Outputs: `passed` and `failed`. Write the steps files with `phonedriver save` after a session on your own machine; a step that typed a secret stops the replay there, so keep secrets out of runs meant for CI.
+Inputs: `runs` (paths or globs, one a line), `platform` (`android` or `ios`), `app`, `api-level` (default 35), `device` (a Simulator name; default the first iPhone), `record`, `vars`, `screens` (a folder with a subfolder of kept screens for each run, named as its steps file; a run with no subfolder keeps its screens in the artifact under `screens/`), `version` (default `latest`), `binary` (a phonedriver already on the runner) and `artifact` (the artifact's name). Outputs: `passed` and `failed`. Write the steps files with `phonedriver save` after a session on your own machine. A step that typed a secret names an environment variable (`PHONEDRIVER_SECRET_1`); give it to the Action step with `env:`, for example `PHONEDRIVER_SECRET_1: ${{ secrets.APP_PASSWORD }}`, and the replay types it. `vars` fills `{{name}}` in the files, one `name=value` a line; `{{run}}` needs no input.
 
 ### Fingerprint and Face ID on an emulator or Simulator
 

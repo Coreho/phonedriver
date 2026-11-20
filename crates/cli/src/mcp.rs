@@ -88,6 +88,8 @@ struct AppsArgs {
     action: Option<String>,
     app: Option<String>,
     permissions: Option<Vec<String>>,
+    /// For `notify`: JSON, such as `{"aps":{"alert":"Hi"}}`.
+    payload: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -98,6 +100,12 @@ struct LogsArgs {
     grep: Option<String>,
     /// The last lines to keep; default 40, 0 for all.
     head: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct NetworkArgs {
+    device: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -145,6 +153,8 @@ struct ReplayArgs {
     save: Option<bool>,
     /// Start at this step.
     from: Option<u32>,
+    /// Values for `{{name}}`. Not for secrets.
+    vars: Option<std::collections::BTreeMap<String, String>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -313,9 +323,38 @@ struct LaunchArgs {
 #[serde(deny_unknown_fields)]
 struct WaitArgs {
     device: Option<String>,
-    condition: String,
+    condition: Option<String>,
+    /// `up` or `down`.
+    vpn: Option<String>,
+    /// Text of a log line written from now on.
+    log: Option<String>,
+    /// With `log`: this app's lines only.
+    app: Option<String>,
     /// Default 5000.
     timeout_ms: Option<u64>,
+}
+
+impl WaitArgs {
+    fn verb(self) -> Result<Verb, String> {
+        match (self.condition, self.vpn, self.log) {
+            (Some(condition), None, None) => Ok(Verb::Wait {
+                condition,
+                app: None,
+            }),
+            (None, Some(state), None) if matches!(state.as_str(), "up" | "down") => {
+                Ok(Verb::Wait {
+                    condition: format!("vpn:{state}"),
+                    app: None,
+                })
+            }
+            (None, Some(_), None) => Err("`vpn` is `up` or `down`".into()),
+            (None, None, Some(pattern)) => Ok(Verb::Wait {
+                condition: format!("log:{pattern}"),
+                app: self.app,
+            }),
+            _ => Err("give one of `condition`, `vpn` or `log`".into()),
+        }
+    }
 }
 
 impl TapArgs {
@@ -446,11 +485,9 @@ fn step_verb(step: serde_json::Value) -> Result<Verb, String> {
         "press" => Ok(Verb::Press {
             key: serde_json::from_value::<PressArgs>(rest).map_err(args)?.key,
         }),
-        "wait" => Ok(Verb::Wait {
-            condition: serde_json::from_value::<WaitArgs>(rest)
-                .map_err(args)?
-                .condition,
-        }),
+        "wait" => serde_json::from_value::<WaitArgs>(rest)
+            .map_err(args)?
+            .verb(),
         "launch" => serde_json::from_value::<LaunchArgs>(rest)
             .map_err(args)?
             .verb()
@@ -1243,6 +1280,18 @@ impl Mcp {
     }
 
     #[tool(
+        description = "The networks: Wi-Fi, cellular, VPN (its app and user ids), the default, DNS, always-on VPN, lockdown. Android.",
+        annotations(
+            title = "Read the networks",
+            read_only_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn network(&self, Parameters(a): Parameters<NetworkArgs>) -> CallToolResult {
+        self.run(a.device, Verb::Network, None).await
+    }
+
+    #[tool(
         description = "An app's last log lines and its last crash (Android). `app` defaults to the one in front; `grep` keeps lines with these words (`a|b`).",
         annotations(
             title = "Read an app's logs",
@@ -1261,7 +1310,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Run a saved steps file again in one call; it stops at the first step that fails and shows the screen. `save: true` writes the file from this session's actions: do it when a task that worked will be asked again.",
+        description = "Run a saved steps file again in one call; it stops at the first step that fails and shows the screen. `vars` fills `{{name}}` in it. `save: true` writes the file from this session's actions.",
         annotations(
             title = "Replay saved steps",
             read_only_hint = false,
@@ -1279,6 +1328,7 @@ impl Mcp {
                 file,
                 from: a.from.map_or(1, |n| n as usize),
                 screens: None,
+                vars: a.vars.unwrap_or_default().into_iter().collect(),
             }
         };
         self.run(a.device, verb, None).await
@@ -1313,7 +1363,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`).",
+        description = "List apps (`name  id`), or `action` install (file in `app`), stop, clear (data), uninstall, or grant / revoke `permissions` (`camera`, `location`), or notify (push `payload`; iOS Simulator).",
         annotations(
             title = "Apps",
             read_only_hint = false,
@@ -1323,10 +1373,15 @@ impl Mcp {
         )
     )]
     async fn apps(&self, Parameters(a): Parameters<AppsArgs>) -> CallToolResult {
+        let permissions = match (a.action.as_deref(), a.payload) {
+            (Some("notify"), Some(payload)) => vec![payload],
+            _ => a.permissions.unwrap_or_default(),
+        };
         let verb = Verb::Apps {
             action: a.action,
             target: a.app,
-            permissions: a.permissions.unwrap_or_default(),
+            permissions,
+            file: None,
         };
         self.run(a.device, verb, None).await
     }
@@ -1600,14 +1655,16 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Wait for `settled`, a text (`A|B` for either) or @ref to appear, or `gone:<text>`.",
+        description = "Wait for `settled`, a text (`A|B` for either) or @ref to appear, or `gone:<text>`; or `vpn` up or down; or a `log` line (of `app`) written from now on.",
         annotations(title = "Wait", read_only_hint = true, open_world_hint = true)
     )]
     async fn wait(&self, Parameters(a): Parameters<WaitArgs>) -> CallToolResult {
-        let mut globals = self.globals(a.device);
-        globals.timeout = a.timeout_ms;
-        let verb = Verb::Wait {
-            condition: a.condition,
+        let (device, timeout_ms) = (a.device.clone(), a.timeout_ms);
+        let mut globals = self.globals(device);
+        globals.timeout = timeout_ms;
+        let verb = match a.verb() {
+            Ok(verb) => verb,
+            Err(why) => return bad(&why),
         };
         self.run_with(globals, verb, None).await
     }

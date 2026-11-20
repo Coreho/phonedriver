@@ -15,7 +15,7 @@ Change a setting, send an intent or press a key without tapping through screens.
 - `shell` for everything else, and where `setting` answers unsupported (older Android, the Simulator). One call returns the exit code, the output and what changed on screen.
 - Android: `cmd uimode night yes`, `settings put system screen_brightness 20`, `am start -a android.intent.action.VIEW -d <url>`, `input keyevent 3`, `dumpsys window | grep mCurrentFocus`. Jank: `dumpsys gfxinfo <package> reset`, act, then `dumpsys gfxinfo <package>` with grep `Janky|percentile`.
 - Android emulator: `emu geo fix <lon> <lat>` (a location), `emu sms send <number> <text>`, `emu power capacity 15` go to its console.
-- iOS Simulator: `simctl ui appearance dark`, `simctl openurl <url>`, `simctl privacy grant photos <bundle id>`, `simctl location set <lat>,<lon>`, `simctl push <bundle id> <payload.json>` (a push notification).
+- iOS Simulator: `simctl ui appearance dark`, `simctl openurl <url>`, `simctl privacy grant photos <bundle id>`, `simctl location set <lat>,<lon>`. To push a notification to an app, use `apps notify <app> '<json with an aps object>'` (the app has to have asked for notification permission first).
 - A physical iPhone has no shell. A physical Android refuses wipes and removing apps phonedriver did not install; pass `force` only when the user asked for exactly that.
 
 ## App UI: the loop
@@ -28,7 +28,7 @@ A reply with a `crashed:` line means the app stopped during that action; the lin
 
 To read a web page (Android: Chrome, or a web view in a debug build), call `snapshot` with `page: true`: the page's whole text in one call, with no scrolling. Add `find` to keep only the lines with a word and the two lines after each. It reads; to act, use refs from a plain `snapshot`.
 
-Actions already wait for the screen; use `wait` when something loads later (`wait "Row 640"`, `wait gone:"Loading"`).
+Actions already wait for the screen; use `wait` when something loads later (`wait "Row 640"`, `wait gone:"Loading"`). Android also has `wait vpn:up` and `wait vpn:down`, `wait log:"text" --app Name` (a log line written from now on; `A|B` for either), and `network`, which lists the networks, a VPN's app and the user ids it carries, DNS, and always-on VPN state.
 
 A path of taps you can predict goes in one MCP call with `then`: `tap {"target":"More options","then":["Settings","Dark theme"]}` taps each text in order on the screens that follow, and `type {"text":"Paris","then":["Paris, France"]}` types and picks the suggestion. Name every step you expect, even on screens you have not seen: a missing text stops the path and returns that screen, so a wrong guess costs one call.
 
@@ -52,7 +52,7 @@ A permission sheet, an "isn't responding" box or another system dialog shows in 
 - A line ending in `under-keyboard`, and the lines under it, are behind the keyboard; `tap` hides the keyboard first.
 - `screenshot` (with `marks` to box each tappable element with its ref) covers what the snapshot lacks: a map, a drawing, a photo, a game. Look at the image before tapping a point on it. A reply for a screen with no element list at all brings its picture with it (MCP).
 - To see what an action changed on a screen you read by picture, without a second picture: `screenshot shot.png`, act, `compare shot.png` (MCP: `screenshot`, act, `screenshot` with `compare: true`). The reply is `same`, or the texts that changed with their points.
-- A task that worked and will be asked again: `save <file>` (MCP: `replay` with `save: true`) writes your steps, and `replay <file>` runs them in one call next time. When a replay stops at a step, do that step, then replay from the next one (`--from N`, MCP `from`).
+- A task that worked and will be asked again: `save <file>` (MCP: `replay` with `save: true`) writes your steps, and `replay <file>` runs them in one call next time. When a replay stops at a step, do that step, then replay from the next one (`--from N`, MCP `from`). A secret you typed is saved as the name of an environment variable the person sets (`PHONEDRIVER_SECRET_1`), and `{{name}}` in a saved step is filled from `--var name=value` (MCP `vars`).
 - A fingerprint prompt on an Android emulator: `press fingerprint` passes it once a fingerprint is enrolled (enroll in Settings with the same key), `press wrong-fingerprint` fails it. On an iOS Simulator the same keys answer Face ID; if the app says Face ID is not set up, press `fingerprint` once and ask again. On a phone, tell the user: it needs their finger or face.
 - `press landscape` and `press portrait` turn the screen (an app that supports only one way stays as it is; on Android auto-rotate goes off).
 - Asked for a video of what you do (Android, iOS Simulator): `record start`, the actions, then `record stop` (MCP: `screenshot` with `record: "start"`, then `"stop"`). The reply names the MP4 file and a list of your actions with their times.
@@ -87,4 +87,4 @@ Each error has a hint that names the next step; follow it.
 
 ## Verbs
 
-`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `batch`, `clipboard`, `replay`. The command line also has `find`, `page`, `clear`, `open <url>`, `gesture`, `compare`, `boot` and `release`.
+`devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `shell`, `setting`, `logs`, `network`, `batch`, `clipboard`, `replay`. The command line also has `find`, `page`, `clear`, `open <url>`, `gesture`, `compare`, `boot` and `release`.

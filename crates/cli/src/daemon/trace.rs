@@ -175,6 +175,9 @@ fn hide_condition(condition: &mut Value, full: bool) {
     for key in ["appears", "gone"] {
         hide_text(&mut condition[key], full);
     }
+    if !full && let Some(s) = condition["log"].get("pattern") {
+        condition["log"]["pattern"] = length("pattern_len", s);
+    }
 }
 
 fn hide_action(action: &mut Value, full: bool) {
@@ -281,5 +284,26 @@ mod clean_tests {
             !tmp.join("old.png").exists(),
             "an old file in the cleaned folder was kept"
         );
+    }
+}
+
+#[cfg(test)]
+mod wait_tests {
+    use serde_json::json;
+
+    use super::sanitize;
+
+    #[test]
+    fn a_log_wait_is_traced_by_the_length_of_its_pattern_unless_the_trace_is_full() {
+        let params = json!({"condition": {"log": {"pattern": "token=|code", "app": "Example"}}});
+        let short = sanitize("wait", &params, false);
+        assert_eq!(
+            short["condition"]["log"],
+            json!({"pattern": {"pattern_len": 11}, "app": "Example"})
+        );
+        let full = sanitize("wait", &params, true);
+        assert_eq!(full["condition"]["log"]["pattern"], "token=|code");
+        let vpn = sanitize("wait", &json!({"condition": {"vpn": "up"}}), false);
+        assert_eq!(vpn["condition"]["vpn"], "up");
     }
 }

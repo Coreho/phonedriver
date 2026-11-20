@@ -13,6 +13,23 @@ pub fn app_command(package: &str, seconds: u64) -> String {
     )
 }
 
+/// The command `Device::log_wait` streams: lines written from now on by the device's own clock, of the uid of
+/// `package` when one is given. The uid, not the pid, so the lines of an app that restarts are still read.
+pub fn watch_command(package: Option<&str>) -> String {
+    let from = "$(date +%s.%N)";
+    match package {
+        None => format!("logcat -v brief -T \"{from}\""),
+        Some(package) => format!(
+            "U=$(pm list packages -U {package} | sed -n 's/^package:{package} uid://p'); [ -n \"$U\" ] && logcat -v brief --uid=$U -T \"{from}\""
+        ),
+    }
+}
+
+/// Whether `line` is one of logcat's own `--------- beginning of ...` markers, not a message.
+pub fn is_marker(line: &str) -> bool {
+    line.starts_with("--------- beginning of")
+}
+
 fn message(line: &str) -> Option<(&str, &str)> {
     let (head, text) = line.split_once("): ")?;
     let (_, pid) = head.split_once('(')?;
@@ -101,6 +118,17 @@ E/AndroidRuntime( 222): \tat com.example.Main.other(Main.kt:40)
             crash_of("--------- beginning of crash\n", "com.example"),
             None
         );
+    }
+
+    #[test]
+    fn the_watch_command_reads_from_the_devices_clock_and_picks_an_app_by_its_uid() {
+        let all = watch_command(None);
+        assert!(all.starts_with("logcat -v brief -T"), "{all}");
+        assert!(all.contains("$(date +%s.%N)"), "{all}");
+        assert!(!all.contains("--uid"), "{all}");
+        let app = watch_command(Some("com.example"));
+        assert!(app.contains("pm list packages -U com.example"), "{app}");
+        assert!(app.contains("--uid=$U"), "{app}");
     }
 
     #[test]

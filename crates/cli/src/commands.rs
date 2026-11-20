@@ -21,6 +21,7 @@ use phonedriver_core::device::DisplayMode;
 use phonedriver_core::error::{Category, span};
 use phonedriver_core::render::plural;
 
+use crate::variables;
 use crate::wire::{
     ActionResult, Approval, BatchResult, DeviceEntry, Kind, Observation, ScreenshotResult,
     ShellResult, VERSION,
@@ -301,7 +302,7 @@ pub(crate) enum Verb {
         app: String,
         /// Grant these runtime permissions first, so their dialog never appears: `notifications`, `camera`,
         /// `location`, or a full name such as `android.permission.CAMERA` (Android); `photos`, `location` and the other
-        /// `simctl privacy` services (Simulator). A physical device only takes this for apps phonedriver installed.
+        /// `simctl privacy` services (Simulator). A physical device only takes this for apps phonedriver installed or listed in `PHONEDRIVER_APPS_UNDER_TEST`.
         #[arg(long, value_delimiter = ',')]
         grant: Vec<String>,
         /// Stop the app first, so it opens on its first screen instead of where it was left.
@@ -317,18 +318,25 @@ pub(crate) enum Verb {
         app: Option<String>,
     },
     /// List the apps that can be launched, or `install <path>`, `stop`, `clear` (data) or `uninstall` one by name or id,
-    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`.
-    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed.
+    /// or `grant` or `revoke` its permissions: `phonedriver apps revoke Maps location`, or `notify` it: send it a push
+    /// notification to test how it handles one (the iOS Simulator only):
+    /// `phonedriver apps notify Mail '{"aps":{"alert":"Hi"}}'` or `--file payload.json`.
+    /// On a physical device `clear`, `uninstall`, `grant` and `revoke` only touch apps phonedriver installed, and the
+    /// packages in `PHONEDRIVER_APPS_UNDER_TEST` (a comma list the daemon reads when it starts).
     Apps {
         /// What to do to an app. Omit it to list apps.
-        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke"])]
+        #[arg(value_parser = ["install", "stop", "clear", "uninstall", "grant", "revoke", "notify"])]
         action: Option<String>,
         /// The app file to install (on the daemon's machine), or the app to act on.
         target: Option<String>,
         /// For `grant` and `revoke`: `notifications`, `camera`, `location`, or a full name such as
         /// `android.permission.CAMERA` (Android); `photos`, `location` and the other `simctl privacy` services
-        /// (Simulator).
+        /// (Simulator). For `notify`: the push notification as one JSON argument, such as
+        /// `'{"aps":{"alert":"Hi"}}'`.
         permissions: Vec<String>,
+        /// For `notify`: read the push notification's JSON from this file instead.
+        #[arg(long, value_name = "PATH")]
+        file: Option<std::path::PathBuf>,
     },
     /// Drag from the middle of the screen, or of `--from`, the way a finger does.
     Swipe {
@@ -436,6 +444,11 @@ pub(crate) enum Verb {
         /// whose text changed. A step with no screenshot there keeps its own. The status bar is left out.
         #[arg(long, value_name = "DIR")]
         screens: Option<PathBuf>,
+        /// A value for `{{name}}` in the file's text, such as `--var user=ada`; repeat it for more. `{{run}}` is a
+        /// short id new in every replay. A variable is not a secret: a secret is read from the environment variable
+        /// the file names (`PHONEDRIVER_SECRET_1`, ...).
+        #[arg(long = "var", value_name = "NAME=VALUE", value_parser = parse_var)]
+        vars: Vec<(String, String)>,
     },
     /// Record the screen to an MP4 file (Android and the iOS Simulator): `record start`, the actions to show, then `record stop`, which
     /// prints the file and, beside it, a `.steps.jsonl` file of the actions done meanwhile with their times.
@@ -461,6 +474,9 @@ pub(crate) enum Verb {
         #[arg(long)]
         since: Option<u64>,
     },
+    /// Print the device's networks: which are up and by what (Wi-Fi, cellular, VPN), the default one, the app and
+    /// user ids a VPN carries, DNS, and always-on VPN state (Android).
+    Network,
     /// Print the web page in front as text, whole, without scrolling (Android: Chrome, and the web views of debug builds).
     Page {
         /// Keep only lines containing one of these words, separated by `|`, ignoring case.
@@ -508,10 +524,15 @@ pub(crate) enum Verb {
     /// `press home`.
     #[command(hide = true)]
     Home,
-    /// Wait for `settled`, for a text or `@ref` to appear, or for `gone:<text>` (or `gone:@ref`) to leave the screen.
+    /// Wait for `settled`, for a text or `@ref` to appear, for `gone:<text>` (or `gone:@ref`) to leave the screen,
+    /// for `vpn:up` or `vpn:down`, or for `log:<text>` (`A|B` for either) to appear in a log line written from now on.
     Wait {
-        /// `settled`, a text or `@ref` to appear, or `gone:<text>` (or `gone:@ref`) to leave.
+        /// `settled`, a text or `@ref` to appear, `gone:<text>` (or `gone:@ref`) to leave, `vpn:up`, `vpn:down`, or
+        /// `log:<text>`.
         condition: String,
+        /// With `log:`, read only this app's lines: its name or id.
+        #[arg(long)]
+        app: Option<String>,
     },
     /// Run steps in order and print one diff at the end; stops at the first step that fails. Each step is a
     /// command line in quotes, such as `batch "tap @e3" "type hello --submit" "press enter"`.
@@ -1064,8 +1085,8 @@ pub(crate) async fn execute_with(
                 .map_err(|e| Failure::Local(format!("the daemon sent bad image data: {e}")))?;
             compared(&before, &now, image.as_deref()).map_err(Failure::Local)
         }
-        Verb::Wait { condition } => {
-            let mut p = json!({"condition": wait_condition(&condition)});
+        Verb::Wait { condition, app } => {
+            let mut p = json!({"condition": wait_condition(&condition, app.as_deref())});
             if let Some(t) = g.timeout {
                 p["timeout_ms"] = json!(t);
             }
@@ -1124,7 +1145,8 @@ pub(crate) async fn execute_with(
             let cannot =
                 |e: std::io::Error| Failure::Local(format!("cannot write {}: {e}", file.display()));
             let r = client.call("journal", with(json!({"keep": true}))).await?;
-            let steps = r["steps"].as_array().cloned().unwrap_or_default();
+            let mut steps = r["steps"].as_array().cloned().unwrap_or_default();
+            name_secrets(&mut steps);
             if !steps.is_empty() {
                 let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
                 let mut beside = file.clone().into_os_string();
@@ -1155,6 +1177,7 @@ pub(crate) async fn execute_with(
             file,
             from,
             screens,
+            vars,
         } => {
             let text = std::fs::read_to_string(&file)
                 .map_err(|e| Failure::Local(format!("cannot read {}: {e}", file.display())))?;
@@ -1172,11 +1195,24 @@ pub(crate) async fn execute_with(
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let mut values: std::collections::BTreeMap<String, String> = vars.into_iter().collect();
+            if values.contains_key(variables::RUN) {
+                return Err(Failure::Local(format!(
+                    "`{}` is filled in by phonedriver, with a new id for each replay; choose another name",
+                    variables::RUN
+                )));
+            }
+            let id = variables::run_id();
+            values.insert(variables::RUN.into(), id.clone());
+            let name = file.display().to_string();
+            let (steps, used) = variables::fill(&steps, from, &values)
+                .map_err(|missing| missing_variables(&name, &missing))?;
             let run = Replay {
-                file: file.display().to_string(),
+                file: name,
                 steps,
                 from,
                 screens,
+                run: used.contains(variables::RUN).then_some(id),
             };
             run.play(client, &act, &with, g.json).await
         }
@@ -1216,6 +1252,13 @@ pub(crate) async fn execute_with(
                 return Ok(r.to_string());
             }
             Ok(show_logs(&r, since.unwrap_or(60)))
+        }
+        Verb::Network => {
+            let r = client.call("network", with(json!({}))).await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_network(&r))
         }
         Verb::Page { grep, all } => {
             let r = client
@@ -1276,11 +1319,25 @@ pub(crate) async fn execute_with(
             action: Some(action),
             target,
             permissions,
+            file,
         } => {
             let target = target
                 .ok_or_else(|| Failure::Local(format!("apps {action} needs an app or a path")))?;
             let p = if action == "install" {
                 json!({"action": action, "path": target})
+            } else if action == "notify" {
+                let payload = match (file, permissions.as_slice()) {
+                    (Some(path), []) => std::fs::read_to_string(&path).map_err(|e| {
+                        Failure::Local(format!("cannot read {}: {e}", path.display()))
+                    })?,
+                    (None, [json]) => json.clone(),
+                    _ => {
+                        return Err(Failure::Local(
+                            "apps notify needs the push notification as JSON: the `payload` field over MCP, one quoted argument or `--file payload.json` on the command line".into(),
+                        ));
+                    }
+                };
+                json!({"action": action, "app": target, "payload": payload})
             } else {
                 json!({"action": action, "app": target, "permissions": permissions})
             };
@@ -1396,7 +1453,13 @@ pub(crate) fn compared(
     Ok(text)
 }
 
-fn wait_condition(condition: &str) -> Value {
+fn wait_condition(condition: &str, app: Option<&str>) -> Value {
+    if let Some(state) = condition.strip_prefix("vpn:") {
+        return json!({"vpn": state});
+    }
+    if let Some(pattern) = condition.strip_prefix("log:") {
+        return json!({"log": {"pattern": pattern, "app": app}});
+    }
     match condition.strip_prefix("gone:") {
         Some(rest) => json!({"gone": parse_target(rest)}),
         None if condition == "settled" => json!({"settled": true}),
@@ -1515,8 +1578,8 @@ pub(crate) fn step_json(verb: &Verb, secret: Option<&str>) -> Result<Value, Fail
         Verb::Press { key } => json!({"kind": "press", "key": key}),
         Verb::Back => json!({"kind": "press", "key": "back"}),
         Verb::Home => json!({"kind": "press", "key": "home"}),
-        Verb::Wait { condition } => {
-            json!({"kind": "wait", "condition": wait_condition(condition)})
+        Verb::Wait { condition, app } => {
+            json!({"kind": "wait", "condition": wait_condition(condition, app.as_deref())})
         }
         _ => {
             return Err(Failure::Local(
@@ -1815,6 +1878,119 @@ pub(crate) const EMPTY_SCREEN: &str = "hint: this screen gives no element list; 
 /// in every replay.
 const SAVED_STEP_CHARS: usize = 60;
 
+/// `--var name=value`.
+fn parse_var(text: &str) -> Result<(String, String), String> {
+    match text.split_once('=') {
+        Some((name, value)) if variables::is_name(name) => Ok((name.into(), value.into())),
+        _ => Err("expected NAME=VALUE, where NAME has letters, digits, `_`, `-` or `.`".into()),
+    }
+}
+
+/// A file's `{{name}}`s that no `--var` gave, refused before any step runs.
+fn missing_variables(file: &str, missing: &[String]) -> Failure {
+    let Failure::Rpc(mut error) = refused(&format!(
+        "{file} needs {} nobody gave: {}",
+        plural(missing.len() as u64, "variable"),
+        missing.join(", ")
+    )) else {
+        unreachable!()
+    };
+    let give: Vec<String> = missing.iter().map(|n| format!("--var {n}=VALUE")).collect();
+    if let Some(data) = error.data.as_object_mut() {
+        data.insert("hint".into(), json!(format!(
+            "Add {} (MCP: vars). {{{{{}}}}} is filled in by phonedriver; variables are not secrets, so they may show in replies.",
+            give.join(" "),
+            variables::RUN
+        )));
+    }
+    Failure::Rpc(error)
+}
+
+/// Why a saved secret cannot be typed, and what to do about it.
+enum NoSecret {
+    NoVariable,
+    NotAllowed(String),
+    Unset(String),
+}
+
+impl NoSecret {
+    fn message(&self) -> String {
+        match self {
+            NoSecret::NoVariable => {
+                "this step types a secret but names no environment variable".into()
+            }
+            NoSecret::NotAllowed(name) => format!(
+                "{name} is not a variable a replay may type: its name must begin {}",
+                variables::SECRET_PREFIX
+            ),
+            NoSecret::Unset(name) => format!("{name} is not set"),
+        }
+    }
+}
+
+/// The action of a saved step with the secret it names filled in from this process's environment. A `type` that
+/// is not a secret is returned as it is.
+fn with_secret(action: &Value) -> Result<Value, NoSecret> {
+    let mut action = action.clone();
+    if action["kind"] != "type" || action["secret"] != true {
+        return Ok(action);
+    }
+    let name = action["secret_env"]
+        .as_str()
+        .ok_or(NoSecret::NoVariable)?
+        .to_string();
+    if !name.starts_with(variables::SECRET_PREFIX) {
+        return Err(NoSecret::NotAllowed(name));
+    }
+    let text = std::env::var(&name)
+        .ok()
+        .filter(|t| !t.is_empty())
+        .ok_or(NoSecret::Unset(name))?;
+    if let Some(fields) = action.as_object_mut() {
+        fields.remove("secret_env");
+        fields.insert("text".into(), json!(text));
+    }
+    Ok(action)
+}
+
+fn secret_hint(why: &NoSecret, n: usize, total: usize) -> String {
+    let first = match why {
+        NoSecret::NoVariable => format!(
+            "Add \"secret_env\": \"{}1\" to the step and set it",
+            variables::SECRET_PREFIX
+        ),
+        NoSecret::NotAllowed(_) => format!(
+            "Rename the variable in the file to start with {} and set it",
+            variables::SECRET_PREFIX
+        ),
+        NoSecret::Unset(name) => format!("Set {name} and replay again"),
+    };
+    let rest = if n < total {
+        format!(
+            "then replay the same file from step {} for the {} left.",
+            n + 1,
+            plural((total - n) as u64, "step")
+        )
+    } else {
+        "it is the last step.".into()
+    };
+    let sep = if n < total { "," } else { ";" };
+    format!("{first}, or type the secret yourself with `type --secret`{sep} {rest}")
+}
+
+/// Gives each typed secret of the steps about to be saved the name of the environment variable a replay reads it
+/// from: `PHONEDRIVER_SECRET_1`, `_2`, ... in order. A person may rename them in the file.
+fn name_secrets(steps: &mut [Value]) {
+    let mut n = 0;
+    for step in steps {
+        let action = &mut step["params"]["action"];
+        if action["kind"] == "type" && action["secret"] == true && action["secret_env"].is_null() {
+            n += 1;
+            action["secret_env"] = json!(format!("{}{n}", variables::SECRET_PREFIX));
+        }
+    }
+}
+
 /// `save`: the steps that went into the file, one line each, and how many of them a replay cannot be sure of.
 pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
     if steps.is_empty() {
@@ -1841,6 +2017,16 @@ pub(crate) fn show_saved(path: &str, steps: &[Value], over: bool) -> String {
             "\n{by_position} of them tap a position, because no text singles out the element: they hold only while the layout does"
         ));
     }
+    let names: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s["params"]["action"]["secret_env"].as_str())
+        .collect();
+    if !names.is_empty() {
+        out.push_str(&format!(
+            "\nthe secret text is not in the file: set {} before replaying (rename a variable in the file if you like)",
+            names.join(", ")
+        ));
+    }
     let manual = count("manual");
     if manual > 0 {
         out.push_str(&format!(
@@ -1862,6 +2048,7 @@ pub(crate) struct Replay {
     pub steps: Vec<Value>,
     pub from: usize,
     pub screens: Option<PathBuf>,
+    pub run: Option<String>,
 }
 
 /// The screen after a replayed step against the screenshot kept for it.
@@ -1895,10 +2082,11 @@ impl Replay {
                     .find_map(|f| action[*f].as_str())
                     .map(|v| format!(" {v}"))
                     .unwrap_or_default();
-                let typed = action["text"]
-                    .as_str()
-                    .map(|t| format!(" \"{t}\""))
-                    .unwrap_or_default();
+                let typed = match (action["secret_env"].as_str(), action["text"].as_str()) {
+                    (Some(name), _) => format!(" secret ${name}"),
+                    (None, Some(t)) => format!(" \"{t}\""),
+                    (None, None) => String::new(),
+                };
                 let on = ["target", "into", "until", "from", "at"]
                     .iter()
                     .map(|f| target(&action[*f]))
@@ -1913,6 +2101,12 @@ impl Replay {
             }
             "wait" => {
                 let c = &params["condition"];
+                if let Some(state) = c["vpn"].as_str() {
+                    return format!("wait vpn:{state}");
+                }
+                if let Some(pattern) = c["log"]["pattern"].as_str() {
+                    return format!("wait log:{pattern}");
+                }
                 match (target(&c["appears"]), target(&c["gone"])) {
                     (appears, _) if !appears.is_empty() => format!("wait{appears}"),
                     (_, gone) if !gone.is_empty() => format!("wait gone:{}", gone.trim_start()),
@@ -1944,13 +2138,16 @@ impl Replay {
         let mut done = Vec::new();
         let (mut kept, mut same) = (0u64, 0u64);
         for (i, step) in self.steps.iter().enumerate().skip(self.from - 1) {
+            let mut hint = None;
             let outcome = match (step["manual"].as_str(), step["method"].as_str()) {
                 (Some(what), _) => Err(refused(what)),
-                (None, Some("act")) => {
-                    client
-                        .call("act", act(step["params"]["action"].clone()))
-                        .await
-                }
+                (None, Some("act")) => match with_secret(&step["params"]["action"]) {
+                    Ok(action) => client.call("act", act(action)).await,
+                    Err(why) => {
+                        hint = Some(secret_hint(&why, i + 1, total));
+                        Err(refused(&why.message()))
+                    }
+                },
                 (None, Some(method @ ("wait" | "shell" | "setting" | "app"))) => {
                     client.call(method, with(step["params"].clone())).await
                 }
@@ -1976,7 +2173,7 @@ impl Replay {
                 ),
                 Err(failure) => {
                     return Err(self
-                        .stopped(client, with, i + 1, &done, failure, None)
+                        .stopped(client, with, i + 1, &done, failure, hint)
                         .await);
                 }
             };
@@ -2004,13 +2201,21 @@ impl Replay {
         let ms = started.elapsed().as_millis() as u64;
         if json {
             let mut out = json!({"ok": true, "steps": ran, "ms": ms});
+            if let Some(run) = &self.run {
+                out["run"] = json!(run);
+            }
             if self.screens.is_some() {
                 out["screens"] = json!({"same": same, "kept": kept});
             }
             return Ok(out.to_string());
         }
+        let run = self
+            .run
+            .as_ref()
+            .map(|id| format!(" (run {id})"))
+            .unwrap_or_default();
         let mut out = format!(
-            "replayed {} in {:.1} s\n{}",
+            "replayed {} in {:.1} s{run}\n{}",
             plural(ran, "step"),
             ms as f64 / 1000.0,
             done.join("\n")
@@ -2277,6 +2482,92 @@ pub(crate) fn show_logs(result: &Value, seconds: u64) -> String {
     out.join("\n")
 }
 
+/// `network`: one line for each network, then private DNS and always-on VPN, then the fields the platform did not give.
+pub(crate) fn show_network(result: &Value) -> String {
+    let list = |v: &Value| {
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .unwrap_or_default()
+    };
+    let networks = result["networks"].as_array().cloned().unwrap_or_default();
+    let mut out = Vec::new();
+    if networks.is_empty() {
+        out.push("no network is up".to_string());
+    }
+    for n in &networks {
+        let mut line = format!(
+            "{} {}{}",
+            n["id"],
+            list(&n["transports"]).replace(',', "+"),
+            if n["default"] == true {
+                " (default)"
+            } else {
+                ""
+            }
+        );
+        if let Some(owner) = n["owner"].as_str() {
+            line.push_str(&format!(" of {owner}"));
+        }
+        if let Some(interface) = n["interface"].as_str() {
+            line.push_str(&format!(" on {interface}"));
+        }
+        if n["uids"].as_array().is_some_and(|u| !u.is_empty()) {
+            line.push_str(&format!(" for uids {}", list(&n["uids"])));
+        }
+        if let Some(under) = n["underlying"].as_array().filter(|u| !u.is_empty()) {
+            let ids: Vec<String> = under.iter().map(|u| u.to_string()).collect();
+            line.push_str(&format!(" over {}", ids.join(",")));
+        }
+        match list(&n["dns"]).as_str() {
+            "" => line.push_str(" · dns not given"),
+            dns => line.push_str(&format!(" · dns {dns}")),
+        }
+        out.push(line);
+    }
+    let missing: Vec<&str> = result["missing"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|x| x.as_str()).collect())
+        .unwrap_or_default();
+    let given = |field: &str, text: String| (!missing.contains(&field)).then_some(text);
+    let lines = [
+        given(
+            "private DNS",
+            format!(
+                "private dns {}",
+                result["private_dns"].as_str().unwrap_or("?")
+            ),
+        ),
+        given(
+            "always-on VPN app",
+            format!(
+                "always-on vpn {}",
+                result["always_on_vpn"].as_str().unwrap_or("none")
+            ),
+        ),
+        given(
+            "always-on VPN lockdown",
+            format!(
+                "lockdown {}",
+                if result["lockdown"] == true {
+                    "on"
+                } else {
+                    "off"
+                }
+            ),
+        ),
+    ];
+    out.extend(lines.into_iter().flatten());
+    if !missing.is_empty() {
+        out.push(format!("not given: {}", missing.join(", ")));
+    }
+    out.join("\n")
+}
+
 /// `page`: the title and address, then the page's lines, then what was left out and how to get it.
 pub(crate) fn show_page(result: &Value, grep: Option<&str>) -> String {
     let text = result["text"].as_str().unwrap_or_default();
@@ -2499,6 +2790,16 @@ fn stop_daemon() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The packages in a comma list such as `com.example.app, com.example.other`; blanks are dropped.
+fn apps_under_test(list: Option<&str>) -> Vec<String> {
+    list.unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 fn run_daemon(trace: TraceOptions) -> ExitCode {
     let Ok(rt) = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -2514,12 +2815,13 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
             ("sim:", Arc::new(SimSource::new(socket::home()))),
             ("ios:", Arc::new(PhysicalSource::new(socket::home()))),
         ]);
-        let daemon = Daemon::with_trace(
+        let daemon = Daemon::start(
             Arc::new(sources),
             Config {
                 home: socket::home(),
             },
             trace,
+            apps_under_test(std::env::var("PHONEDRIVER_APPS_UNDER_TEST").ok().as_deref()),
         );
         let listener = match socket::listen(&socket::socket_path()).await {
             Ok(l) => l,
@@ -2544,6 +2846,16 @@ fn run_daemon(trace: TraceOptions) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_apps_under_test_list_splits_on_commas_and_drops_blanks() {
+        assert_eq!(
+            super::apps_under_test(Some(" com.example.app, ,com.example.other,")),
+            vec!["com.example.app", "com.example.other"]
+        );
+        assert!(super::apps_under_test(None).is_empty());
+        assert!(super::apps_under_test(Some("")).is_empty());
+    }
+
     use super::*;
 
     #[test]
@@ -2739,6 +3051,64 @@ mod tests {
         assert!(
             head.ends_with("still animating after 9150ms, read as it is now"),
             "{head}"
+        );
+    }
+
+    #[test]
+    fn wait_takes_vpn_state_and_a_log_line_beside_a_text_and_a_target_that_is_gone() {
+        assert_eq!(wait_condition("vpn:up", None), json!({"vpn": "up"}));
+        assert_eq!(wait_condition("vpn:down", None), json!({"vpn": "down"}));
+        assert_eq!(
+            wait_condition("log:code=|ready", Some("Example")),
+            json!({"log": {"pattern": "code=|ready", "app": "Example"}})
+        );
+        assert_eq!(
+            wait_condition("log:x", None),
+            json!({"log": {"pattern": "x", "app": null}})
+        );
+        assert_eq!(
+            wait_condition("gone:Loading", None),
+            json!({"gone": {"text": "Loading"}})
+        );
+        assert_eq!(
+            parse_step_line("wait log:ready --app Example").unwrap(),
+            json!({"kind": "wait", "condition": {"log": {"pattern": "ready", "app": "Example"}}})
+        );
+        assert_eq!(
+            parse_step_line("wait vpn:up").unwrap(),
+            json!({"kind": "wait", "condition": {"vpn": "up"}})
+        );
+    }
+
+    #[test]
+    fn a_saved_vpn_or_log_wait_reads_as_one_in_a_replay() {
+        let d = |c: Value| Replay::describe(&json!({"method": "wait", "params": {"condition": c}}));
+        assert_eq!(d(json!({"vpn": "up"})), "wait vpn:up");
+        assert_eq!(
+            d(json!({"log": {"pattern": "ready", "app": null}})),
+            "wait log:ready"
+        );
+    }
+
+    #[test]
+    fn the_network_view_prints_a_line_for_each_network_then_what_was_not_given() {
+        let shown = show_network(&json!({
+            "networks": [
+                {"id": 101, "transports": ["wifi"], "default": true, "interface": "wlan0", "dns": ["10.0.2.3"], "uids": [], "underlying": []},
+                {"id": 102, "transports": ["wifi", "vpn"], "default": false, "interface": "tun0", "dns": ["10.77.0.1"],
+                 "owner": "dev.example.vpn", "uids": ["0-99999"], "underlying": [101]}],
+            "always_on_vpn": "dev.example.vpn",
+            "lockdown": true,
+            "missing": ["private DNS"]
+        }));
+        assert_eq!(
+            shown,
+            "101 wifi (default) on wlan0 · dns 10.0.2.3\n102 wifi+vpn of dev.example.vpn on tun0 for uids 0-99999 over 101 · dns 10.77.0.1\nalways-on vpn dev.example.vpn\nlockdown on\nnot given: private DNS"
+        );
+        let none = show_network(&json!({"networks": [], "missing": []}));
+        assert_eq!(
+            none,
+            "no network is up\nprivate dns ?\nalways-on vpn none\nlockdown off"
         );
     }
 

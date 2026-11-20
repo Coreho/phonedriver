@@ -152,12 +152,25 @@ impl Daemon {
         config: Config,
         trace: TraceOptions,
     ) -> Arc<Daemon> {
+        Self::start(source, config, trace, Vec::new())
+    }
+
+    /// `apps_under_test` are packages the person named outside the tools; on a physical device they count as theirs
+    /// for `apps clear`, `uninstall`, `grant`, `revoke` and `launch --grant`, like an app phonedriver installed.
+    pub fn start(
+        source: Arc<dyn DeviceSource>,
+        config: Config,
+        trace: TraceOptions,
+        apps_under_test: Vec<String>,
+    ) -> Arc<Daemon> {
         trace::clean_older_than(&config.home.join("tmp"), TMP_MAX_AGE);
         trace::clean_older_than(&config.home.join("traces"), TRACE_MAX_AGE);
         Arc::new(Daemon {
             source,
             traces: Traces::new(config.home.join("traces"), trace),
-            ledger: Arc::new(ledger::Ledger::new(&config.home)),
+            ledger: Arc::new(
+                ledger::Ledger::new(&config.home).with_apps_under_test(apps_under_test),
+            ),
             home: config.home,
             actors: Mutex::default(),
             told: Mutex::default(),
@@ -242,8 +255,8 @@ impl Daemon {
                 Ok(json!({"same": last.as_deref() == Some(line.as_str())}))
             }
             "release" | "snapshot" | "screenshot" | "act" | "wait" | "batch" | "find" | "apps"
-            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "page" | "record"
-            | "journal" => {
+            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "network"
+            | "page" | "record" | "journal" => {
                 let common: Common = rpc::params(params)?;
                 if method == "release" && common.device.is_none() {
                     self.release_everywhere(session).await;
@@ -269,6 +282,7 @@ impl Daemon {
                         Call::Shell(p)
                     }
                     "logs" => Call::Logs(rpc::params(params)?),
+                    "network" => Call::Network,
                     "page" => Call::Page(rpc::params(params)?),
                     "record" => {
                         let p: RecordParams = rpc::params(params)?;

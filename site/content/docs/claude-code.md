@@ -27,6 +27,16 @@ claude mcp add --env PHONEDRIVER_DEVICE=android:emulator-5554 phonedriver -- npx
 
 `phonedriver devices` lists the ids.
 
+## An app you are developing
+
+On a physical Android phone, `apps clear`, `uninstall`, `grant` and `revoke` touch only apps phonedriver installed, so an app that Gradle or Android Studio put there is refused. Name your own apps in the server's environment, which the agent cannot change:
+
+```sh
+claude mcp add --env PHONEDRIVER_APPS_UNDER_TEST=com.example.app,com.example.other phonedriver -- npx -y phonedriver mcp
+```
+
+The daemon reads the list when it starts, so run `phonedriver daemon stop` once if one is already running. Emulators and Simulators need none of this.
+
 ## Or install the plugin
 
 The plugin adds the same server and the phonedriver skill, so Claude Code has the full instructions without you pasting them. Remove a server you added with `claude mcp add` first (`claude mcp remove phonedriver`), or the tools are listed twice.
@@ -57,7 +67,7 @@ ok tapped @e41 "Dark Appearance"
 
 ## What the agent gets
 
-Seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. Each prints the same text as the CLI verb of the same name. `phonedriver skill` prints `SKILL.md`, the instructions an agent reads before it uses the tools; the MCP server carries a short version too.
+Eighteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs`, `network` and `replay`. Each prints the same text as the CLI verb of the same name. `phonedriver skill` prints `SKILL.md`, the instructions an agent reads before it uses the tools; the MCP server carries a short version too.
 
 ## When Claude Code asks you something
 

@@ -34,6 +34,8 @@ Put this in `.vscode/mcp.json`. In VS Code the top key is `servers`, where most 
 }
 ```
 
+To let the agent clear, remove or change the permissions of an app you are developing on a physical Android phone (an app Gradle installed, not phonedriver), add `"PHONEDRIVER_APPS_UNDER_TEST": "com.example.app"` to `env`, and run `phonedriver daemon stop` once if a daemon is running.
+
 `PHONEDRIVER_DEVICE` is optional when one device is connected. `phonedriver devices` lists the ids. On Windows, if VS Code cannot start `npx` directly, use `"command": "cmd"` with `"args": ["/c", "npx", "-y", "phonedriver", "mcp"]`.
 
 ## Connect a device and ask
@@ -42,7 +44,7 @@ Start an [Android emulator](/docs/android-emulator/), plug in an [Android phone]
 
 > Open Settings and turn on dark mode.
 
-The server has seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. `snapshot`, `screenshot`, `wait` and `logs` are marked read-only.
+The server has eighteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs`, `network` and `replay`. `snapshot`, `screenshot`, `wait`, `logs` and `network` are marked read-only.
 
 ## Approval prompts
 

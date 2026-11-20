@@ -4,7 +4,7 @@ seo: Replay an AI agent's mobile app run in GitHub Actions on an Android emulato
 nav: Replay in CI
 description: Save what an agent did on your app as a steps file, replay it with no model, and run the files on every commit with the phonedriver GitHub Action on an Android emulator or an iOS Simulator.
 meta: Save an agent's run on your app as a steps file and replay it on every commit with the phonedriver GitHub Action, on an Android emulator or the iOS Simulator.
-updated: 2026-11-17
+updated: 2026-11-20
 date: 2026-11-17
 ---
 
@@ -36,7 +36,27 @@ error: step 6 of 9 (tap "Pay now") failed: no element matches "Pay now"
 hint: Do step 6 yourself, then replay the same file from step 7 for the 3 steps left.
 ```
 
-Text typed with `--secret` is never written to the file, so a replay stops at that step. Keep real passwords out of runs meant for CI and type test values in plain text.
+## Logins and fresh data
+
+Text typed with `--secret` is never written to the file. `save` writes the step with the name of an environment variable instead, and lists it:
+
+```console
+$ phonedriver save login.steps
+saved 3 steps to login.steps
+1. tap "Sign in"
+2. type secret $PHONEDRIVER_SECRET_1 into "Password"
+3. tap "Continue"
+the secret text is not in the file: set PHONEDRIVER_SECRET_1 before replaying (rename a variable in the file if you like)
+```
+
+A replay reads that variable from the environment of the process that runs it and types it as a secret, so it is hidden in replies and traces like any `--secret` text. If the variable is not set, the replay stops at that step and the hint names it. A renamed variable must still begin `PHONEDRIVER_SECRET_`, so a steps file cannot make a replay type another variable. With MCP, put the variable in the MCP server's `env`, not in a tool argument.
+
+`{{name}}` in a step's text is filled from `--var name=value` (MCP: `vars`), and `{{run}}` is a short id new in every replay, for data that must be fresh, such as `test+{{run}}@example.com`. A variable the file uses and nobody gave is refused before the first step, with every missing name listed. Variables are not secrets and may show in replies; use the environment variable for a secret. `save` never writes variables: edit them into the file where a value should change.
+
+```console
+$ PHONEDRIVER_SECRET_1=hunter2-test phonedriver replay signup.steps --var plan=pro
+replayed 6 steps in 14.2 s (run 3fa91c07)
+```
 
 ## Check what each screen shows
 
@@ -78,6 +98,10 @@ jobs:
           app: app/build/outputs/apk/debug/app-debug.apk
           runs: e2e/*.steps
           record: true
+          vars: |
+            plan=pro
+        env:
+          PHONEDRIVER_SECRET_1: ${{ secrets.APP_PASSWORD }}
 ```
 
 For iOS, use a macOS runner, `platform: ios` and a Simulator `.app` built with `xcodebuild -sdk iphonesimulator`. `device` picks the Simulator; the default is the first iPhone the runner has.
@@ -92,6 +116,7 @@ Each run's result is a row in the job summary. The reply of every run, and the s
 | `api-level` | `35` | The Android system image |
 | `device` | first iPhone | The Simulator to boot |
 | `record` | `false` | `true` keeps a video of every run |
+| `vars` | | Values for `{{name}}` in the files, one `name=value` a line |
 | `screens` | | A folder of kept screens, a subfolder for each run named as its steps file. A run with no subfolder keeps its screens in the artifact, under `screens/`, for you to commit |
 | `version` | `latest` | The phonedriver release to install |
 | `artifact` | `phonedriver-<job>` | The artifact's name |

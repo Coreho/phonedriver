@@ -7,6 +7,7 @@ use tokio::sync::{broadcast, watch};
 
 use crate::error::{DeviceId, Error, Op};
 use crate::geometry::{Point, Rect, Size};
+use crate::network::{LogWait, LogWaited, NetworkView};
 use crate::raw::RawTree;
 use crate::settings::{SettingOp, SettingReply};
 
@@ -357,6 +358,14 @@ pub trait Device: Send + Sync {
             reason: "this device cannot revoke permissions",
         })
     }
+    /// Delivers a push notification with this JSON `payload` to an installed app, as the platform's push service
+    /// would, so the app's handling of it can be tested.
+    async fn push(&self, _app: &AppId, _payload: &str) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::App,
+            reason: "this device cannot be sent a push notification to test an app with",
+        })
+    }
     /// Starts writing the screen's video to an MP4 file at `path`, from the picture now on screen.
     async fn record_start(&self, _path: &std::path::Path) -> Result<()> {
         Err(Error::Unsupported {
@@ -375,6 +384,20 @@ pub trait Device: Send + Sync {
         Err(Error::Unsupported {
             op: Op::Logs,
             reason: "this device's app logs cannot be read; Android devices have them",
+        })
+    }
+    /// Waits for a log line, from now on, that holds one of `req.patterns`; the device streams its own log.
+    async fn log_wait(&self, _req: &LogWait) -> Result<LogWaited> {
+        Err(Error::Unsupported {
+            op: Op::Logs,
+            reason: "this device's log cannot be followed; Android devices and the iOS Simulator can",
+        })
+    }
+    /// The networks the device is on, their DNS, and always-on VPN state, as the platform reports them.
+    async fn network(&self) -> Result<NetworkView> {
+        Err(Error::Unsupported {
+            op: Op::Network,
+            reason: "this device's networks cannot be read; Android devices can",
         })
     }
     /// The web page the app in front shows, read from the browser and not from the screen.

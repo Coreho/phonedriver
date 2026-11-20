@@ -172,7 +172,7 @@ phonedriver replay signup.steps
 phonedriver replay signup.steps --screens screens/signup
 ```
 
-Replay needs no model. It stops at the first step that misses and shows the screen, so the agent can do that one step. With `--screens`, the first replay keeps a screenshot after each step, and later replays stop at the first step whose screen shows different text. The status bar is left out. A step that typed a secret is not saved with its text, so the replay stops there.
+Replay needs no model. It stops at the first step that misses and shows the screen, so the agent can do that one step. With `--screens`, the first replay keeps a screenshot after each step, and later replays stop at the first step whose screen shows different text. The status bar is left out. A step that typed a secret is saved with the name of an environment variable (`PHONEDRIVER_SECRET_1`), not its text, and a replay types what that variable holds, so a login replays in CI. `{{name}}` in a step is filled from `--var name=value`, and `{{run}}` is a new id for each replay.
 
 The repository is also a GitHub Action that boots an emulator or a Simulator, installs your app and replays these files on every commit ([Saving and replaying a run](docs/reference.md#saving-and-replaying-a-run), [in CI](docs/reference.md#replaying-runs-in-github-actions)).
 
@@ -191,7 +191,7 @@ The repository is also a GitHub Action that boots an emulator or a Simulator, in
 
 `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`.
 
-`snapshot`, `screenshot`, `wait` and `logs` are marked read-only, so a client can run them without a permission prompt. The `phonedriver` CLI has the same commands, for scripts and for agents that prefer a shell. A device you used from a terminal goes to your agent after 30 seconds idle. Every command and argument is in the [reference](docs/reference.md), and everything new in 0.1.5 is in the [changelog](CHANGELOG.md).
+`snapshot`, `screenshot`, `wait`, `logs` and `network` are marked read-only, so a client can run them without a permission prompt. The `phonedriver` CLI has the same commands, for scripts and for agents that prefer a shell. A device you used from a terminal goes to your agent after 30 seconds idle. Every command and argument is in the [reference](docs/reference.md), and everything new in 0.1.6 is in the [changelog](CHANGELOG.md).
 
 </details>
 

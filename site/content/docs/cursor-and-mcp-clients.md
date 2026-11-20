@@ -24,6 +24,8 @@ I test with Claude Code. I have not run a session in Cursor, Gemini CLI, Zed or 
 }
 ```
 
+To let the agent clear, remove or change the permissions of an app you are developing on a physical Android phone (an app Gradle installed, not phonedriver), add `"PHONEDRIVER_APPS_UNDER_TEST": "com.example.app,com.example.other"` to `env`, and run `phonedriver daemon stop` once if a daemon is running.
+
 The first start downloads the binary once. On Windows, some clients cannot start `npx` directly: use `"command": "cmd"` and `"args": ["/c", "npx", "-y", "phonedriver", "mcp"]`. If you installed phonedriver yourself, use `"command": "phonedriver"` with `"args": ["mcp"]`, or the full path. `PHONEDRIVER_DEVICE` is optional when one device is connected.
 
 ## Cursor
@@ -60,7 +62,7 @@ Use the client's own place for stdio servers, with the same `command` and `args`
 
 ## Tools
 
-The server has seventeen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs` and `replay`. `apps` also installs, stops, clears and uninstalls. Each prints the same text as the CLI verb of the same name, so anything you read in these docs about the command line holds for the tools.
+The server has eighteen tools: `devices`, `apps`, `snapshot`, `screenshot`, `tap`, `type`, `swipe`, `scroll`, `press`, `launch`, `wait`, `batch`, `clipboard`, `shell`, `setting`, `logs`, `network` and `replay`. `apps` also installs, stops, clears and uninstalls. Each prints the same text as the CLI verb of the same name, so anything you read in these docs about the command line holds for the tools.
 
 In Claude Code's wrapper a tool costs about 51 tokens whatever its text. Measured when the server had fourteen tools, the first turn of a one-word `claude -p` cost 5,606 tokens with phonedriver attached ([token benchmark](/benchmarks/#tokens)).
 

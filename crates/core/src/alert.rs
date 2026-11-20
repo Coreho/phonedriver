@@ -13,6 +13,7 @@ const DIALOG_PACKAGES: &[&str] = &[
     "com.google.android.permissioncontroller",
     "com.android.packageinstaller",
     "com.google.android.packageinstaller",
+    "com.android.vpndialogs",
     "android",
 ];
 
@@ -199,6 +200,17 @@ mod tests {
         );
         let alerts = find(&tree, PHONE);
         assert_eq!(alerts[0].1.title.as_deref(), Some("Allow USB debugging?"));
+    }
+
+    #[test]
+    fn the_vpn_connection_request_is_an_alert_with_its_title() {
+        let tree = android(include_str!(
+            "../tests/fixtures/android/vpn_consent_dialog.json"
+        ));
+        let alerts = find(&tree, PHONE);
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].1.package, "com.android.vpndialogs");
+        assert_eq!(alerts[0].1.title.as_deref(), Some("Connection request"));
     }
 
     #[test]

@@ -8,6 +8,7 @@ use phonedriver_core::device::{
 };
 use phonedriver_core::error::{Error, Op};
 use phonedriver_core::geometry::{Rect, Size};
+use phonedriver_core::network::{LogWait, LogWaited, NetworkView};
 use phonedriver_core::raw::{NodeFlags, RawTree};
 use phonedriver_core::settings::{SettingOp, SettingReply, SettingsIndex};
 use phonedriver_video::frame_store::FrameStore;
@@ -16,13 +17,14 @@ use phonedriver_video::stream::VideoStream;
 use serde_json::{Value, json};
 use tokio::sync::{broadcast, watch};
 
-use crate::adb::{Adb, ShellOutput};
+use crate::adb::{Adb, ShellOutput, ShellPacket};
 use crate::agent::{Agent, AgentLog, Launched};
 use crate::console;
 use crate::control::Control;
 use crate::devtools;
 use crate::logs;
 use crate::map;
+use crate::network;
 use crate::settings;
 
 const FIRST_FRAME_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
@@ -417,6 +419,13 @@ impl Device for AndroidDevice {
         self.pm_permissions("grant", app, permissions).await
     }
 
+    async fn push(&self, _app: &AppId, _payload: &str) -> Result<()> {
+        Err(Error::Unsupported {
+            op: Op::App,
+            reason: "an Android app's push messages reach it through Google Play services, which only that service may send, and the shell cannot stand in for it; `cmd notification post` can show a notification, but from the shell's package and not from the app, so it does not test the app. Send the push from the Firebase console or its HTTP API, or call a receiver your debug build exposes with `shell`",
+        })
+    }
+
     async fn revoke(&self, app: &AppId, permissions: &[String]) -> Result<()> {
         self.pm_permissions("revoke", app, permissions).await
     }
@@ -477,6 +486,76 @@ impl Device for AndroidDevice {
             run(logs::app_command(&req.app.0, seconds)).await?
         };
         Ok(LogReply { text, crash })
+    }
+
+    async fn log_wait(&self, req: &LogWait) -> Result<LogWaited> {
+        let package = match &req.app {
+            Some(app) => {
+                package_name(app)?;
+                Some(app.0.as_str())
+            }
+            None => None,
+        };
+        let mut stream = self
+            .adb
+            .shell_stream(&self.serial, &logs::watch_command(package))
+            .await?;
+        let deadline = tokio::time::Instant::now() + req.timeout;
+        let (mut pending, mut seen) = (Vec::<u8>::new(), 0usize);
+        let mut said = String::new();
+        loop {
+            let packet = match tokio::time::timeout_at(deadline, stream.next()).await {
+                Err(_) => return Ok(LogWaited { line: None, seen }),
+                Ok(packet) => packet?,
+            };
+            match packet {
+                Some(ShellPacket::Stdout(data)) => {
+                    pending.extend(data);
+                    while let Some(end) = pending.iter().position(|b| *b == b'\n') {
+                        let line: Vec<u8> = pending.drain(..=end).collect();
+                        let line = String::from_utf8_lossy(&line).trim_end().to_string();
+                        if line.is_empty() || logs::is_marker(&line) {
+                            continue;
+                        }
+                        seen += 1;
+                        if req.matches(&line) {
+                            return Ok(LogWaited {
+                                line: Some(line),
+                                seen,
+                            });
+                        }
+                    }
+                }
+                Some(ShellPacket::Stderr(data)) => said.push_str(&String::from_utf8_lossy(&data)),
+                Some(ShellPacket::Exit(_)) | None => {
+                    return Err(Error::Transport {
+                        detail: match req.app.as_ref() {
+                            Some(app) if said.trim().is_empty() => {
+                                format!("the log of {} ended: is it installed?", app.0)
+                            }
+                            _ => format!("the log ended: {}", said.trim()),
+                        },
+                    });
+                }
+            }
+        }
+    }
+
+    async fn network(&self) -> Result<NetworkView> {
+        let request = ShellRequest {
+            command: network::COMMAND.to_string(),
+            timeout: NETWORK_LIMIT,
+        };
+        let reply = self.shell(&request).await?;
+        if reply.timed_out || reply.stdout.trim().is_empty() {
+            return Err(Error::Transport {
+                detail: format!(
+                    "the device did not print its connectivity state within {} s",
+                    NETWORK_LIMIT.as_secs()
+                ),
+            });
+        }
+        Ok(network::parse(&reply.stdout))
     }
 
     async fn setting(&self, op: SettingOp) -> Result<SettingReply> {
@@ -732,6 +811,8 @@ fn first_install_time(dump: &str) -> Option<String> {
 }
 
 const LOGS_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+/// `dumpsys connectivity` took 6 s to 10 s for a minute after a VPN app was force-stopped (API 37 emulator).
+const NETWORK_LIMIT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// An app id goes into shell commands, so it must look like a package name.
 pub(crate) fn package_name(app: &AppId) -> Result<()> {
