@@ -106,7 +106,7 @@ async fn message<S: AsyncRead + Unpin>(s: &mut S) -> Result<String> {
             127 => s.read_u64().await.map_err(closed)?,
             n => u64::from(n),
         };
-        if length + whole.len() as u64 > LARGEST_ANSWER {
+        if length.saturating_add(whole.len() as u64) > LARGEST_ANSWER {
             return Err(broken("sent more than a page can hold"));
         }
         let mut payload = vec![0; length as usize];
@@ -348,5 +348,14 @@ mod tests {
         assert_eq!(out[1], 0x80 | 127);
         assert_eq!(u64::from_be_bytes(out[2..10].try_into().unwrap()), 70_000);
         assert_eq!(out[14] ^ 1, b'y');
+    }
+
+    #[tokio::test]
+    async fn a_frame_that_claims_more_bytes_than_fit_in_a_number_is_refused() {
+        let mut sent = server_frame(0x1, false, b"x");
+        sent.extend([0x0, 127]);
+        sent.extend(u64::MAX.to_be_bytes());
+        let error = message(&mut sent.as_slice()).await.unwrap_err();
+        assert!(error.to_string().contains("more than a page"), "{error}");
     }
 }

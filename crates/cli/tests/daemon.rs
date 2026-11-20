@@ -1661,6 +1661,33 @@ async fn plain_text_is_refused_in_the_focused_password_field_and_clearing_it_is_
     );
 }
 
+#[tokio::test(start_paused = true)]
+async fn clearing_a_field_whose_state_description_says_empty_is_verified_and_shows_no_text() {
+    let json = r#"{"windows":[{"id":1,"type":"application","package":"com.example","bounds":[0,0,360,800]}],"nodes":[
+        {"p":-1,"w":1,"cls":"android.widget.FrameLayout","b":[0,0,360,800],"f":"vVe"},
+        {"p":0,"w":1,"cls":"android.widget.EditText","text":"","sd":"Empty","b":[0,100,360,160],"f":"vVeEF","a":["tap","set_text"]}]}"#;
+    let tree = RawTree::from_android_json(json, Scale { density: 1.0 }).unwrap();
+    let (source, _) = FakeSource::with(vec![tree.clone(), tree]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        json!({"action": {"kind": "type", "text": "", "into": {"ref": "e1"}}}),
+    )
+    .await;
+    assert_eq!(r["verified"], true, "{r}");
+    let snapshot = ok(&d, "default", "snapshot", json!({})).await;
+    assert!(
+        snapshot["text"]
+            .as_str()
+            .unwrap()
+            .contains("@e1 textbox focused"),
+        "{snapshot}"
+    );
+}
+
 fn coded_field(label: Option<&str>, hint: Option<&str>, id: Option<&str>) -> RawTree {
     let node = json!({
         "p": 0, "w": 1, "cls": "android.widget.EditText", "text": "", "desc": label, "hint": hint, "id": id,
@@ -4512,6 +4539,72 @@ async fn scroll_until_keeps_going_while_the_target_is_under_the_toolbar() {
     assert_eq!(fake.calls().len(), 1);
 }
 
+/// Chrome on the API 37 emulator showing a page with a fixed bottom bar (`position: fixed`, like Instagram's tab bar),
+/// scrolled by `scroll` CSS pixels: 0 leaves the sixth row of tiles under the bar, 17 shows a 15 pt strip of it above
+/// the bar, 68 shows its upper half.
+fn chrome_fixed_bar(scroll: u32) -> RawTree {
+    let json = match scroll {
+        0 => include_str!("../../core/tests/fixtures/android/chrome_fixed_bar.json"),
+        17 => include_str!("../../core/tests/fixtures/android/chrome_fixed_bar_strip.json"),
+        _ => include_str!("../../core/tests/fixtures/android/chrome_fixed_bar_half.json"),
+    };
+    RawTree::from_android_json(json, Scale { density: 2.625 }).unwrap()
+}
+
+fn tapped_y(call: &Call) -> f32 {
+    match call {
+        Call::Gesture(g) => g.fingers[0][0].at.y,
+        other => panic!("not a tap: {other:?}"),
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_tile_under_a_pages_fixed_bar_is_tapped_where_it_shows_or_scrolled_clear() {
+    let (source, fake) = FakeSource::with(vec![chrome_fixed_bar(17)]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "act", tap_text("Post 16")).await;
+    let y = tapped_y(&fake.calls()[0]);
+    assert!(
+        (2171.0 / 2.625..2210.0 / 2.625).contains(&y),
+        "the tap is in the strip above the bar: {y}"
+    );
+
+    let (source, fake) = FakeSource::with(vec![chrome_fixed_bar(0)]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let e = err(&d, "default", "act", tap_text("Post 16")).await;
+    assert_eq!(e.code, -32009, "{e:?}");
+    assert!(e.message.contains("under the page's bar"), "{}", e.message);
+    assert!(
+        e.data["hint"].as_str().unwrap().contains("scroll down"),
+        "{}",
+        e.data["hint"]
+    );
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+    ok(&d, "default", "act", tap_text("Profile")).await;
+    assert_eq!(fake.calls().len(), 1, "the bar's own links are tappable");
+}
+
+#[tokio::test(start_paused = true)]
+async fn scroll_until_keeps_going_while_a_pages_fixed_bar_covers_the_target() {
+    let (source, fake) = FakeSource::with(vec![chrome_fixed_bar(17), chrome_fixed_bar(68)]);
+    let (d, _home) = daemon(source);
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        scroll(json!({"until": {"text": "Post 16"}})),
+    )
+    .await;
+    assert!(
+        r["summary"].as_str().unwrap().contains("down 1 time to"),
+        "{}",
+        r["summary"]
+    );
+    assert_eq!(fake.calls().len(), 1);
+}
+
 fn tap_text(text: &str) -> Value {
     json!({"action": {"kind": "tap", "target": {"text": text}}})
 }
@@ -4814,6 +4907,77 @@ async fn a_batch_with_a_malformed_step_runs_nothing_and_names_the_step() {
     assert_eq!(e.code, -32602);
 }
 
+#[tokio::test]
+async fn a_tap_with_more_taps_or_a_longer_hold_than_a_person_makes_is_refused_and_nothing_runs() {
+    let (source, fake) = FakeSource::with(vec![tree(&["One"])]);
+    let (d, _home) = daemon(source);
+    let point = json!({"point": {"x": 10.0, "y": 10.0}});
+    for (field, value, limit) in [
+        ("count", json!(11), "10 times"),
+        ("count", json!(u32::MAX), "10 times"),
+        ("long", json!(10_001), "10 seconds"),
+        ("long", json!(u32::MAX), "10 seconds"),
+    ] {
+        let mut action = json!({"kind": "tap", "target": point});
+        action[field] = value;
+        let e = err(&d, "default", "act", json!({"action": action})).await;
+        assert_eq!(e.code, -32602, "{field}");
+        assert!(e.message.contains(limit), "{}", e.message);
+        let e = err(&d, "default", "batch", batch(json!([action]))).await;
+        assert_eq!(e.code, -32602, "{field}");
+        assert!(e.message.contains("step 1"), "{}", e.message);
+    }
+    assert!(fake.calls().is_empty());
+    let action = json!({"kind": "tap", "target": point, "count": 10, "long": 10_000});
+    ok(&d, "default", "act", json!({"action": action})).await;
+}
+
+#[tokio::test]
+async fn a_closed_mcp_connection_drops_its_sessions_state_and_a_closed_cli_connection_keeps_it() {
+    for (client, kept) in [("mcp", false), ("cli", true)] {
+        let (source, _) = FakeSource::with(vec![tree(&["One"])]);
+        let (d, home) = daemon(source);
+        let path = local_socket(home.path(), "d.sock");
+        tokio::spawn(d.clone().serve(path.clone()));
+        wait_for_socket(&path).await;
+        let stream = phonedriver::daemon::socket::connect(&path).await.unwrap();
+        let (read, mut write) = tokio::io::split(stream);
+        let mut replies = BufReader::new(read).lines();
+        let hello = json!({"client": client, "version": env!("CARGO_PKG_VERSION")});
+        for (method, mut params) in [("hello", hello), ("act", tap_point(10.0, 10.0))] {
+            params["session"] = "s".into();
+            let req = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+            write
+                .write_all(format!("{req}\n").as_bytes())
+                .await
+                .unwrap();
+            let reply: Value =
+                serde_json::from_str(&replies.next_line().await.unwrap().unwrap()).unwrap();
+            assert!(reply.get("result").is_some(), "{method}: {reply}");
+        }
+        drop((write, replies));
+        for _ in 0..200 {
+            let listed = ok(&d, "other", "devices", json!({})).await;
+            if kept || listed[0]["leased_by"].is_null() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let saved = ok(&d, "s", "journal", json!({})).await;
+        assert_eq!(saved["steps"].as_array().unwrap().len(), usize::from(kept));
+        let traces = std::fs::read_dir(home.path().join("traces"))
+            .unwrap()
+            .filter(|f| {
+                std::fs::read_to_string(f.as_ref().unwrap().path())
+                    .unwrap()
+                    .contains("\"session\":\"s\"")
+            })
+            .count();
+        assert_eq!(traces, if kept { 1 } else { 2 }, "{client}");
+    }
+}
+
 #[tokio::test(start_paused = true)]
 async fn drag_presses_at_the_first_target_holds_then_moves_to_the_second_and_pinch_plays_two_fingers()
  {
@@ -4964,6 +5128,155 @@ async fn on_a_physical_device_only_apps_phonedriver_installed_can_be_cleared_or_
         .count();
     assert_eq!(removed, 1);
     assert!(home.path().join("installed.json").exists());
+}
+
+fn read_ledger(home: &tempfile::TempDir) -> Value {
+    serde_json::from_slice(&std::fs::read(home.path().join("installed.json")).unwrap()).unwrap()
+}
+
+async fn install_apk(d: &Daemon) -> Value {
+    ok(
+        d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn an_install_that_adds_several_packages_records_none_of_them_and_says_so() {
+    let (source, fake) = physical();
+    fake.set_installs(&["com.example.theirs", "com.example.installed"]);
+    let (d, home) = daemon(source);
+    let r = install_apk(&d).await;
+    let summary = r["summary"].as_str().unwrap();
+    assert!(
+        summary.contains("2 packages are new") && summary.contains("com.example.theirs"),
+        "{summary}"
+    );
+    let e = err(&d, "default", "app", app_call("clear", "Theirs")).await;
+    assert_eq!(e.code, -32011, "{}", e.message);
+    let e = err(&d, "default", "app", app_call("clear", "Mine")).await;
+    assert_eq!(e.code, -32011, "{}", e.message);
+    assert!(!home.path().join("installed.json").exists());
+}
+
+#[tokio::test]
+async fn an_install_that_replaces_an_app_records_nothing() {
+    let (source, fake) = physical();
+    fake.set_installs(&[]);
+    let (d, home) = daemon(source);
+    let r = install_apk(&d).await;
+    assert_eq!(r["summary"], "installed (it replaced an app already there)");
+    assert!(!home.path().join("installed.json").exists());
+}
+
+#[tokio::test]
+async fn an_app_installed_again_by_its_owner_is_no_longer_the_one_phonedriver_installed() {
+    let (source, fake) = physical();
+    fake.set_installed_at("2026-11-19 10:04:31");
+    let (d, _home) = daemon(source);
+    install_apk(&d).await;
+    ok(&d, "default", "app", app_call("clear", "Mine")).await;
+    fake.set_installed_at("2026-11-19 18:30:02");
+    for action in ["clear", "uninstall"] {
+        let e = err(&d, "default", "app", app_call(action, "Mine")).await;
+        assert_eq!(e.code, -32011, "{action}");
+        assert!(e.message.contains("installed again"), "{}", e.message);
+    }
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "grant", "app": "Mine", "permissions": ["camera"]}),
+    )
+    .await;
+    assert!(e.message.contains("installed again"), "{}", e.message);
+    let removed = fake
+        .calls()
+        .iter()
+        .filter(|c| {
+            matches!(
+                c,
+                Call::AppOp(phonedriver_core::device::AppOp::Uninstall, _)
+            )
+        })
+        .count();
+    assert_eq!(removed, 0);
+}
+
+#[tokio::test]
+async fn a_record_written_before_installs_were_identified_still_counts() {
+    let (source, _fake) = physical();
+    let (d, home) = daemon(source);
+    std::fs::write(
+        home.path().join("installed.json"),
+        r#"{"android:R5CT123":["com.example.installed"]}"#,
+    )
+    .unwrap();
+    ok(&d, "default", "app", app_call("clear", "Mine")).await;
+    let e = err(&d, "default", "app", app_call("clear", "Theirs")).await;
+    assert_eq!(e.code, -32011);
+}
+
+#[tokio::test]
+async fn the_record_is_kept_under_the_phones_own_serial_and_not_its_connection() {
+    let (source, fake) = physical();
+    fake.set_hardware_serial("R5CT123");
+    let (d, home) = daemon(source);
+    install_apk(&d).await;
+    assert_eq!(
+        read_ledger(&home)["android:R5CT123"],
+        json!([{"id": "com.example.installed"}])
+    );
+
+    let (source, fake) = physical();
+    fake.set_hardware_serial("OTHER9");
+    let (d, home) = daemon(source);
+    std::fs::write(
+        home.path().join("installed.json"),
+        r#"{"android:R5CT123":["com.example.installed"]}"#,
+    )
+    .unwrap();
+    let e = err(&d, "default", "app", app_call("clear", "Mine")).await;
+    assert_eq!(e.code, -32011, "another phone at the same address");
+}
+
+#[tokio::test]
+async fn an_install_that_cannot_be_recorded_says_so_and_a_damaged_record_is_not_replaced() {
+    let (source, _fake) = physical();
+    let (d, home) = daemon(source);
+    std::fs::create_dir(home.path().join("installed.json")).unwrap();
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await;
+    assert!(
+        e.message.contains("installed com.example.installed")
+            && e.message.contains("installed.json"),
+        "{}",
+        e.message
+    );
+
+    let (source, _fake) = physical();
+    let (d, home) = daemon(source);
+    std::fs::write(home.path().join("installed.json"), "{not json").unwrap();
+    let e = err(
+        &d,
+        "default",
+        "app",
+        json!({"action": "install", "path": "/tmp/a.apk"}),
+    )
+    .await;
+    assert!(e.message.contains("installed.json"), "{}", e.message);
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("installed.json")).unwrap(),
+        "{not json"
+    );
 }
 
 #[tokio::test(start_paused = true)]

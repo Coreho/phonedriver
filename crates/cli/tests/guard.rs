@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 
 use fakes::PNG;
 use phonedriver::client::{Client, Failure};
-use phonedriver::mcp::Mcp;
 use phonedriver_core::device::{DeviceEvent, FrameRef};
 use phonedriver_core::error::Category;
 use rmcp::model::{
@@ -311,7 +310,7 @@ async fn mcp_asking(
 ) -> Mcp2 {
     let rig = rig().await;
     let (client_io, server_io) = tokio::io::duplex(1 << 20);
-    let server = Mcp::new(Some(rig.socket.clone()), "mcp-guard".into()).asking(ask);
+    let server = rig.mcp().asking(ask);
     tokio::spawn(async move {
         let running = server.serve(server_io).await.unwrap();
         let _ = running.waiting().await;

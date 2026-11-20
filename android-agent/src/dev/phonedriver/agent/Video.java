@@ -27,6 +27,12 @@ final class Video {
 
     private static final long REPEAT_US = 100_000L;
 
+    // A phone whose display HAL fails a virtual display that renders straight into the encoder gives no output at
+    // all (Galaxy A53, One UI 8, #22). A software encoder is left out: on a loaded API 37 emulator its first frame
+    // came up to 5 s late.
+    private static final long NO_OUTPUT_NS = 1_500_000_000L;
+    private static volatile boolean relayFallback;
+
     // A frame's presentation time is the System.nanoTime at which the screen showed it: on the API 37 emulator every
     // frame left the encoder between 30 ms and 5 s after its own. An encoder whose times are further off than this
     // is on another clock; its frames are not timed, and a barrier then passes once the output on hand is written.
@@ -111,7 +117,7 @@ final class Video {
         out.writeInt(Hidden.width());
         out.writeInt(Hidden.height());
         out.flush();
-        pump(Hidden.codec(), -1, 0, 0, 0);
+        pump(Hidden.codec(), -1, 0, 0, 0, false);
     }
 
     void run() throws Exception {
@@ -135,19 +141,28 @@ final class Video {
             int rotation = di.getRotation();
             int[] size = fit(dw, dh, maxSize, align);
             Surface surface = null;
+            GlRelay relay = null;
             VirtualDisplay display = null;
             IBinder legacyDisplay = null;
             boolean started = false;
             try {
                 codec.configure(format(size[0], size[1], bitRate, fps, constantRate), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                 surface = codec.createInputSurface();
+                if (relayFallback || GlRelay.wanted()) {
+                    try {
+                        relay = GlRelay.start(size[0], size[1], surface);
+                    } catch (Exception e) {
+                        System.err.println("video: no OpenGL relay, rendering straight to the encoder: " + e);
+                    }
+                }
+                Surface target = relay != null ? relay.input() : surface;
                 try {
-                    display = ServiceManager.getDisplayManager().createVirtualDisplay("phonedriver", size[0], size[1], 0, surface);
+                    display = ServiceManager.getDisplayManager().createVirtualDisplay("phonedriver", size[0], size[1], 0, target);
                 } catch (Exception e) {
                     legacyDisplay = SurfaceControl.createDisplay("phonedriver", false);
                     SurfaceControl.openTransaction();
                     try {
-                        SurfaceControl.setDisplaySurface(legacyDisplay, surface);
+                        SurfaceControl.setDisplaySurface(legacyDisplay, target);
                         SurfaceControl.setDisplayProjection(legacyDisplay, 0, new Rect(0, 0, dw, dh), new Rect(0, 0, size[0], size[1]));
                         SurfaceControl.setDisplayLayerStack(legacyDisplay, di.getLayerStack());
                     } finally {
@@ -166,7 +181,7 @@ final class Video {
                 out.writeInt(size[0]);
                 out.writeInt(size[1]);
                 out.flush();
-                pump(codec, 0, dw, dh, rotation);
+                pump(codec, 0, dw, dh, rotation, relay == null && !software(codec));
             } catch (IOException e) {
                 throw e;
             } catch (Exception e) {
@@ -190,6 +205,9 @@ final class Video {
                 if (legacyDisplay != null) {
                     SurfaceControl.destroyDisplay(legacyDisplay);
                 }
+                if (relay != null) {
+                    relay.release();
+                }
                 if (surface != null) {
                     surface.release();
                 }
@@ -197,9 +215,16 @@ final class Video {
         }
     }
 
-    private void pump(MediaCodec codec, int displayId, int dw, int dh, int rotation) throws IOException {
+    private static boolean software(MediaCodec codec) {
+        String name = codec.getName();
+        return name.startsWith("c2.android.") || name.startsWith("OMX.google.");
+    }
+
+    private void pump(MediaCodec codec, int displayId, int dw, int dh, int rotation, boolean canRelay) throws IOException {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         long lastCheck = 0;
+        long startedNs = System.nanoTime();
+        boolean any = false;
         while (true) {
             if (lane.syncRequested) {
                 lane.syncRequested = false;
@@ -224,6 +249,15 @@ final class Video {
             }
             int id = codec.dequeueOutputBuffer(info, OUTPUT_WAIT_US);
             long now = System.nanoTime();
+            if (id >= 0) {
+                any = true;
+            } else if (canRelay && !any && now - startedNs > NO_OUTPUT_NS) {
+                // A new display always draws once, so an encoder that has given nothing by now gets no frames.
+                relayFallback = true;
+                System.err.println("video: no frame from the encoder in " + NO_OUTPUT_NS / 1_000_000
+                        + " ms; trying again through an OpenGL relay");
+                return;
+            }
             if (displayId >= 0 && now - lastCheck > DISPLAY_POLL_NS) {
                 lastCheck = now;
                 DisplayInfo d = ServiceManager.getDisplayManager().getDisplayInfo(displayId);

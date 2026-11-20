@@ -39,6 +39,13 @@ impl Traces {
         }
     }
 
+    pub fn close(&self, session: &str) {
+        self.files
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session);
+    }
+
     pub fn record(
         &self,
         session: &str,

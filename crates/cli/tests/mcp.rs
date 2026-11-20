@@ -25,9 +25,13 @@ async fn rig(trees: Vec<RawTree>) -> Rig {
 }
 
 async fn rig_with(device: Arc<dyn phonedriver_core::device::Device>) -> Rig {
+    rig_on(Arc::new(OneDevice(device))).await
+}
+
+async fn rig_on(source: Arc<dyn phonedriver::daemon::DeviceSource>) -> Rig {
     let home = tempfile::tempdir().unwrap();
     let daemon = Daemon::new(
-        Arc::new(OneDevice(device)),
+        source,
         Config {
             home: home.path().to_path_buf(),
         },
@@ -1149,6 +1153,111 @@ async fn replay_saves_what_the_session_did_and_runs_it_again_step_by_step() {
 }
 
 #[tokio::test]
+async fn a_save_that_cannot_write_leaves_the_steps_for_the_next_save() {
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    let rig = rig_with(fake).await;
+    rig.call("snapshot", json!({})).await;
+    rig.call("tap", json!({"target": "One"})).await;
+    let file = rig.home.path().join("run.steps");
+    let path = file.to_str().unwrap();
+    let blocked = rig.home.path().join("run.steps.tmp");
+    std::fs::create_dir(&blocked).unwrap();
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    assert!(texts(&r)[0].starts_with("cannot write "), "{r:?}");
+    assert!(!file.exists());
+
+    std::fs::remove_dir(&blocked).unwrap();
+    let r = rig
+        .call("replay", json!({"file": path, "save": true}))
+        .await;
+    assert!(texts(&r)[0].starts_with("saved 1 step to "), "{r:?}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap().lines().count(), 1);
+    assert!(!blocked.exists());
+}
+
+#[tokio::test]
+async fn a_replayed_shell_step_that_exits_other_than_it_expects_fails_the_replay() {
+    use phonedriver_core::device::ShellReply;
+    let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
+        "One",
+    ])]));
+    let rig = rig_with(fake.clone()).await;
+    let exits = |exit, timed_out| {
+        fake.answer_shell(ShellReply {
+            exit,
+            timed_out,
+            ..ShellReply::default()
+        })
+    };
+    let file = rig.home.path().join("check.steps");
+    let path = file.to_str().unwrap();
+
+    exits(3, false);
+    rig.call("shell", json!({"command": "exit 3", "settle": false}))
+        .await;
+    rig.call("replay", json!({"file": path, "save": true}))
+        .await;
+    let saved: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(saved["expect_exit"], 3, "{saved}");
+    let r = rig.call("replay", json!({"file": path})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+
+    let write = |step: Value| std::fs::write(&file, format!("{step}\n")).unwrap();
+    let shell = json!({"method": "shell", "params": {"command": "ping -c1 host", "settle": false}});
+    let with = |extra: Value| {
+        let mut step = shell.clone();
+        step.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        step
+    };
+
+    exits(1, false);
+    write(shell.clone());
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_eq!(r.is_error, Some(true), "{text}");
+    assert!(
+        text.starts_with(
+            "step 1 of 1 (shell ping -c1 host) failed: it exited 1; the step expects 0"
+        ),
+        "{text}"
+    );
+    write(with(json!({"expect_exit": 1})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    write(with(json!({"expect_exit": null})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    assert_ne!(r.is_error, Some(true), "{r:?}");
+    write(with(json!({"expect_exit": 2})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert!(
+        text.starts_with(
+            "step 1 of 1 (shell ping -c1 host) failed: it exited 1; the step expects 2"
+        ),
+        "{text}"
+    );
+
+    exits(124, true);
+    write(with(json!({"expect_exit": 124})));
+    let r = rig.call("replay", json!({"file": path})).await;
+    let text = texts(&r).join("\n");
+    assert_eq!(r.is_error, Some(true), "{text}");
+    assert!(
+        text.starts_with(
+            "step 1 of 1 (shell ping -c1 host) failed: it ran past its time limit and was stopped"
+        ),
+        "{text}"
+    );
+}
+
+#[tokio::test]
 async fn screenshot_with_record_starts_and_stops_a_video_and_returns_text_only() {
     let fake = Arc::new(phonedriver_core::testing::FakeDevice::new(vec![tree(&[
         "One",
@@ -1259,4 +1368,55 @@ fn test_socket(home: &std::path::Path, name: &str) -> std::path::PathBuf {
     } else {
         home.join("run").join(name)
     }
+}
+
+struct TwoDevices(Vec<(String, Arc<dyn phonedriver_core::device::Device>)>);
+
+#[async_trait::async_trait]
+impl phonedriver::daemon::DeviceSource for TwoDevices {
+    async fn list(
+        &self,
+    ) -> Result<Vec<phonedriver::daemon::Listed>, phonedriver_core::error::Error> {
+        Ok(self
+            .0
+            .iter()
+            .map(|(id, device)| phonedriver::daemon::Listed {
+                id: id.clone(),
+                model: "Fake".into(),
+                os: Some("FakeOS 1".into()),
+                tier: "fake".into(),
+                capabilities: device.info().capabilities,
+            })
+            .collect())
+    }
+
+    async fn connect(
+        &self,
+        id: &str,
+    ) -> Result<Arc<dyn phonedriver_core::device::Device>, phonedriver_core::error::Error> {
+        Ok(self.0.iter().find(|(d, _)| d == id).unwrap().1.clone())
+    }
+}
+
+#[tokio::test]
+async fn devices_use_sends_the_calls_that_follow_to_that_device() {
+    let rig = rig_on(Arc::new(TwoDevices(vec![
+        ("fake:1".into(), pixel_device(vec![tree(&["First"])])),
+        ("fake:2".into(), pixel_device(vec![tree(&["Second"])])),
+    ])))
+    .await;
+    let r = rig.call("snapshot", json!({})).await;
+    assert_eq!(r.is_error, Some(true), "{r:?}");
+    let r = rig.call("devices", json!({"use": "fake:2"})).await;
+    assert!(
+        texts(&r)
+            .join("\n")
+            .contains("default device: fake:2 (used when `device` is omitted)"),
+        "{r:?}"
+    );
+    let r = rig.call("snapshot", json!({})).await;
+    assert!(texts(&r).join("\n").contains("Second"), "{r:?}");
+    rig.call("devices", json!({"use": "fake:1"})).await;
+    let r = rig.call("snapshot", json!({})).await;
+    assert!(texts(&r).join("\n").contains("First"), "{r:?}");
 }

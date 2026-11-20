@@ -161,14 +161,57 @@ const DEVICE_SUBCOMMANDS: &[&str] = &[
     "spawn",
 ];
 
-/// What `xcrun` runs for a `shell` command on the Simulator `udid`: `simctl <sub> ...` gets the device inserted after
-/// the subcommand, and anything else runs in the Simulator's `/bin/sh` through `simctl spawn`.
-pub fn shell_args(udid: &str, command: &str) -> std::result::Result<Vec<String>, String> {
+/// The folders of a Simulator's system where a program name is looked up, as its `PATH` would.
+const PROGRAM_FOLDERS: &[&str] = &["usr/bin", "bin", "usr/sbin", "sbin"];
+
+/// What `xcrun` runs for a `shell` command on the Simulator `udid` whose system is the folder `root`: `simctl <sub>
+/// ...` gets the device inserted after the subcommand, and anything else runs in the Simulator through `simctl spawn`,
+/// by the program's full path under `root`. With Xcode 27 `simctl spawn` of a path inside the Simulator (`/bin/sh`)
+/// fails with launchd error 111 while the same program by its path under `root` runs. iOS 26 Simulators have no
+/// `/bin/sh`, so there a command is one program and its arguments.
+pub fn shell_args(
+    udid: &str,
+    command: &str,
+    root: &std::path::Path,
+) -> std::result::Result<Vec<String>, String> {
     let words = split_words(command)?;
     if words.first().map(String::as_str) != Some("simctl") {
-        return Ok(["spawn", udid, "/bin/sh", "-c", command]
-            .map(String::from)
-            .to_vec());
+        let sh = root.join("bin/sh");
+        if sh.exists() {
+            return Ok(vec![
+                "spawn".into(),
+                udid.into(),
+                sh.display().to_string(),
+                "-c".into(),
+                command.into(),
+            ]);
+        }
+        if needs_shell(command) {
+            return Err(format!(
+                "this Simulator's iOS has no shell, so a command is one program and its arguments: no pipes, `;`, `&&`, redirection, `$` or wildcards. Run each program in its own call ({}), or `simctl <subcommand>`",
+                examples(root)
+            ));
+        }
+        let Some(program) = words.first() else {
+            return Err("the command is empty".into());
+        };
+        let path = if program.starts_with('/') {
+            Some(root.join(program.trim_start_matches('/'))).filter(|p| p.is_file())
+        } else {
+            PROGRAM_FOLDERS
+                .iter()
+                .map(|folder| root.join(folder).join(program))
+                .find(|p| p.is_file())
+        };
+        let Some(path) = path else {
+            return Err(format!(
+                "`{program}` is not a program in this Simulator's iOS. It has {}, or use `simctl <subcommand>`",
+                examples(root)
+            ));
+        };
+        let mut args = vec!["spawn".into(), udid.into(), path.display().to_string()];
+        args.extend(words[1..].iter().cloned());
+        return Ok(args);
     }
     let Some(sub) = words.get(1) else {
         return Err(format!(
@@ -185,6 +228,73 @@ pub fn shell_args(udid: &str, command: &str) -> std::result::Result<Vec<String>,
     let mut args = vec![sub.clone(), udid.to_string()];
     args.extend(words[2..].iter().cloned());
     Ok(args)
+}
+
+/// Whether `command` uses what only a shell does: a pipe, a list, redirection, expansion or a wildcard outside quotes.
+fn needs_shell(command: &str) -> bool {
+    let mut quote: Option<char> = None;
+    command.chars().any(|c| match (quote, c) {
+        (Some(q), c) if c == q => {
+            quote = None;
+            false
+        }
+        (Some('\''), _) => false,
+        (Some(_), c) => c == '$' || c == '`',
+        (None, '\'' | '"') => {
+            quote = Some(c);
+            false
+        }
+        (None, c) => "|;&<>$`*?(){}\n".contains(c),
+    })
+}
+
+/// A few of the programs under `root`, for an error that says what can be run.
+fn examples(root: &std::path::Path) -> String {
+    let mut names: Vec<String> = PROGRAM_FOLDERS
+        .iter()
+        .filter_map(|folder| std::fs::read_dir(root.join(folder)).ok())
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    names.sort();
+    let preferred = ["defaults", "log", "launchctl", "notifyutil", "plutil"];
+    let mut shown: Vec<&str> = preferred
+        .iter()
+        .copied()
+        .filter(|p| names.iter().any(|n| n == p))
+        .collect();
+    if shown.is_empty() {
+        shown = names.iter().take(5).map(String::as_str).collect();
+    }
+    match names.len().saturating_sub(shown.len()) {
+        0 => shown.join(", "),
+        more => format!("{} and {more} more", shown.join(", ")),
+    }
+}
+
+/// The folder that holds the system of the Simulator `udid` (its runtime root), from `simctl list`.
+pub async fn runtime_root(udid: &str) -> Result<std::path::PathBuf> {
+    let devices = simctl(&["list", "devices", "-j"]).await?;
+    let runtimes = simctl(&["list", "runtimes", "-j"]).await?;
+    root_of(&devices, &runtimes, udid).ok_or_else(|| Error::Transport {
+        detail: format!("simctl does not say where the system of Simulator {udid} is"),
+    })
+}
+
+fn root_of(devices: &str, runtimes: &str, udid: &str) -> Option<std::path::PathBuf> {
+    let devices: Value = serde_json::from_str(devices).ok()?;
+    let runtimes: Value = serde_json::from_str(runtimes).ok()?;
+    let (runtime, _) = devices["devices"].as_object()?.iter().find(|(_, list)| {
+        list.as_array()
+            .is_some_and(|l| l.iter().any(|d| d["udid"] == udid))
+    })?;
+    runtimes["runtimes"]
+        .as_array()?
+        .iter()
+        .find(|r| r["identifier"] == runtime.as_str())?["runtimeRoot"]
+        .as_str()
+        .map(std::path::PathBuf::from)
 }
 
 fn split_words(s: &str) -> std::result::Result<Vec<String>, String> {
@@ -387,42 +497,111 @@ mod tests {
         );
     }
 
+    fn system(with_shell: bool) -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        for program in ["usr/bin/defaults", "usr/bin/log", "bin/launchctl", "bin/df"] {
+            let path = root.path().join(program);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "").unwrap();
+        }
+        if with_shell {
+            std::fs::write(root.path().join("bin/sh"), "").unwrap();
+        }
+        root
+    }
+
     #[test]
-    fn a_plain_command_runs_in_the_simulators_shell() {
+    fn a_command_runs_one_program_by_its_path_in_the_simulators_system() {
+        let root = system(false);
+        let args = shell_args("U", "defaults read -g 'Apple Locale'", root.path()).unwrap();
+        assert_eq!(args[..2], ["spawn", "U"]);
         assert_eq!(
-            shell_args("U", "defaults read -g AppleInterfaceStyle").unwrap(),
-            [
-                "spawn",
-                "U",
-                "/bin/sh",
-                "-c",
-                "defaults read -g AppleInterfaceStyle"
-            ]
+            std::path::Path::new(&args[2]),
+            root.path().join("usr/bin/defaults")
         );
+        assert_eq!(args[3..], ["read", "-g", "Apple Locale"]);
+        assert_eq!(
+            std::path::Path::new(&shell_args("U", "/bin/df -h", root.path()).unwrap()[2]),
+            root.path().join("bin/df")
+        );
+    }
+
+    #[test]
+    fn a_system_with_a_shell_runs_the_command_in_it() {
+        let root = system(true);
+        let args = shell_args("U", "defaults read x | head -1", root.path()).unwrap();
+        assert_eq!(args[..2], ["spawn", "U"]);
+        assert_eq!(std::path::Path::new(&args[2]), root.path().join("bin/sh"));
+        assert_eq!(args[3..], ["-c", "defaults read x | head -1"]);
+    }
+
+    #[test]
+    fn without_a_shell_what_needs_one_is_refused_and_says_what_can_run() {
+        let root = system(false);
+        for command in [
+            "defaults read x | head -1",
+            "log show; ls",
+            "echo $HOME",
+            "ls *.plist",
+            "defaults read \"$KEY\"",
+        ] {
+            let e = shell_args("U", command, root.path()).unwrap_err();
+            assert!(e.contains("has no shell"), "{command}: {e}");
+            assert!(e.contains("defaults, log, launchctl"), "{e}");
+        }
+        assert!(
+            shell_args(
+                "U",
+                "log show --predicate 'process == \"a|b\"'",
+                root.path()
+            )
+            .is_ok()
+        );
+        let e = shell_args("U", "ls /", root.path()).unwrap_err();
+        assert!(e.starts_with("`ls` is not a program in this Simulator's iOS. It has defaults, log, launchctl and 1 more"), "{e}");
+    }
+
+    #[test]
+    fn the_system_folder_is_the_root_of_the_simulators_runtime() {
+        let devices = r#"{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-5":[{"udid":"U","name":"iPhone 17","state":"Booted"}],"com.apple.CoreSimulator.SimRuntime.iOS-18-6":[{"udid":"A"}]}}"#;
+        let runtimes = r#"{"runtimes":[{"identifier":"com.apple.CoreSimulator.SimRuntime.iOS-18-6","runtimeRoot":"/r/18"},{"identifier":"com.apple.CoreSimulator.SimRuntime.iOS-26-5","runtimeRoot":"/r/26"}]}"#;
+        assert_eq!(root_of(devices, runtimes, "U"), Some("/r/26".into()));
+        assert_eq!(root_of(devices, runtimes, "A"), Some("/r/18".into()));
+        assert_eq!(root_of(devices, runtimes, "Z"), None);
     }
 
     #[test]
     fn simctl_commands_get_the_device_after_the_subcommand() {
         assert_eq!(
-            shell_args("U", "simctl ui appearance dark").unwrap(),
+            shell_args("U", "simctl ui appearance dark", std::path::Path::new("/r")).unwrap(),
             ["ui", "U", "appearance", "dark"]
         );
         assert_eq!(
-            shell_args("U", "simctl openurl 'https://example.com/a b'").unwrap(),
+            shell_args(
+                "U",
+                "simctl openurl 'https://example.com/a b'",
+                std::path::Path::new("/r")
+            )
+            .unwrap(),
             ["openurl", "U", "https://example.com/a b"]
         );
         assert_eq!(
-            shell_args("U", "simctl location set 37.77,-122.41").unwrap(),
+            shell_args(
+                "U",
+                "simctl location set 37.77,-122.41",
+                std::path::Path::new("/r")
+            )
+            .unwrap(),
             ["location", "U", "set", "37.77,-122.41"]
         );
     }
 
     #[test]
     fn simctl_subcommands_that_do_not_target_this_device_are_refused_with_the_list() {
-        let e = shell_args("U", "simctl erase all").unwrap_err();
+        let e = shell_args("U", "simctl erase all", std::path::Path::new("/r")).unwrap_err();
         assert!(e.contains("not offered") && e.contains("openurl"), "{e}");
-        assert!(shell_args("U", "simctl").is_err());
-        assert!(shell_args("U", "simctl openurl 'unclosed").is_err());
+        assert!(shell_args("U", "simctl", std::path::Path::new("/r")).is_err());
+        assert!(shell_args("U", "simctl openurl 'unclosed", std::path::Path::new("/r")).is_err());
     }
 
     #[test]

@@ -195,8 +195,9 @@ impl Rendered {
     }
 
     /// A progress indicator is visible, or a web view has not shown its page yet (it has no children).
-    /// The floating `Toolbar` that covers the center of element `i` without containing it, and which way to scroll to
-    /// move the element out from under it: down for a bar on the lower half of the screen, up for one on the upper.
+    /// The bar that covers the center of element `i` without containing it, and which way to scroll to move the element
+    /// out from under it: down for a bar on the lower half of the screen, up for one on the upper. A bar is iOS's
+    /// floating `Toolbar`, or a page's fixed bar in the element's web view.
     pub fn covered_by(&self, i: usize) -> Option<(&Element, Direction)> {
         let e = &self.elements[i];
         // Only content that scrolls slides under a bar; a bar's own neighbor (the back button iOS 26 draws over the
@@ -209,10 +210,20 @@ impl Rendered {
             return None;
         }
         let c = e.bounds.center();
+        let web = self
+            .ancestors(i)
+            .find(|&a| self.elements[a].role == Role::WebView);
         let bar = self.elements.iter().enumerate().find(|(j, b)| {
             *j != i
                 && b.role == Role::Other
-                && b.label.as_deref() == Some("Toolbar")
+                && (b.label.as_deref() == Some("Toolbar")
+                    || (b.label.is_none()
+                        && b.actions.is_empty()
+                        && !b.children.is_empty()
+                        && web.is_some_and(|w| {
+                            self.ancestors(*j).any(|a| a == w)
+                                && crate::prune::page_bar(b.bounds, self.elements[w].bounds)
+                        })))
                 && (b.bounds.x..=b.bounds.x + b.bounds.w).contains(&c.x)
                 && (b.bounds.y..=b.bounds.y + b.bounds.h).contains(&c.y)
                 && !self.ancestors(i).any(|a| a == *j)
@@ -845,6 +856,35 @@ mod tests {
 
     fn settings_main() -> Rendered {
         captured(include_str!("../tests/fixtures/android/settings_main.json"))
+    }
+
+    #[test]
+    fn a_pages_fixed_bar_covers_the_tiles_under_it_and_prints_no_line() {
+        let strip = captured(include_str!(
+            "../tests/fixtures/android/chrome_fixed_bar_strip.json"
+        ));
+        let at = |r: &Rendered, label: &str| {
+            r.elements
+                .iter()
+                .position(|e| e.label.as_deref() == Some(label))
+                .unwrap()
+        };
+        let (bar, toward) = strip.covered_by(at(&strip, "Post 16")).unwrap();
+        assert_eq!((bar.label.as_deref(), toward), (None, Direction::Down));
+        assert!(strip.covered_by(at(&strip, "Post 13")).is_none());
+        assert!(strip.covered_by(at(&strip, "Profile")).is_none());
+        let half = captured(include_str!(
+            "../tests/fixtures/android/chrome_fixed_bar_half.json"
+        ));
+        assert!(
+            half.covered_by(at(&half, "Post 16")).is_none(),
+            "its center shows above the bar"
+        );
+        let text = strip.text(&Filters::default()).unwrap();
+        assert!(
+            !text.lines().any(|l| l.trim_end().ends_with(" group")),
+            "{text}"
+        );
     }
 
     fn golden(name: &str, fixture: &str) {

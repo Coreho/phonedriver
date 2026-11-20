@@ -10,6 +10,7 @@ pub mod checkbox;
 pub mod guard;
 pub mod ios;
 pub mod journal;
+pub mod ledger;
 pub mod progress;
 pub mod rpc;
 pub mod secret_field;
@@ -44,7 +45,8 @@ tokio::task_local! {
 }
 use self::trace::{TraceOptions, Traces};
 use crate::wire::{
-    ActParams, Action, BatchParams, Common, DeviceEntry, RecordParams, SettingParams, Step, VERSION,
+    ActParams, Action, BatchParams, Common, DeviceEntry, MAX_TIME_LIMIT_S, RecordParams,
+    SettingParams, ShellParams, Step, VERSION,
 };
 
 const IDLE_EXIT: Duration = Duration::from_secs(15 * 60);
@@ -133,6 +135,7 @@ pub struct Daemon {
     traces: Traces,
     told: Mutex<HashMap<String, String>>,
     secrets: Arc<secrets::Secrets>,
+    ledger: Arc<ledger::Ledger>,
     agents: Mutex<std::collections::HashSet<String>>,
     connections: AtomicUsize,
     last_activity: Mutex<Instant>,
@@ -154,6 +157,7 @@ impl Daemon {
         Arc::new(Daemon {
             source,
             traces: Traces::new(config.home.join("traces"), trace),
+            ledger: Arc::new(ledger::Ledger::new(&config.home)),
             home: config.home,
             actors: Mutex::default(),
             told: Mutex::default(),
@@ -253,9 +257,17 @@ impl Daemon {
                     "apps" => Call::Apps,
                     "app" => Call::App(rpc::params(params)?),
                     "health" => Call::Health,
-                    "journal" => Call::Journal,
+                    "journal" => Call::Journal(rpc::params(params)?),
                     "clipboard" => Call::Clipboard(rpc::params(params)?),
-                    "shell" => Call::Shell(rpc::params(params)?),
+                    "shell" => {
+                        let p: ShellParams = rpc::params(params)?;
+                        if p.time_limit_s.is_some_and(|s| s > MAX_TIME_LIMIT_S) {
+                            return Err(RpcError::invalid_params(format!(
+                                "a shell command can run for at most {MAX_TIME_LIMIT_S} seconds; lower `time_limit_s`"
+                            )));
+                        }
+                        Call::Shell(p)
+                    }
                     "logs" => Call::Logs(rpc::params(params)?),
                     "page" => Call::Page(rpc::params(params)?),
                     "record" => {
@@ -292,6 +304,9 @@ impl Daemon {
                                 "each finger needs at least two points: where it lands and where it lifts",
                             ));
                         }
+                        if let Some(why) = act.action.refusal() {
+                            return Err(RpcError::invalid_params(why));
+                        }
                         Call::Act(act)
                     }
                     "batch" => {
@@ -305,6 +320,14 @@ impl Daemon {
                             let step = Step::parse(raw).map_err(|why| {
                                 RpcError::invalid_params(format!("step {}: {why}", i + 1))
                             })?;
+                            if let Step::Act(action) = &step
+                                && let Some(why) = action.refusal()
+                            {
+                                return Err(RpcError::invalid_params(format!(
+                                    "step {}: {why}",
+                                    i + 1
+                                )));
+                            }
                             if let Step::Act(Action::Gesture { fingers }) = &step
                                 && (fingers.is_empty() || fingers.iter().any(|f| f.len() < 2))
                             {
@@ -403,19 +426,21 @@ impl Daemon {
     }
 
     fn actor(&self, id: &str) -> mpsc::Sender<Job> {
-        self.actors
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .entry(id.to_string())
-            .or_insert_with(|| {
-                actor::spawn(
-                    id.to_string(),
-                    self.source.clone(),
-                    self.home.clone(),
-                    self.secrets.clone(),
-                )
-            })
-            .clone()
+        let spawn = || {
+            actor::spawn(
+                id.to_string(),
+                self.source.clone(),
+                self.home.clone(),
+                self.secrets.clone(),
+                self.ledger.clone(),
+            )
+        };
+        let mut actors = self.actors.lock().unwrap_or_else(|e| e.into_inner());
+        let tx = actors.entry(id.to_string()).or_insert_with(spawn);
+        if tx.is_closed() {
+            *tx = spawn();
+        }
+        tx.clone()
     }
 
     async fn send(
@@ -622,14 +647,33 @@ impl Daemon {
         }
         if mcp {
             for session in sessions {
-                self.release_everywhere(&session).await;
+                self.forget(&session).await;
             }
         }
     }
 
-    /// Ends the leases a session holds on every device. An MCP client that exits or is killed never sends `release`,
-    /// and its lease would otherwise block the next agent until it lapses.
+    /// Ends a session that will not come back: an MCP server's name is its process id. An MCP client that exits or is
+    /// killed never sends `release`, and its lease would otherwise block the next agent until it lapses. A command
+    /// line session is kept, because each command is its own connection and `save` comes after the run.
+    async fn forget(&self, session: &str) {
+        self.send_to_all(session, || Call::Forget).await;
+        self.traces.close(session);
+        self.told
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session);
+        self.agents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session);
+    }
+
+    /// Ends the leases a session holds on every device.
     async fn release_everywhere(&self, session: &str) {
+        self.send_to_all(session, || Call::Release).await;
+    }
+
+    async fn send_to_all(&self, session: &str, call: impl Fn() -> Call) {
         let ids: Vec<String> = self
             .actors
             .lock()
@@ -639,7 +683,7 @@ impl Daemon {
             .collect();
         for id in ids {
             let _ = self
-                .send(&id, session, false, DisplayMode::Main, Call::Release)
+                .send(&id, session, false, DisplayMode::Main, call())
                 .await;
         }
     }

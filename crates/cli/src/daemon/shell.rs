@@ -122,6 +122,12 @@ fn words(segment: &str) -> Vec<String> {
         .collect()
 }
 
+fn file_name(word: &str) -> &str {
+    word.rsplit('/')
+        .find(|part| !part.is_empty())
+        .unwrap_or(word)
+}
+
 fn segments(command: &str) -> Vec<Vec<String>> {
     let spaced = command
         .replace("&&", "\n")
@@ -134,13 +140,16 @@ fn segments(command: &str) -> Vec<Vec<String>> {
         .map(|mut w| {
             const WRAPPERS: &[&str] = &[
                 "su", "sudo", "0", "2000", "root", "-c", "env", "nohup", "exec", "time", "busybox",
-                "toybox",
+                "toybox", "sh", "bash",
             ];
             let skip = w
                 .iter()
-                .take_while(|t| WRAPPERS.contains(&t.as_str()))
+                .take_while(|t| WRAPPERS.contains(&file_name(t)))
                 .count();
             w.drain(..skip);
+            if let Some(word) = w.first_mut() {
+                *word = file_name(word).to_string();
+            }
             w
         })
         .filter(|w| !w.is_empty())
@@ -364,6 +373,10 @@ mod tests {
             "su 0 rm -r /storage/emulated/0",
             "pm uninstall com.android.chrome",
             "pm clear --user 0 com.google.android.gm",
+            "/system/bin/pm uninstall com.example.other",
+            "bash -c \"pm clear com.example.other\"",
+            "sh -c 'pm clear com.example.other'",
+            "/system/bin/sh -c \"ls; pm uninstall com.example.other\"",
             "cmd package uninstall -k com.example.other",
             "recovery --wipe_data",
             "am broadcast -a android.intent.action.MASTER_CLEAR",
@@ -382,6 +395,9 @@ mod tests {
             "rm /sdcard/a.txt",
             "pm uninstall com.mine",
             "pm clear --user 0 com.mine",
+            "/system/bin/pm clear com.mine",
+            "sh -c 'pm clear com.mine'",
+            "/system/bin/echo pm clear com.other",
             "pm list packages",
             "echo rm -rf /sdcard",
             "cmd uimode night yes",

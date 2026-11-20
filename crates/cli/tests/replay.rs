@@ -112,6 +112,24 @@ async fn the_journal_holds_each_action_that_worked_with_a_target_that_outlives_i
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_journal_can_be_read_in_place_and_emptied_only_as_far_as_the_client_saved() {
+    let (d, _fake, _home) = setup(vec![tree(&["One", "Two"])]);
+    ok(&d, "snapshot", json!({})).await;
+    ok(&d, "act", tap_ref("e1")).await;
+    ok(&d, "act", tap_ref("e2")).await;
+    let read = ok(&d, "journal", json!({"keep": true})).await;
+    assert_eq!(read["steps"].as_array().unwrap().len(), 2, "{read}");
+    ok(&d, "act", tap_ref("e1")).await;
+    ok(&d, "journal", json!({"drop": 2})).await;
+    let rest = ok(&d, "journal", json!({"keep": true})).await;
+    let steps = rest["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), 1, "{rest}");
+    assert_eq!(steps[0]["params"], read["steps"][0]["params"]);
+    assert_eq!(ok(&d, "journal", json!({})).await["steps"], rest["steps"]);
+    assert_eq!(ok(&d, "journal", json!({})).await["steps"], json!([]));
+}
+
+#[tokio::test(start_paused = true)]
 async fn an_element_its_text_does_not_single_out_is_saved_by_position_and_marked() {
     let (d, _fake, _home) = setup(vec![tree(&["Same", "Same"])]);
     ok(&d, "snapshot", json!({})).await;

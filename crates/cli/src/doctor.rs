@@ -251,6 +251,19 @@ pub async fn android(adb: &Adb, only: Option<&str>) -> Vec<Check> {
             "Pass `--device` an id that `adb devices` lists, or leave `--device` out to check every device.",
         ));
     }
+    if only.is_none() {
+        let probed: Vec<String> = devices
+            .iter()
+            .filter(|d| d.state == DeviceState::Device)
+            .map(|d| format!("android:{}", d.serial))
+            .collect();
+        if !probed.is_empty() {
+            eprintln!(
+                "starting the agent on {}; `--device <id>` checks only one",
+                probed.join(", ")
+            );
+        }
+    }
     for d in devices
         .iter()
         .filter(|d| wants(only, &format!("android:{}", d.serial)))

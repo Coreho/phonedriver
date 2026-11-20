@@ -33,6 +33,7 @@ use tokio::time::Instant;
 use super::DeviceSource;
 use super::checkbox;
 use super::journal::{self, Kept};
+use super::ledger::{Entry, Ledger};
 use super::secrets::Secrets;
 use super::session::{Resolved, Session};
 use super::shell;
@@ -40,7 +41,7 @@ use super::verify::{Expect, Verdict, Verify};
 use super::{guard, secret_field};
 use crate::wire::{
     ActParams, Action, ActionResult, AppParams, Approval, BatchParams, BatchResult,
-    ClipboardParams, Crashed, FindParams, Kind, LogsParams, Observation, PageParams,
+    ClipboardParams, Crashed, FindParams, JournalParams, Kind, LogsParams, Observation, PageParams,
     PinchDirection, RecordAction, RecordParams, ScreenshotParams, ScreenshotResult, SettingParams,
     ShellParams, ShellResult, SnapshotParams, Step, StepFailure, StepResult, Target, TypeMode,
     WaitCondition, WaitParams,
@@ -146,11 +147,12 @@ pub enum Call {
     Logs(LogsParams),
     Page(PageParams),
     Record(RecordParams),
-    /// The session's steps so far, taken out of it.
-    Journal,
+    Journal(JournalParams),
     /// What `doctor` needs: the device answers a tree read, and a frame arrives.
     Health,
     Release,
+    /// `Release`, and the session's state on this device is dropped: its last screen, journal and approvals.
+    Forget,
     /// Who holds the lease, without taking it.
     Leased,
 }
@@ -173,6 +175,7 @@ pub fn spawn(
     source: Arc<dyn DeviceSource>,
     home: PathBuf,
     secrets: Arc<Secrets>,
+    ledger: Arc<Ledger>,
 ) -> mpsc::Sender<Job> {
     let (tx, rx) = mpsc::channel(32);
     let actor = Actor {
@@ -196,6 +199,7 @@ pub fn spawn(
         names: Arc::default(),
         recording: None,
         secrets,
+        ledger,
     };
     tokio::spawn(actor.run(rx));
     tx
@@ -246,6 +250,7 @@ struct Live {
     frames: watch::Receiver<FrameRef>,
     events: broadcast::Receiver<DeviceEvent>,
     screen: Size,
+    ledger_key: tokio::sync::OnceCell<String>,
 }
 
 impl Live {
@@ -339,6 +344,7 @@ struct Actor {
     names: Arc<Mutex<HashMap<String, String>>>,
     recording: Option<Taping>,
     secrets: Arc<Secrets>,
+    ledger: Arc<Ledger>,
 }
 
 async fn next_signal(live: &mut Option<Live>) -> Signal {
@@ -555,6 +561,7 @@ impl Actor {
             frames,
             events,
             screen,
+            ledger_key: tokio::sync::OnceCell::new(),
         });
         Ok(())
     }
@@ -576,9 +583,12 @@ impl Actor {
                 None => json!({"hidden_display": hidden_display}),
             });
         }
-        if matches!(call, Call::Release) {
+        if matches!(call, Call::Release | Call::Forget) {
             if self.lease.as_ref().is_some_and(|l| l.session == session) {
                 self.drop_lease();
+            }
+            if matches!(call, Call::Forget) {
+                self.sessions.remove(&session);
             }
             return Ok(json!({}));
         }
@@ -686,14 +696,17 @@ impl Actor {
                 }
             }
             Call::Shell(p) => {
-                let step = if p.secret {
-                    journal::manual("a shell command was run here with `--secret`; run it again")
-                } else if p.force {
-                    journal::call("shell", json!({"command": p.command, "force": true}))
-                } else {
-                    journal::call("shell", json!({"command": p.command}))
-                };
+                let (command, secret) = (p.command.clone(), p.secret);
                 let done = self.shell(s, p).await?;
+                let step = if secret {
+                    journal::manual("a shell command was run here with `--secret`; run it again")
+                } else {
+                    let mut step = journal::call("shell", json!({"command": command}));
+                    if done.exit != 0 {
+                        step["expect_exit"] = json!(done.exit);
+                    }
+                    step
+                };
                 s.journal.push(step);
                 to_value(done)
             }
@@ -718,12 +731,19 @@ impl Actor {
                 }
                 done
             }
-            Call::Journal => s.journal.take(),
+            Call::Journal(p) => match p.drop {
+                Some(n) => {
+                    s.journal.drop_first(n);
+                    json!({})
+                }
+                None if p.keep => s.journal.peek(),
+                None => s.journal.take(),
+            },
             Call::Logs(p) => self.logs(s, p).await?,
             Call::Page(p) => self.page(p).await?,
             Call::Record(p) => self.record(p).await?,
             Call::Health => self.health().await?,
-            Call::Release | Call::Leased => json!({}),
+            Call::Release | Call::Forget | Call::Leased => json!({}),
         };
         Ok(value)
     }
@@ -737,17 +757,35 @@ impl Actor {
                 op: Op::App,
                 reason: "install needs the path of an app file",
             })?;
-            let id = device.install(std::path::Path::new(&path)).await?;
-            if let Some(id) = &id {
-                self.ledger(|l| {
-                    if !l.contains(&id.0) {
-                        l.push(id.0.clone());
+            let added = device.install(std::path::Path::new(&path)).await?;
+            let summary = match added.as_slice() {
+                [] => "installed (it replaced an app already there)".to_string(),
+                [id] => {
+                    if self.physical() {
+                        let installed_at = device.installed_at(id).await?;
+                        let key = self.ledger_key(&*device).await?;
+                        self.ledger
+                            .update(&key, |l| {
+                                l.retain(|e| e.id != id.0);
+                                l.push(Entry {
+                                    id: id.0.clone(),
+                                    installed_at,
+                                });
+                            })
+                            .map_err(|why| Error::Transport {
+                                detail: format!("installed {}, but {why}", id.0),
+                            })?;
                     }
-                });
-            }
-            let summary = match id {
-                Some(id) => format!("installed {}", id.0),
-                None => "installed (it replaced an app already there)".to_string(),
+                    format!("installed {}", id.0)
+                }
+                several => {
+                    let names: Vec<&str> = several.iter().map(|a| a.0.as_str()).collect();
+                    format!(
+                        "installed, but {} packages are new ({}) and phonedriver cannot tell which is this app, so it records none of them",
+                        several.len(),
+                        names.join(", ")
+                    )
+                }
             };
             return Ok(json!({"ok": true, "summary": summary}));
         }
@@ -776,15 +814,11 @@ impl Actor {
                     reason: "grant and revoke need `permissions`, such as camera or location",
                 });
             }
-            if self.physical() {
-                let mut mine = false;
-                self.ledger(|l| mine = l.contains(&found.id.0));
-                if !mine {
-                    return Err(Error::Unsupported {
-                        op: Op::App,
-                        reason: "phonedriver did not install this app on this physical device, so it will not change its permissions",
-                    });
-                }
+            if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
+                return Err(Error::Unsupported {
+                    op: Op::App,
+                    reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not change its permissions",
+                });
             }
             let names = p.permissions.join(", ");
             let summary = if p.action == "grant" {
@@ -797,19 +831,23 @@ impl Actor {
             s.set_last(None);
             return Ok(json!({"ok": true, "summary": summary}));
         };
-        if op != AppOp::Stop && self.physical() {
-            let mut mine = false;
-            self.ledger(|l| mine = l.contains(&found.id.0));
-            if !mine {
-                return Err(Error::Unsupported {
-                    op: Op::App,
-                    reason: "phonedriver did not install this app on this physical device, so it will not clear or remove it",
-                });
-            }
+        if op != AppOp::Stop
+            && self.physical()
+            && !self.installed_by_us(&*device, &found.id).await?
+        {
+            return Err(Error::Unsupported {
+                op: Op::App,
+                reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not clear or remove it",
+            });
         }
         device.app_op(op, &found.id).await?;
-        if op == AppOp::Uninstall {
-            self.ledger(|l| l.retain(|a| *a != found.id.0));
+        if op == AppOp::Uninstall && self.physical() {
+            let key = self.ledger_key(&*device).await?;
+            self.ledger
+                .update(&key, |l| l.retain(|e| e.id != found.id.0))
+                .map_err(|why| Error::Transport {
+                    detail: format!("uninstalled {}, but {why}", found.name),
+                })?;
         }
         s.set_last(None);
         let word = match op {
@@ -828,8 +866,15 @@ impl Actor {
             "an iPhone or iPad has no shell for anyone to run commands in; use launch, open, type and the other verbs, or a Simulator",
         )?;
         if self.physical() && !p.force {
-            let mut mine = Vec::new();
-            self.ledger(|l| mine = l.clone());
+            let device = self.device()?;
+            let key = self.ledger_key(&*device).await?;
+            let mine: Vec<String> = self
+                .ledger
+                .entries(&key)
+                .map_err(|detail| Error::Transport { detail })?
+                .into_iter()
+                .map(|e| e.id)
+                .collect();
             if let Some(reason) = shell::refuse_on_physical(&p.command, &mine) {
                 return Err(Error::Unsupported {
                     op: Op::Shell,
@@ -925,6 +970,7 @@ impl Actor {
                 };
                 match std::fs::remove_file(taping.steps_path()) {
                     Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                        let _ = device.record_stop().await;
                         return Err(Error::Refused {
                             detail: format!(
                                 "the steps file of an earlier recording to this path cannot be replaced: {e}"
@@ -1229,24 +1275,37 @@ impl Actor {
         }
     }
 
-    /// Reads, lets `f` change, and writes back the apps phonedriver installed on this device.
-    fn ledger(&self, f: impl FnOnce(&mut Vec<String>)) {
-        let path = self.home.join("installed.json");
-        let mut all: serde_json::Map<String, Value> = std::fs::read(&path)
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default();
-        let mut mine: Vec<String> = all
-            .get(&self.id)
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_default();
-        let before = mine.clone();
-        f(&mut mine);
-        if mine != before {
-            all.insert(self.id.clone(), json!(mine));
-            let _ = std::fs::create_dir_all(&self.home)
-                .and_then(|()| std::fs::write(&path, Value::Object(all).to_string()));
-        }
+    /// The key of this device's entries in the record: the phone's own serial number, which a change of connection
+    /// does not change, so a phone that later gets this one's address does not inherit its list.
+    async fn ledger_key(&self, device: &dyn Device) -> Result<String, Error> {
+        let live = self.live.as_ref().ok_or_else(|| Error::DeviceGone {
+            id: self.id.clone(),
+        })?;
+        live.ledger_key
+            .get_or_try_init(|| async {
+                Ok(match device.hardware_serial().await? {
+                    Some(serial) => format!("android:{serial}"),
+                    None => self.id.clone(),
+                })
+            })
+            .await
+            .cloned()
+    }
+
+    /// Whether phonedriver installed this app on this device and nobody has installed it again since.
+    async fn installed_by_us(&self, device: &dyn Device, app: &AppId) -> Result<bool, Error> {
+        let key = self.ledger_key(device).await?;
+        let entries = self
+            .ledger
+            .entries(&key)
+            .map_err(|detail| Error::Transport { detail })?;
+        let Some(entry) = entries.into_iter().find(|e| e.id == app.0) else {
+            return Ok(false);
+        };
+        Ok(match entry.installed_at {
+            Some(then) => device.installed_at(app).await?.as_deref() == Some(then.as_str()),
+            None => true,
+        })
     }
 
     async fn health(&mut self) -> Result<Value, Error> {
@@ -1809,6 +1868,7 @@ impl Actor {
                 line: None,
                 under_keyboard: false,
                 covered: None,
+                beside_bar: false,
             });
         }
         let now = self.fresh(s).await?;
@@ -2115,6 +2175,7 @@ impl Actor {
                     element: found,
                     under_keyboard,
                     covered,
+                    beside_bar,
                 } = {
                     let t = Instant::now();
                     let r = self.resolve_target(s, &target).await;
@@ -2129,7 +2190,7 @@ impl Actor {
                     return Err(Error::Disabled { r#ref: e.r#ref });
                 }
                 let mut hid = false;
-                let (at, element, found, covered) = match (under_keyboard, &found) {
+                let (at, element, found, covered, beside_bar) = match (under_keyboard, &found) {
                     (true, Some(e)) => {
                         let behind = Error::OffScreen {
                             r#ref: e.r#ref,
@@ -2156,11 +2217,11 @@ impl Actor {
                             return Err(behind);
                         }
                         hid = true;
-                        (r.at, r.line, r.element, r.covered)
+                        (r.at, r.line, r.element, r.covered, r.beside_bar)
                     }
-                    _ => (at, element, found, covered),
+                    _ => (at, element, found, covered, beside_bar),
                 };
-                if let (Some((bar, scroll_hint)), Some(e)) = (covered, &found) {
+                if let (Some((bar, scroll_hint)), Some(e), false) = (covered, &found, beside_bar) {
                     return Err(Error::OffScreen {
                         r#ref: e.r#ref,
                         scroll_hint,
@@ -2367,15 +2428,11 @@ impl Actor {
                 self.lap("apps", t);
                 let found = find_app(&installed, &app)?;
                 if !grant.is_empty() {
-                    if self.physical() {
-                        let mut mine = false;
-                        self.ledger(|l| mine = l.contains(&found.id.0));
-                        if !mine {
-                            return Err(Error::Unsupported {
-                                op: Op::Launch,
-                                reason: "phonedriver did not install this app on this physical device, so it will not grant it permissions",
-                            });
-                        }
+                    if self.physical() && !self.installed_by_us(&*device, &found.id).await? {
+                        return Err(Error::Unsupported {
+                            op: Op::Launch,
+                            reason: "phonedriver did not install this app on this physical device, or it was installed again since, so it will not grant it permissions",
+                        });
                     }
                     device.grant(&found.id, &grant).await?;
                 }

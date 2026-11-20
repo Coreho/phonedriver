@@ -229,7 +229,8 @@ pub fn prune(tree: &RawTree) -> Vec<Node> {
             || node.role == Role::ProgressIndicator
             || node.role == Role::Keyboard
             || node.role == Role::WebView
-            || scrollable;
+            || scrollable
+            || fixed_bar(tree, &children, &clipped, i);
         // The header's `app` line names the app, so iOS's application node, whose label is that name, says nothing.
         if !keep || (node.class == "XCUIElementTypeApplication" && node.actions.is_empty()) {
             continue;
@@ -285,6 +286,46 @@ pub fn prune(tree: &RawTree) -> Vec<Node> {
         });
     }
     web_link_names(web_forms(fold_wrappers(drop_echoes(out))))
+}
+
+/// A page's fixed bottom bar (Instagram's tab bar in Chrome): as wide as the web view at least `BAR_WIDTH` of it, no
+/// taller than `BAR_HEIGHT` of it, and flush with its bottom. Chrome lists it as ordinary nodes, with no draw order, so
+/// its bounds are the only record of what it covers.
+pub fn page_bar(bar: Rect, web: Rect) -> bool {
+    const BAR_WIDTH: f32 = 0.8;
+    const BAR_HEIGHT: f32 = 0.5;
+    const BAR_EDGE: f32 = 1.0;
+    bar.w >= web.w * BAR_WIDTH
+        && bar.h <= web.h * BAR_HEIGHT
+        && (bar.y + bar.h - (web.y + web.h)).abs() <= BAR_EDGE
+}
+
+/// Whether node `i` is a page's fixed bar, kept for its bounds; it prints no line of its own. A block of the page that
+/// the bottom of the web view cuts off is flush with it too, but parts of it are off screen, while all of a fixed bar
+/// shows (Wikipedia's main page in Chrome).
+fn fixed_bar(tree: &RawTree, children: &[Vec<usize>], clipped: &[Option<Rect>], i: usize) -> bool {
+    let node = &tree.nodes[i];
+    let Some(bounds) = clipped[i] else {
+        return false;
+    };
+    if node.role != Role::Other
+        || node.label.is_some()
+        || !node.actions.is_empty()
+        || children[i].is_empty()
+    {
+        return false;
+    }
+    let mut below = children[i].clone();
+    while let Some(c) = below.pop() {
+        if !tree.nodes[c].flags.contains(NodeFlags::VISIBLE_TO_USER) {
+            return false;
+        }
+        below.extend(&children[c]);
+    }
+    std::iter::successors(node.parent, |&p| tree.nodes[p].parent)
+        .find(|&p| tree.nodes[p].role == Role::WebView)
+        .and_then(|p| clipped[p])
+        .is_some_and(|web| page_bar(bounds, web))
 }
 
 /// Chrome names a link that has no text by its address: Hacker News's vote arrows read

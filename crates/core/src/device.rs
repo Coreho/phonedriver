@@ -392,12 +392,23 @@ pub trait Device: Send + Sync {
             reason: "this device has no settings to read or write by key (Android 17 has them); use `shell`, or the Settings app",
         })
     }
-    /// Installs the app file at `path` (on the daemon's machine). Returns the new app's id when it can tell.
-    async fn install(&self, _path: &std::path::Path) -> Result<Option<AppId>> {
+    /// Installs the app file at `path` (on the daemon's machine). Returns the apps that were not on the device
+    /// before: none when the file replaced one, and more than one when something else was installed meanwhile.
+    async fn install(&self, _path: &std::path::Path) -> Result<Vec<AppId>> {
         Err(Error::Unsupported {
             op: Op::App,
             reason: "this device cannot install apps",
         })
+    }
+    /// A token that changes when the app is removed and installed again, so a record of an install can tell that
+    /// app from a later one under the same id. `None` where the device has no such token.
+    async fn installed_at(&self, _app: &AppId) -> Result<Option<String>> {
+        Ok(None)
+    }
+    /// The phone's own serial number, which stays the same when its connection changes. `None` where the device's id
+    /// already is that.
+    async fn hardware_serial(&self) -> Result<Option<String>> {
+        Ok(None)
     }
     async fn app_op(&self, _op: AppOp, _app: &AppId) -> Result<()> {
         Err(Error::Unsupported {

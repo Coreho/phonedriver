@@ -126,6 +126,30 @@ pub enum Action {
     },
 }
 
+pub const MAX_TAP_COUNT: u32 = 10;
+pub const MAX_LONG_PRESS_MS: u32 = 10_000;
+
+impl Action {
+    /// Why the daemon will not run this action, when its parameters alone say so.
+    pub fn refusal(&self) -> Option<String> {
+        let Action::Tap { count, long, .. } = self else {
+            return None;
+        };
+        if count.is_some_and(|c| c > MAX_TAP_COUNT) {
+            return Some(format!(
+                "a tap can repeat at most {MAX_TAP_COUNT} times; lower `count`"
+            ));
+        }
+        if long.is_some_and(|l| l > MAX_LONG_PRESS_MS) {
+            return Some(format!(
+                "a tap can hold for at most {} seconds; lower `long`",
+                MAX_LONG_PRESS_MS / 1000
+            ));
+        }
+        None
+    }
+}
+
 impl std::fmt::Debug for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -351,6 +375,15 @@ pub struct RecordParams {
     pub path: Option<std::path::PathBuf>,
 }
 
+/// The session's steps (`docs/protocol.md`, `journal`): taken out, read in place with `keep`, or the first `drop` of them
+/// removed once the client has stored them.
+#[derive(Debug, Default, Deserialize)]
+pub struct JournalParams {
+    #[serde(default)]
+    pub keep: bool,
+    pub drop: Option<usize>,
+}
+
 /// An app's recent log lines (`docs/protocol.md`, `logs`). `app` defaults to the one in front.
 #[derive(Debug, Deserialize)]
 pub struct LogsParams {
@@ -423,6 +456,8 @@ fn yes() -> bool {
     true
 }
 
+pub const MAX_TIME_LIMIT_S: u64 = 600;
+
 /// Run a command in the device's shell (`docs/protocol.md`, `shell`). The command may be a secret, so `Debug` omits it.
 #[derive(Deserialize)]
 pub struct ShellParams {
@@ -431,7 +466,7 @@ pub struct ShellParams {
     pub settle: bool,
     pub timeout_ms: Option<u64>,
     pub expect_change_ms: Option<u64>,
-    /// How long the command may run, in seconds; default 30.
+    /// How long the command may run, in seconds; default 30, at most `MAX_TIME_LIMIT_S`.
     pub time_limit_s: Option<u64>,
     pub grep: Option<String>,
     /// Lines of output to keep; default 40, 0 keeps all.

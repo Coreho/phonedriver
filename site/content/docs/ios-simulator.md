@@ -41,7 +41,7 @@ The first command that needs the runner builds a small XCTest runner on your Mac
 
 ## Use the shell
 
-`phonedriver shell "simctl ui appearance dark"` runs through `simctl spawn`, and fills in the device for `simctl` subcommands. See [the shell](/docs/shell/).
+`phonedriver shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands, and runs anything else inside the Simulator. iOS 26 Simulators have no shell, so a command is one of their own programs, such as `defaults` or `log`. See [the shell](/docs/shell/).
 
 ## Speed
 

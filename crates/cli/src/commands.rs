@@ -411,7 +411,7 @@ pub(crate) enum Verb {
         /// Run a command that is refused on a physical device (wipes, `rm -r` of storage, removing apps phonedriver did not install).
         #[arg(long)]
         force: bool,
-        /// Kill the command after this many seconds (default 30).
+        /// Kill the command after this many seconds (default 30, at most 600).
         #[arg(long)]
         time_limit: Option<u64>,
         /// Read the command from stdin or PHONEDRIVER_SECRET and keep it out of logs and traces.
@@ -1123,18 +1123,22 @@ pub(crate) async fn execute_with(
         Verb::Save { file } => {
             let cannot =
                 |e: std::io::Error| Failure::Local(format!("cannot write {}: {e}", file.display()));
-            let mut out = std::fs::OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .write(true)
-                .open(&file)
-                .map_err(cannot)?;
-            let r = client.call("journal", with(json!({}))).await?;
+            let r = client.call("journal", with(json!({"keep": true}))).await?;
             let steps = r["steps"].as_array().cloned().unwrap_or_default();
             if !steps.is_empty() {
                 let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
-                out.set_len(0).map_err(cannot)?;
-                std::io::Write::write_all(&mut out, text.as_bytes()).map_err(cannot)?;
+                let mut beside = file.clone().into_os_string();
+                beside.push(".tmp");
+                let beside = std::path::PathBuf::from(beside);
+                std::fs::write(&beside, text)
+                    .and_then(|()| std::fs::rename(&beside, &file))
+                    .inspect_err(|_| {
+                        let _ = std::fs::remove_file(&beside);
+                    })
+                    .map_err(cannot)?;
+                client
+                    .call("journal", with(json!({"drop": steps.len()})))
+                    .await?;
             }
             if g.json {
                 return Ok(
@@ -1952,6 +1956,10 @@ impl Replay {
                 }
                 _ => Err(refused("this is not a step this version can run")),
             };
+            let outcome = outcome.and_then(|r| match unexpected_exit(step, &r) {
+                Some(why) => Err(refused(&why)),
+                None => Ok(r),
+            });
             let outcome = match outcome {
                 Ok(r) if step["changed"] == true && r["changed"] == false => Err(refused(
                     "it changed nothing this time; when it was saved it changed the screen",
@@ -2178,6 +2186,27 @@ async fn shoot(
             )
         })?;
     Ok((png, shot.status_bar.unwrap_or(0) as f32))
+}
+
+fn unexpected_exit(step: &Value, reply: &Value) -> Option<String> {
+    if step["method"] != "shell" {
+        return None;
+    }
+    let expected = match step.get("expect_exit") {
+        None => 0,
+        Some(Value::Null) => return None,
+        Some(n) => match n.as_i64() {
+            Some(n) => n,
+            None => {
+                return Some("the step's expect_exit is neither a whole number nor null".into());
+            }
+        },
+    };
+    if reply["timed_out"] == true {
+        return Some("it ran past its time limit and was stopped".into());
+    }
+    let exit = reply["exit"].as_i64()?;
+    (exit != expected).then(|| format!("it exited {exit}; the step expects {expected}"))
 }
 
 fn refused(detail: &str) -> Failure {

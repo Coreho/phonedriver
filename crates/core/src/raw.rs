@@ -440,7 +440,12 @@ fn node(
             let shows_hint = flags.contains(NodeFlags::SHOWING_HINT);
             let label = desc.or_else(|| text.clone().filter(|_| !editable));
             let field_text = text.filter(|_| editable && !shows_hint);
-            (label, state.or(range_text).or(field_text))
+            let value = if editable {
+                field_text
+            } else {
+                state.or(range_text)
+            };
+            (label, value)
         }
         Platform::Ios => (text.or(desc), state.or(range_text)),
     };
@@ -581,6 +586,19 @@ mod tests {
         assert_eq!(t.nodes[0].role, Role::Switch);
         assert_eq!(t.nodes[0].value.as_deref(), Some("Off"));
         assert_eq!(t.nodes[2].role, Role::Other);
+    }
+
+    #[test]
+    fn an_editable_field_shows_its_text_and_not_its_state_description() {
+        let json = r#"{"windows":[],"nodes":[
+            {"p":-1,"w":1,"cls":"android.widget.EditText","text":"","sd":"Empty","b":[0,0,360,50],"f":"vVeEF"},
+            {"p":-1,"w":1,"cls":"android.widget.EditText","text":"Empty","sd":"Empty","b":[0,60,360,110],"f":"vVeE"},
+            {"p":-1,"w":1,"cls":"android.widget.EditText","text":"Search","sd":"Empty","b":[0,120,360,170],"f":"vVeEh"},
+            {"p":-1,"w":1,"cls":"android.widget.Switch","sd":"Empty","b":[0,180,360,230],"f":"vVce"}
+        ]}"#;
+        let t = RawTree::from_android_json(json, Scale { density: 1.0 }).unwrap();
+        let values: Vec<_> = t.nodes.iter().map(|n| n.value.as_deref()).collect();
+        assert_eq!(values, [None, Some("Empty"), None, Some("Empty")]);
     }
 
     #[test]

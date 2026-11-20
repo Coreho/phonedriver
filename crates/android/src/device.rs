@@ -16,7 +16,7 @@ use phonedriver_video::stream::VideoStream;
 use serde_json::{Value, json};
 use tokio::sync::{broadcast, watch};
 
-use crate::adb::Adb;
+use crate::adb::{Adb, ShellOutput};
 use crate::agent::{Agent, AgentLog, Launched};
 use crate::console;
 use crate::control::Control;
@@ -126,11 +126,7 @@ impl AndroidDevice {
 
     async fn packages(&self) -> Result<Vec<String>> {
         let out = self.adb.shell(&self.serial, "pm list packages").await?;
-        Ok(out
-            .stdout_text()
-            .lines()
-            .filter_map(|l| l.strip_prefix("package:").map(|p| p.trim().to_string()))
-            .collect())
+        listed_packages(&out)
     }
 
     /// A connection to the emulator's console and the token it may ask for, or why there is none. `op` is what
@@ -550,7 +546,7 @@ impl Device for AndroidDevice {
         })
     }
 
-    async fn install(&self, path: &std::path::Path) -> Result<Option<AppId>> {
+    async fn install(&self, path: &std::path::Path) -> Result<Vec<AppId>> {
         let bytes = std::fs::read(path).map_err(|e| Error::Transport {
             detail: format!("cannot read {}: {e}", path.display()),
         })?;
@@ -561,7 +557,37 @@ impl Device for AndroidDevice {
         let _ = self.adb.shell(&self.serial, &format!("rm {remote}")).await;
         installed?;
         let after = self.packages().await?;
-        Ok(after.into_iter().find(|p| !before.contains(p)).map(AppId))
+        Ok(after
+            .into_iter()
+            .filter(|p| !before.contains(p))
+            .map(AppId)
+            .collect())
+    }
+
+    async fn installed_at(&self, app: &AppId) -> Result<Option<String>> {
+        package_name(app)?;
+        let out = self
+            .adb
+            .shell(
+                &self.serial,
+                &format!("dumpsys package {} | grep firstInstallTime", app.0),
+            )
+            .await?;
+        first_install_time(&out.stdout_text())
+            .map(Some)
+            .ok_or_else(|| Error::Transport {
+                detail: format!("`dumpsys package {}` shows no firstInstallTime", app.0),
+            })
+    }
+
+    async fn hardware_serial(&self) -> Result<Option<String>> {
+        let serial = self.adb.hardware_serial(&self.serial).await?;
+        if serial.is_empty() {
+            return Err(Error::Transport {
+                detail: "the phone did not report its serial number (`getprop ro.serialno`)".into(),
+            });
+        }
+        Ok(Some(serial))
     }
 
     async fn app_op(&self, op: AppOp, app: &AppId) -> Result<()> {
@@ -678,6 +704,31 @@ fn unapplied(dump: &str, verb: &str, permission: &str) -> Option<&'static str> {
         ("revoke", Some(true)) => Some("the permission is still granted"),
         _ => None,
     }
+}
+
+fn listed_packages(out: &ShellOutput) -> Result<Vec<String>> {
+    let packages: Vec<String> = out
+        .stdout_text()
+        .lines()
+        .filter_map(|l| l.strip_prefix("package:").map(|p| p.trim().to_string()))
+        .collect();
+    if out.exit_code != 0 {
+        return Err(Error::Transport {
+            detail: format!("`pm list packages` exited with {}", out.exit_code),
+        });
+    }
+    if packages.is_empty() {
+        return Err(Error::Transport {
+            detail: "`pm list packages` listed no packages".into(),
+        });
+    }
+    Ok(packages)
+}
+
+fn first_install_time(dump: &str) -> Option<String> {
+    dump.lines()
+        .find_map(|l| l.trim().strip_prefix("firstInstallTime="))
+        .map(|t| t.trim().to_string())
 }
 
 const LOGS_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -993,5 +1044,48 @@ mod permission_tests {
             "android.permission.READ_CONTACTS"
         );
         assert!(permission_name("camera; rm -rf /").is_err());
+    }
+}
+
+#[cfg(test)]
+mod package_tests {
+    use crate::adb::ShellOutput;
+
+    use super::{first_install_time, listed_packages};
+
+    fn output(stdout: &str, exit_code: i32) -> ShellOutput {
+        ShellOutput {
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: Vec::new(),
+            exit_code,
+        }
+    }
+
+    #[test]
+    fn a_package_listing_that_failed_is_an_error_even_with_some_lines() {
+        let e = listed_packages(&output("package:com.a\n", 1)).unwrap_err();
+        assert!(format!("{e:?}").contains("pm list packages"), "{e:?}");
+    }
+
+    #[test]
+    fn an_empty_package_listing_is_an_error() {
+        let e = listed_packages(&output("", 0)).unwrap_err();
+        assert!(format!("{e:?}").contains("no packages"), "{e:?}");
+    }
+
+    #[test]
+    fn a_package_listing_names_each_package() {
+        let listed = listed_packages(&output("package:com.a\npackage:com.b\n", 0)).unwrap();
+        assert_eq!(listed, ["com.a", "com.b"]);
+    }
+
+    #[test]
+    fn the_first_install_time_is_read_from_the_package_dump() {
+        let dump = "    versionName=1.0\n    firstInstallTime=2026-11-19 10:04:31\n    lastUpdateTime=2026-11-19 10:09:02\n";
+        assert_eq!(
+            first_install_time(dump).as_deref(),
+            Some("2026-11-19 10:04:31")
+        );
+        assert_eq!(first_install_time("Unable to find package: com.a\n"), None);
     }
 }

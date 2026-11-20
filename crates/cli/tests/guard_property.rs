@@ -11,7 +11,6 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use guard_rig::{PLACE_ORDER, rig};
-use phonedriver::mcp::Mcp;
 use phonedriver_core::error::Category;
 use phonedriver_core::testing::Call;
 use proptest::prelude::*;
@@ -326,7 +325,7 @@ async fn world(
 ) -> World {
     let rig = rig().await;
     let (client_io, server_io) = tokio::io::duplex(1 << 20);
-    let server = Mcp::new(Some(rig.socket.clone()), "mcp-guard".into()).asking(ask.to_vec());
+    let server = rig.mcp().asking(ask.to_vec());
     tokio::spawn(async move {
         let running = server.serve(server_io).await.unwrap();
         let _ = running.waiting().await;

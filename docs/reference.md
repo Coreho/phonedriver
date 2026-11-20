@@ -69,7 +69,7 @@ phonedriver 0.1.5
 
 Until the package is published, register the built binary with your client by its full path: `claude mcp add phonedriver -- "$PWD/target/release/phonedriver" mcp`.
 
-Run `phonedriver doctor`. It checks adb, each Android device, the agent, UiAutomation, the video stream, Xcode, the simulators, and the permissions of the daemon socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`. Without `--device` it starts the agent on every Android device the adb server lists, which replaces an agent another session is using; with `--device <id>` it probes only that one.
+Run `phonedriver doctor`. It checks adb, each Android device, the agent, UiAutomation, the video stream, Xcode, the simulators, and the permissions of the daemon socket. Each line says `ok`, `warn` or `fail`, and a fix follows every line that is not `ok`. Without `--device` it starts the agent on every Android device the adb server lists, which replaces an agent another session is using, and names those devices on stderr first; with `--device <id>` it probes only that one.
 
 ```console
 $ phonedriver doctor
@@ -159,7 +159,7 @@ Tested on an iPhone 13 Pro Max (iOS 27.0.1) on one network. An iPhone 14 Plus (i
 | `PHONEDRIVER_GUARD` | on | `off` stops phonedriver asking the human before a tap that spends money or cannot be undone (`Place order`, `Pay`, `Delete account`). Set it for `phonedriver mcp` or the CLI only when you grant the agent full autonomy. |
 | `PHONEDRIVER_ASK` | none | A comma list of more kinds of tap to ask the human about, besides payments and account deletion: `send` (Send, Reply, Post, Share), `delete` (Delete, Remove, Erase, Clear all) and `install` (Install, Uninstall). For example `PHONEDRIVER_ASK=send,delete`. Read by `phonedriver mcp` and the CLI; a name that is not one of these stops the command with exit code 2. `PHONEDRIVER_GUARD=off` and `autonomous: true` skip these questions too. |
 | `PHONEDRIVER_SECRET` | none | The text for `type --secret`, instead of stdin. The daemon shows it as `•••` wherever it later appears on a screen it reads or in a command's output, until the daemon stops; a screenshot still shows what the phone shows. |
-| `PHONEDRIVER_TRACE_FULL` | off | `1` keeps observation text and text targets in traces (the daemon reads it at start). |
+| `PHONEDRIVER_TRACE_FULL` | off | `1` keeps observation text and the text of text targets in the traced requests (the daemon reads it at start). Replies are traced as returned either way: a summary or an error can name an element, as in `tapped @e6 "Busy"` or `no element matches "Pay"`. |
 | `PHONEDRIVER_TRACE_SCREENS` | off | `1` copies every screenshot next to its trace file. |
 | `PHONEDRIVER_AGENT_JAR` | built by `android-agent/build.sh` | Build time only: use this prebuilt Android agent jar. |
 | `ADB_SERVER_SOCKET` | `tcp:127.0.0.1:5037` | The adb server to use, for example a tunnel to another machine. |
@@ -173,7 +173,7 @@ When something does not work:
 
 - `phonedriver doctor` checks the toolchain, devices and the socket, and says how to fix each problem.
 - `$PHONEDRIVER_HOME/daemon.log` (default `~/.phonedriver/daemon.log`) holds the daemon's own messages and startup errors.
-- `$PHONEDRIVER_HOME/traces/<id>.jsonl` has one line per request: method, parameters, the reply's summary, `ms` and settle time. Typed text is recorded only as a length. Start the daemon with `PHONEDRIVER_TRACE_FULL=1` to keep observation text, and `PHONEDRIVER_TRACE_SCREENS=1` to keep screenshots. A running daemon keeps its options: `phonedriver daemon stop` first.
+- `$PHONEDRIVER_HOME/traces/<id>.jsonl` has one line per request: method, parameters, the reply's summary, `ms` and settle time. Typed text is recorded only as a length, and so is the text of a text target. The reply's summary and an error's message are recorded as returned, so they can name elements from the screen (`tapped @e6 "Busy"`, `no element matches "Pay €49.99"`, an approval refusal's `On screen:` lines): read trace lines before you share them. Start the daemon with `PHONEDRIVER_TRACE_FULL=1` to keep observation text and text targets, and `PHONEDRIVER_TRACE_SCREENS=1` to keep screenshots. A running daemon keeps its options: `phonedriver daemon stop` first.
 - iOS: `$PHONEDRIVER_HOME/runner/<udid>.log` is the runner's output, and `runner/<hash>/build.log` is its first build.
 - `phonedriver daemon stop` stops the daemon and the iOS runners it started. The next command starts a new one.
 
@@ -357,7 +357,7 @@ screen now:
 
 Only calls that worked are saved: actions, waits, shell commands, app installs and permission changes, and settings written by key. An element is saved by its text and role, not by its `@ref`, so the file works in a later session. Where no text singles the element out it is saved by position, and `save` says how many such steps there are. `save` lists every step it wrote, so a step that was a wrong turn can be seen and its line deleted from the file. After `save` the session's list starts again empty, so save once before a flow (to a file you throw away) and once after it.
 
-A replay stops at the first step that fails, or that changes nothing where it changed the screen when it was saved. It prints the steps that ran, the screen, and the step to go on from:
+A replay stops at the first step that fails, that changes nothing where it changed the screen when it was saved, or that is a `shell` command with an exit status other than the step expects. It prints the steps that ran, the screen, and the step to go on from:
 
 ```
 error: step 3 of 7 (tap "Intranet") failed: no element matches "Intranet"
@@ -369,6 +369,8 @@ hint: Do step 3 yourself, then replay the same file from step 4 for the 4 steps 
 $ phonedriver tap "Internet"
 $ phonedriver replay run.steps --from 4
 ```
+
+A `shell` step expects exit 0, and a command that runs past its time limit fails the step. `save` keeps `"expect_exit": 3` in the step of a command that exited 3 when it was saved, so a replay of the same run passes; add `"expect_exit": 1` by hand to a step that checks for a failure, or `"expect_exit": null` to a step that is only run for its effect and whose exit status does not matter. A step is saved without `--force`, so a replay on a physical phone is refused again at a command that needs it.
 
 Text typed with `--secret` is never in the file; a replay stops at that step for you to type it. Other typed text is in the file. In MCP, `replay` takes `file`, `from` and `save: true`. Decision D60.
 
@@ -449,7 +451,7 @@ A turned screen ends the recording, and `record stop` says so. Stop a recording 
 
 ### Shell
 
-`phonedriver shell "cmd uimode night yes"` runs a command on the device and prints the exit code, the output (cut at 40 lines; `--grep`, `--head`) and what changed on screen. On Android it runs in the agent already on the device, not in a new `adb shell`. On an iOS Simulator it runs through `simctl spawn`, and `shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands. On an Android emulator, a command that starts with `emu` goes to the emulator's console instead of the device's shell, as `adb emu` does: `shell "emu geo fix -122.41 37.77"` puts the emulator at that longitude and latitude, `emu sms send 5551234 hello` delivers a text message, `emu power capacity 15` sets the battery. A phone has no console. A physical iPhone has no shell. A physical device refuses wipes and removing apps phonedriver did not install unless you pass `--force`. See `docs/bench/history/shell.md` and decision D21.
+`phonedriver shell "cmd uimode night yes"` runs a command on the device and prints the exit code, the output (cut at 40 lines; `--grep`, `--head`) and what changed on screen. On Android it runs in the agent already on the device, not in a new `adb shell`. On an iOS Simulator, `shell "simctl ui appearance dark"` fills in the device for `simctl` subcommands, and anything else runs inside the Simulator through `simctl spawn`. iOS 26 Simulators have no shell, so there a command is one of the Simulator's own programs with its arguments (`defaults read -g AppleLocale`, `log show --last 1m`, `launchctl list`, `notifyutil -p <name>`), with no pipes, `;`, redirection or `$`. On an Android emulator, a command that starts with `emu` goes to the emulator's console instead of the device's shell, as `adb emu` does: `shell "emu geo fix -122.41 37.77"` puts the emulator at that longitude and latitude, `emu sms send 5551234 hello` delivers a text message, `emu power capacity 15` sets the battery. A phone has no console. A physical iPhone has no shell. A physical device refuses wipes and removing apps phonedriver did not install unless you pass `--force`. See `docs/bench/history/shell.md` and decision D21.
 
 ## Development
 
