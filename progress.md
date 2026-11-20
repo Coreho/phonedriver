@@ -3194,7 +3194,7 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - `phonedriver snapshot`: Settings, 22 refs, `390x844pt · portrait`, 184 ms wall-clock including process start. `phonedriver screenshot`: a 390x844 PNG, looked at: it matches the snapshot.
 - `phonedriver tap @e15` after the Settings list had moved: `error: @e15 is no longer on screen` (252 ms). `phonedriver tap Bluetooth`: `ok tapped @e10 "Bluetooth, On" · new screen`, the Bluetooth page with the screen marked `loading`, 5,669 ms. `phonedriver press back`: `ok pressed back via nav-button`, `the screen before the last one is back`, 1,390 ms.
 - A text in Messages, at the contributor's request: `phonedriver launch Messages` (`ok launched Messages · new screen`), `tap @e58` on the thread, `type test --into @e63` (`ok typed into @e63 · verified`, a `Send` button appeared), `tap @e97` (`+ @e102 cell "Your Text Message, test, 1:12 AM"`). Screenshots before and after, looked at: the draft in the field, then the sent bubble with no delivery error.
-- Open: where the 5.7 s of the first tap goes is not measured (the Simulator median is 316 ms). The runner URL in setup's and doctor's hints answers only after the workflow runs on `main`.
+- Open: where the 5.7 s of the first tap goes is not measured (the Simulator median is 316 ms). The runner URL in setup's and doctor's hints answers once a release carries the runner (the first after this change).
 
 ## 2026-11-20: setup and the daemon do not mount the image while Developer Mode is off
 
@@ -3203,3 +3203,8 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - Test first: `developer_mode_off_stops_the_mount_before_it_starts` failed to compile (`cannot find function \`mount_blocked\``), then passed.
 - `cargo test --release -p phonedriver-ios -p phonedriver-core --lib`: `test result: ok. 226 passed` and `test result: ok. 84 passed`. Both clippy commands above with `-D warnings`: clean. `cargo build --release -p phonedriver --no-default-features`: `Finished` (the first try failed with `failed to remove file … phonedriver.exe` while the daemon ran from it; `phonedriver daemon stop`, then it built). blaze is not installed on this PC, so cargo ran everything.
 - The new binary on the iPhone with Developer Mode on: `phonedriver ios setup` printed `ok` for pairing, developer mode, the image and the runner, then `ready.` The off path was not run on the device: it would mean turning Developer Mode off, which restarts the phone.
+
+## 2026-11-20: the runner ships with each release, and D9 allows the pinned disk image download
+
+- Review of #23: the unsigned `PhonedriverRunner.ipa` is built by a `runner-ipa` job in the release workflow and attached to each `v*` release, in place of a rolling `runner` release built from every push to `main`. `runner::RUNNER_IPA` names this version's release, so `ios setup` and `doctor` point at the runner built from the same sources. The release is not created when the runner does not build.
+- D9 and AGENTS.md amended: off a Mac, `ios setup --download-ddi` is allowed its one download from the pinned commit, checked by SHA-256. The README and `docs/architecture.md` list it with the other connections.

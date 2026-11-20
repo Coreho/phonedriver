@@ -228,10 +228,10 @@ On Android 13 and later, the agent can work on a hidden second screen, so your o
 phonedriver drives an iPhone or iPad on iOS 17 or later from Windows, with no Mac. On a Mac, Xcode builds and signs phonedriver's XCTest runner. On Windows:
 
 1. Install **Apple Devices** from the Microsoft Store (or iTunes). Its Apple Mobile Device Service is how Windows reaches the phone on the cable. Plug the phone in, unlock it and tap Trust.
-2. Download [`PhonedriverRunner.ipa`](https://github.com/hridaya423/phonedriver/releases/download/runner/PhonedriverRunner.ipa). GitHub's macOS machines build it unsigned from this repository (`.github/workflows/runner-ipa.yml`).
+2. Download `PhonedriverRunner.ipa` from the release of the phonedriver you run ([the latest](https://github.com/hridaya423/phonedriver/releases/latest/download/PhonedriverRunner.ipa); `phonedriver doctor` gives the link for yours). GitHub's macOS machines build it unsigned with each release.
 3. Install it with [Sideloadly](https://sideloadly.io), signed with your Apple ID. A free Apple ID's signature lasts 7 days, and Sideloadly can sign it again for you. phonedriver never sees your Apple ID. Then trust it on the phone: Settings > General > VPN & Device Management, your Apple ID under Developer App, Trust.
 4. Turn on Settings > Privacy & Security > Developer Mode, restart the phone, and confirm Turn On after you unlock it. The disk image in step 6 does not mount while Developer Mode is off.
-5. Build phonedriver: `cargo build --release -p phonedriver --no-default-features`. The Android helper needs the Android build tools, so leave it out unless you have them.
+5. Install phonedriver with the Windows line under [Start](#start), or build it: `cargo build --release -p phonedriver --no-default-features` leaves out the Android helper, which needs the Android build tools.
 6. Run `phonedriver ios setup --download-ddi`. It downloads Xcode 27.2's developer disk image once from [doronz88/DeveloperDiskImage](https://github.com/doronz88/DeveloperDiskImage) at a pinned commit, checks each file's SHA-256, and mounts it. Mounting asks Apple's signing server for your phone's ticket, as Xcode does. With files from a Mac, use `--ddi <folder>` instead. Then it finds the installed runner and starts it.
 7. `claude mcp add phonedriver -- <path>\phonedriver.exe mcp`, then ask Claude to use the phone.
 
@@ -262,7 +262,7 @@ More answers are in [the FAQ](https://phonedriver.dev/faq/).
 
 ## Source and license
 
-phonedriver sends no telemetry. After the first download from GitHub, it connects only to your device, and a test runs the whole tool in a sandbox that blocks every other connection. Design notes: [architecture](docs/architecture.md), [protocol](docs/protocol.md), [decisions](docs/decisions.md).
+phonedriver sends no telemetry. After the first download from GitHub, it connects only to your device (and, off a Mac, to Apple and once to GitHub for the iPhone developer disk image when you ask with `ios setup --download-ddi`), and a test runs the whole tool in a sandbox that blocks every other connection. Design notes: [architecture](docs/architecture.md), [protocol](docs/protocol.md), [decisions](docs/decisions.md).
 
 AGPL-3.0-only. See [LICENSE](LICENSE). The Android helper includes files from scrcpy under Apache-2.0; see [NOTICE](NOTICE).
 

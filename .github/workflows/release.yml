@@ -119,6 +119,51 @@ jobs:
           path: android-agent/build/phonedriver-agent.jar
           if-no-files-found: error
 
+  # The iOS runner for a computer without Xcode, unsigned: the person signs and installs it (D96). Each release carries
+  # the runner built from its own commit, so `phonedriver ios setup` downloads the one its version speaks to.
+  runner-ipa:
+    runs-on: "macos-latest"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the runner for devices, unsigned
+        working-directory: ios-runner
+        run: |
+          xcodebuild -version
+          xcodebuild build-for-testing \
+            -project PhonedriverRunner.xcodeproj \
+            -scheme PhonedriverRunner \
+            -destination generic/platform=iOS \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            -quiet \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+      - name: Package PhonedriverRunner.ipa
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/dd/Build/Products/Debug-iphoneos/PhonedriverRunner-Runner.app"
+          test -x "$app/PhonedriverRunner-Runner"
+          test -d "$app/PlugIns/PhonedriverRunner.xctest"
+          # Without the copies Xcode bundles, XCTest's libraries load only from the device's mounted developer disk
+          # image, never a mix of that version and this Xcode's. Appium leaves the same folder out of its unsigned
+          # WebDriverAgent for devices (appium/WebDriverAgent Scripts/ci/build-real.sh).
+          rm -rf "$app/Frameworks"
+          # build-for-testing leaves the test bundle's debug symbols in PlugIns, where the device expects only plug-ins.
+          find "$app" -name '*.dSYM' -prune -exec rm -rf {} +
+          test -z "$(find "$app" -name '*.dSYM')"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/PhonedriverRunner.ipa" Payload)
+          unzip -l PhonedriverRunner.ipa | tail -n 40
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: runner-ipa
+          path: PhonedriverRunner.ipa
+          if-no-files-found: error
+
   # Build and packages all the platform-specific things
   build-local-artifacts:
     name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
@@ -261,8 +306,9 @@ jobs:
       - plan
       - build-local-artifacts
       - build-global-artifacts
+      - runner-ipa
     # Only run if we're "publishing", and only if plan, local and global didn't fail (skipped is fine)
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') && needs.runner-ipa.result == 'success' }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: "ubuntu-22.04"
@@ -310,6 +356,11 @@ jobs:
         run: |
           # Remove the granular manifests
           rm -f artifacts/*-dist-manifest.json
+      - name: "Download the iOS runner"
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: runner-ipa
+          path: artifacts
       - name: Create GitHub Release
         env:
           PRERELEASE_FLAG: "${{ fromJson(steps.host.outputs.manifest).announcement_is_prerelease && '--prerelease' || '' }}"

@@ -17,7 +17,7 @@ phonedriver lets AI agents see and operate Android and iOS devices. The design i
 - **No comments** except license headers, public API docs, and external constraints the code cannot express (for example "dtuhidd drops HID events unless a media stream is active").
 - **No speculative code.** No traits with one implementation (the `Device` trait has two plus a fake), no retries or fallbacks without an observed failure written next to them.
 - **Spikes are throwaway.** They live in `spikes/` and are deleted at the end of their phase. Their results live in `docs/spikes/`.
-- **No telemetry, ever** (decision D9). Never add code that sends data anywhere except the device and, for DDI mounting, Apple.
+- **No telemetry, ever** (decision D9). Never add code that sends data anywhere except the device, for DDI mounting Apple, and the pinned DDI download that `ios setup --download-ddi` makes when asked (D96).
 - **Secrets.** Text passed with `--secret` must never reach logs, traces, errors, or test output.
 
 ## Machines
@@ -29,7 +29,7 @@ phonedriver lets AI agents see and operate Android and iOS devices. The design i
 
 ## Stop and ask (one-way doors)
 
-Driving or installing on a physical device; updating a device's OS; downloading DDI images without Xcode; creating a remote, pushing, or publishing; choosing the license. Ask one question at a time with a recommendation.
+Driving or installing on a physical device; updating a device's OS; downloading DDI images without Xcode from anywhere but D96's pinned source; creating a remote, pushing, or publishing; choosing the license. Ask one question at a time with a recommendation.
 
 ## Commits
 
