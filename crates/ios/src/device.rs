@@ -15,6 +15,7 @@ use phonedriver_core::device::{
 use phonedriver_core::element::Role;
 use phonedriver_core::error::{Error, Op};
 use phonedriver_core::geometry::Size;
+use phonedriver_core::network::{LogWait, LogWaited};
 use phonedriver_core::raw::RawTree;
 use phonedriver_video::frame_store::{Frame, FrameStore};
 use serde_json::{Value, json};
@@ -30,7 +31,8 @@ use crate::map;
 use crate::runner::{Client, Runner};
 use crate::simio::{Frames, Seen, SimIo};
 use crate::simulator::{
-    Simulator, privacy_service, shell_args, simctl, simctl_shell, simctl_with_input,
+    Simulator, log_stream_command, privacy_service, shell_args, simctl, simctl_follow,
+    simctl_shell, simctl_with_input,
 };
 use crate::transport::Link;
 
@@ -947,6 +949,36 @@ impl Device for IosDevice {
             stderr,
             timed_out,
         })
+    }
+
+    async fn log_wait(&self, req: &LogWait) -> Result<LogWaited> {
+        if !matches!(self.host, Host::Simulator) {
+            return Err(Error::Unsupported {
+                op: Op::Logs,
+                reason: "an iPhone or iPad's log cannot be followed from here; the iOS Simulator's and Android devices' can",
+            });
+        }
+        let folder = match &req.app {
+            Some(app) => {
+                let path = simctl(&["get_app_container", &self.udid, &app.0, "app"]).await?;
+                Some(
+                    Path::new(path.trim())
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                )
+            }
+            None => None,
+        };
+        let command =
+            log_stream_command(folder.as_deref()).map_err(|detail| Error::Refused { detail })?;
+        let system = self
+            .system
+            .get_or_try_init(|| crate::simulator::runtime_root(&self.udid))
+            .await?;
+        let args =
+            shell_args(&self.udid, &command, system).map_err(|detail| Error::Refused { detail })?;
+        simctl_follow(&args, req).await
     }
 
     async fn app_op(&self, op: AppOp, app: &AppId) -> Result<()> {

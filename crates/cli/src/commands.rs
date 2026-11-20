@@ -461,6 +461,9 @@ pub(crate) enum Verb {
         #[arg(long)]
         since: Option<u64>,
     },
+    /// Print the device's networks: which are up and by what (Wi-Fi, cellular, VPN), the default one, the app and
+    /// user ids a VPN carries, DNS, and always-on VPN state (Android).
+    Network,
     /// Print the web page in front as text, whole, without scrolling (Android: Chrome, and the web views of debug builds).
     Page {
         /// Keep only lines containing one of these words, separated by `|`, ignoring case.
@@ -508,10 +511,15 @@ pub(crate) enum Verb {
     /// `press home`.
     #[command(hide = true)]
     Home,
-    /// Wait for `settled`, for a text or `@ref` to appear, or for `gone:<text>` (or `gone:@ref`) to leave the screen.
+    /// Wait for `settled`, for a text or `@ref` to appear, for `gone:<text>` (or `gone:@ref`) to leave the screen,
+    /// for `vpn:up` or `vpn:down`, or for `log:<text>` (`A|B` for either) to appear in a log line written from now on.
     Wait {
-        /// `settled`, a text or `@ref` to appear, or `gone:<text>` (or `gone:@ref`) to leave.
+        /// `settled`, a text or `@ref` to appear, `gone:<text>` (or `gone:@ref`) to leave, `vpn:up`, `vpn:down`, or
+        /// `log:<text>`.
         condition: String,
+        /// With `log:`, read only this app's lines: its name or id.
+        #[arg(long)]
+        app: Option<String>,
     },
     /// Run steps in order and print one diff at the end; stops at the first step that fails. Each step is a
     /// command line in quotes, such as `batch "tap @e3" "type hello --submit" "press enter"`.
@@ -1064,8 +1072,8 @@ pub(crate) async fn execute_with(
                 .map_err(|e| Failure::Local(format!("the daemon sent bad image data: {e}")))?;
             compared(&before, &now, image.as_deref()).map_err(Failure::Local)
         }
-        Verb::Wait { condition } => {
-            let mut p = json!({"condition": wait_condition(&condition)});
+        Verb::Wait { condition, app } => {
+            let mut p = json!({"condition": wait_condition(&condition, app.as_deref())});
             if let Some(t) = g.timeout {
                 p["timeout_ms"] = json!(t);
             }
@@ -1216,6 +1224,13 @@ pub(crate) async fn execute_with(
                 return Ok(r.to_string());
             }
             Ok(show_logs(&r, since.unwrap_or(60)))
+        }
+        Verb::Network => {
+            let r = client.call("network", with(json!({}))).await?;
+            if g.json {
+                return Ok(r.to_string());
+            }
+            Ok(show_network(&r))
         }
         Verb::Page { grep, all } => {
             let r = client
@@ -1396,7 +1411,13 @@ pub(crate) fn compared(
     Ok(text)
 }
 
-fn wait_condition(condition: &str) -> Value {
+fn wait_condition(condition: &str, app: Option<&str>) -> Value {
+    if let Some(state) = condition.strip_prefix("vpn:") {
+        return json!({"vpn": state});
+    }
+    if let Some(pattern) = condition.strip_prefix("log:") {
+        return json!({"log": {"pattern": pattern, "app": app}});
+    }
     match condition.strip_prefix("gone:") {
         Some(rest) => json!({"gone": parse_target(rest)}),
         None if condition == "settled" => json!({"settled": true}),
@@ -1515,8 +1536,8 @@ pub(crate) fn step_json(verb: &Verb, secret: Option<&str>) -> Result<Value, Fail
         Verb::Press { key } => json!({"kind": "press", "key": key}),
         Verb::Back => json!({"kind": "press", "key": "back"}),
         Verb::Home => json!({"kind": "press", "key": "home"}),
-        Verb::Wait { condition } => {
-            json!({"kind": "wait", "condition": wait_condition(condition)})
+        Verb::Wait { condition, app } => {
+            json!({"kind": "wait", "condition": wait_condition(condition, app.as_deref())})
         }
         _ => {
             return Err(Failure::Local(
@@ -1913,6 +1934,12 @@ impl Replay {
             }
             "wait" => {
                 let c = &params["condition"];
+                if let Some(state) = c["vpn"].as_str() {
+                    return format!("wait vpn:{state}");
+                }
+                if let Some(pattern) = c["log"]["pattern"].as_str() {
+                    return format!("wait log:{pattern}");
+                }
                 match (target(&c["appears"]), target(&c["gone"])) {
                     (appears, _) if !appears.is_empty() => format!("wait{appears}"),
                     (_, gone) if !gone.is_empty() => format!("wait gone:{}", gone.trim_start()),
@@ -2273,6 +2300,92 @@ pub(crate) fn show_logs(result: &Value, seconds: u64) -> String {
     }
     if out.is_empty() {
         return format!("no log lines from {app} in the last {seconds} s");
+    }
+    out.join("\n")
+}
+
+/// `network`: one line for each network, then private DNS and always-on VPN, then the fields the platform did not give.
+pub(crate) fn show_network(result: &Value) -> String {
+    let list = |v: &Value| {
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .unwrap_or_default()
+    };
+    let networks = result["networks"].as_array().cloned().unwrap_or_default();
+    let mut out = Vec::new();
+    if networks.is_empty() {
+        out.push("no network is up".to_string());
+    }
+    for n in &networks {
+        let mut line = format!(
+            "{} {}{}",
+            n["id"],
+            list(&n["transports"]).replace(',', "+"),
+            if n["default"] == true {
+                " (default)"
+            } else {
+                ""
+            }
+        );
+        if let Some(owner) = n["owner"].as_str() {
+            line.push_str(&format!(" of {owner}"));
+        }
+        if let Some(interface) = n["interface"].as_str() {
+            line.push_str(&format!(" on {interface}"));
+        }
+        if n["uids"].as_array().is_some_and(|u| !u.is_empty()) {
+            line.push_str(&format!(" for uids {}", list(&n["uids"])));
+        }
+        if let Some(under) = n["underlying"].as_array().filter(|u| !u.is_empty()) {
+            let ids: Vec<String> = under.iter().map(|u| u.to_string()).collect();
+            line.push_str(&format!(" over {}", ids.join(",")));
+        }
+        match list(&n["dns"]).as_str() {
+            "" => line.push_str(" · dns not given"),
+            dns => line.push_str(&format!(" · dns {dns}")),
+        }
+        out.push(line);
+    }
+    let missing: Vec<&str> = result["missing"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|x| x.as_str()).collect())
+        .unwrap_or_default();
+    let given = |field: &str, text: String| (!missing.contains(&field)).then_some(text);
+    let lines = [
+        given(
+            "private DNS",
+            format!(
+                "private dns {}",
+                result["private_dns"].as_str().unwrap_or("?")
+            ),
+        ),
+        given(
+            "always-on VPN app",
+            format!(
+                "always-on vpn {}",
+                result["always_on_vpn"].as_str().unwrap_or("none")
+            ),
+        ),
+        given(
+            "always-on VPN lockdown",
+            format!(
+                "lockdown {}",
+                if result["lockdown"] == true {
+                    "on"
+                } else {
+                    "off"
+                }
+            ),
+        ),
+    ];
+    out.extend(lines.into_iter().flatten());
+    if !missing.is_empty() {
+        out.push(format!("not given: {}", missing.join(", ")));
     }
     out.join("\n")
 }
@@ -2739,6 +2852,64 @@ mod tests {
         assert!(
             head.ends_with("still animating after 9150ms, read as it is now"),
             "{head}"
+        );
+    }
+
+    #[test]
+    fn wait_takes_vpn_state_and_a_log_line_beside_a_text_and_a_target_that_is_gone() {
+        assert_eq!(wait_condition("vpn:up", None), json!({"vpn": "up"}));
+        assert_eq!(wait_condition("vpn:down", None), json!({"vpn": "down"}));
+        assert_eq!(
+            wait_condition("log:code=|ready", Some("Example")),
+            json!({"log": {"pattern": "code=|ready", "app": "Example"}})
+        );
+        assert_eq!(
+            wait_condition("log:x", None),
+            json!({"log": {"pattern": "x", "app": null}})
+        );
+        assert_eq!(
+            wait_condition("gone:Loading", None),
+            json!({"gone": {"text": "Loading"}})
+        );
+        assert_eq!(
+            parse_step_line("wait log:ready --app Example").unwrap(),
+            json!({"kind": "wait", "condition": {"log": {"pattern": "ready", "app": "Example"}}})
+        );
+        assert_eq!(
+            parse_step_line("wait vpn:up").unwrap(),
+            json!({"kind": "wait", "condition": {"vpn": "up"}})
+        );
+    }
+
+    #[test]
+    fn a_saved_vpn_or_log_wait_reads_as_one_in_a_replay() {
+        let d = |c: Value| Replay::describe(&json!({"method": "wait", "params": {"condition": c}}));
+        assert_eq!(d(json!({"vpn": "up"})), "wait vpn:up");
+        assert_eq!(
+            d(json!({"log": {"pattern": "ready", "app": null}})),
+            "wait log:ready"
+        );
+    }
+
+    #[test]
+    fn the_network_view_prints_a_line_for_each_network_then_what_was_not_given() {
+        let shown = show_network(&json!({
+            "networks": [
+                {"id": 101, "transports": ["wifi"], "default": true, "interface": "wlan0", "dns": ["10.0.2.3"], "uids": [], "underlying": []},
+                {"id": 102, "transports": ["wifi", "vpn"], "default": false, "interface": "tun0", "dns": ["10.77.0.1"],
+                 "owner": "dev.example.vpn", "uids": ["0-99999"], "underlying": [101]}],
+            "always_on_vpn": "dev.example.vpn",
+            "lockdown": true,
+            "missing": ["private DNS"]
+        }));
+        assert_eq!(
+            shown,
+            "101 wifi (default) on wlan0 · dns 10.0.2.3\n102 wifi+vpn of dev.example.vpn on tun0 for uids 0-99999 over 101 · dns 10.77.0.1\nalways-on vpn dev.example.vpn\nlockdown on\nnot given: private DNS"
+        );
+        let none = show_network(&json!({"networks": [], "missing": []}));
+        assert_eq!(
+            none,
+            "no network is up\nprivate dns ?\nalways-on vpn none\nlockdown off"
         );
     }
 

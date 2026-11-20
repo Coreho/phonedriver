@@ -3221,3 +3221,37 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 
 - DrogaBox found and fixed it on a Galaxy A53 (Exynos 1280, One UI 8, Android 16): every frame of a virtual display rendering into the encoder failed in the HAL (`deliverWinConfigData failed: Invalid argument`), so `screenshot` timed out and `record` wrote 0 frames. Their patch, applied as sent except that the no-output fallback skips software encoders (on a loaded API 37 emulator a first frame can take seconds) and shorter comments: `GlRelay` between the display and the encoder, on for Samsung, `debug.phonedriver.gl` to force it, and a fallback after 1.5 s of no output from a hardware encoder. Their results on the A53: `doctor` video frame after 7 to 59 ms, `screenshot` 41 to 47 ms warm, `record` 79 frames in 2.6 s, hidden display works, no HAL errors.
 - Here, API 37 emulator (no Samsung phone): `setprop debug.phonedriver.gl 1`, then `phonedriver doctor`: `ok video … a frame arrived after 61 ms` (43 ms on a second run); logcat showed the display's consumer as `SurfaceTexture-1-4666-0`. `screenshot`: 411x923, looked at, the home screen, upright, the same as with `0` (`a frame arrived after 101 ms`). `swipe up` with settle: `ok swiped up · new screen` both ways. Under heavy I/O load (avg10 91) the forced relay gave `no frame within 1 s`.
+
+## 2026-11-20: a network view, `wait` on a VPN and on a log line, and the VPN consent dialog (D99, #17)
+
+- New: `network` (daemon method, CLI verb, MCP tool; `crates/android/src/network.rs` parses `dumpsys connectivity` plus four `settings get` answers read in one shell call), `Device::network` and `Device::log_wait` (default `Unsupported`; Android and the iOS Simulator implement the log one), `wait vpn:up|down` and `wait log:<text> [--app <app>]` (CLI) / `wait {vpn}` and `wait {log, app}` (MCP; `condition` is no longer required), `com.android.vpndialogs` in `core::alert`. The MCP server has eighteen tools; `docs/architecture.md` and three site pages say so. The benchmark pages still say "17 tools, 1,849 tokens" (0.1.5); not remeasured.
+- Tests first, and what failed: the dialog fixture test `the_vpn_connection_request_is_an_alert_with_its_title` on the real fixture failed with `left: 0 right: 1` with the package removed from the list (`cargo test -p phonedriver-core --features testing --lib alert`), then passed. The daemon tests (`crates/cli/tests/netview.rs`, 11), the MCP test, the CLI parse tests and the iOS command tests were written against the interface before the code and failed to compile until it existed. The Android parser tests were written with the parser, after I had the real dumps (the stub I had compiled first returned an empty view), so no separate red run exists for them. One test found a mistake of mine, not the product's: the secret-mask test used a `shell --secret` command as a substring of a log line; D70 masks the whole remembered text, so the test now uses the secret as the command, and the reply masks it (`log line: I/Auth( 3): issued token ••• for user`).
+- Fixtures: a real `dumpsys connectivity` from the API 37 emulator on Wi-Fi and cellular (`dumpsys_connectivity_wifi_cellular.txt`, 44 KB) and with a VPN up (`dumpsys_connectivity_vpn.txt`, 57 KB), and the real "Connection request" tree and screenshot (`vpn_consent_dialog.json`, `.png`). I read them for anything personal before saving: they hold the emulator's own SSID `AndroidWifi`, its MAC addresses (`02:15:b2:00:00:0x`), `epc.tmobile.com` (the emulator's APN) and package names. The screenshot was looked at: the dialog reads "Connection request", "VpnProbe wants to set up a VPN connection ...", Cancel and OK. The VPN was a throwaway `VpnService` app built with aapt2, javac, d8 and apksigner (not in the repository): it opens `tun0` for 10.77.0.0/24.
+- Workspace on the Mac mini: `cargo test --workspace --no-fail-fast`: 1,036 passed, 0 failed, 137 ignored (the live and device tests). `cargo clippy --workspace --all-targets -- -D warnings`: clean. `cargo fmt --check`: clean. `--test network` (the sandbox that kills any outbound connection): `3 passed`.
+- Live, API 37 emulator (`emulator-5554`), `phonedriver` built on the mini:
+
+```
+$ phonedriver network                       (VPN up)
+100 cellular on eth0 · dns 10.0.2.3
+101 wifi (default) on wlan0 · dns 10.0.2.3
+102 wifi+vpn of dev.pd016.vpnprobe on tun0 for uids 0-99999 over 101 · dns 10.77.0.1
+always-on vpn none
+lockdown off
+not given: private DNS
+$ phonedriver --timeout 3000 wait vpn:up    (no VPN)
+error: timed out after 3189 ms waiting for the VPN to be up; last seen: cellular, wifi (default)
+$ phonedriver wait vpn:up                   (while `am start` brought the VPN up after `appops ... allow`)
+ok a VPN is up (dev.pd016.vpnprobe)
+$ phonedriver wait vpn:down                 (while `am force-stop` ended it)
+ok no VPN is up
+$ phonedriver --timeout 20000 wait 'log:I/pd016'    (and `adb shell log -t pd016 pd-016-check` from another shell)
+ok log line: I/pd016   ( 5750): pd-016-check
+$ phonedriver --timeout 3000 wait 'log:never-appears-xyz'
+error: timed out after 3055 ms waiting for a log line with "never-appears-xyz" (164 lines arrived, none matched)
+$ phonedriver wait 'log:e' --app Calendar   (while `monkey -p com.google.android.calendar 1` started it)
+ok log line: I/DisplayManager( 5578): Choreographer implicitly registered for the refresh rate.
+```
+
+- The consent dialog: `am start` of the VPN app with `appops get ... ACTIVATE_VPN` at `default` gave `alert com.android.vpndialogs: "Connection request"` in `snapshot`, `tap Cancel` closed it; after `shell "appops set dev.pd016.vpnprobe ACTIVATE_VPN allow"` the same start connected the VPN with no dialog. Documented in `docs/reference.md` and `site/content/docs/android-emulator.md`.
+- Things seen and fixed on the way: with the pattern `pd-016-check` the wait returned on `adbd`'s own log of the command line (`adbd service requested 'shell,v2,raw:log -t pd016 pd-016-check'`), which is a true match; the reference says so. `dumpsys connectivity` answered in 6 to 10 s for about a minute after a VPN app was force-stopped, and the first version read an empty answer as "no network"; the read now allows 20 s and an empty or timed-out answer is an error. `Settings` runs as uid 1000, so `--app Settings` includes `system_server`'s lines.
+- Not done: the iOS Simulator log wait was not run through phonedriver. On my own Simulator (created, booted and deleted) the same `simctl spawn <runtime root>/usr/bin/log stream --style compact --level debug --predicate 'processImagePath CONTAINS "/MobileSafari.app/"'` that `shell_args` builds printed lines at once through a pipe, with a stderr warning (`getpwuid_r ...`, discarded) and two header lines (skipped until the first line that starts with a date). No physical Android phone or iPhone was touched. The earlier existing `crates/cli/tests/network.rs` (the no-outbound sandbox) was overwritten by mistake once and restored from git before anything was committed; the new daemon tests are in `netview.rs`.

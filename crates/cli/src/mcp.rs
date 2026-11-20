@@ -102,6 +102,12 @@ struct LogsArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct NetworkArgs {
+    device: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SettingArgs {
     device: Option<String>,
     find: Option<String>,
@@ -313,9 +319,38 @@ struct LaunchArgs {
 #[serde(deny_unknown_fields)]
 struct WaitArgs {
     device: Option<String>,
-    condition: String,
+    condition: Option<String>,
+    /// `up` or `down`: wait for a VPN network to come up or go away.
+    vpn: Option<String>,
+    /// Wait for a log line written from now on with this text (`A|B` for either).
+    log: Option<String>,
+    /// With `log`: only this app's lines.
+    app: Option<String>,
     /// Default 5000.
     timeout_ms: Option<u64>,
+}
+
+impl WaitArgs {
+    fn verb(self) -> Result<Verb, String> {
+        match (self.condition, self.vpn, self.log) {
+            (Some(condition), None, None) => Ok(Verb::Wait {
+                condition,
+                app: None,
+            }),
+            (None, Some(state), None) if matches!(state.as_str(), "up" | "down") => {
+                Ok(Verb::Wait {
+                    condition: format!("vpn:{state}"),
+                    app: None,
+                })
+            }
+            (None, Some(_), None) => Err("`vpn` is `up` or `down`".into()),
+            (None, None, Some(pattern)) => Ok(Verb::Wait {
+                condition: format!("log:{pattern}"),
+                app: self.app,
+            }),
+            _ => Err("give one of `condition`, `vpn` or `log`".into()),
+        }
+    }
 }
 
 impl TapArgs {
@@ -446,11 +481,9 @@ fn step_verb(step: serde_json::Value) -> Result<Verb, String> {
         "press" => Ok(Verb::Press {
             key: serde_json::from_value::<PressArgs>(rest).map_err(args)?.key,
         }),
-        "wait" => Ok(Verb::Wait {
-            condition: serde_json::from_value::<WaitArgs>(rest)
-                .map_err(args)?
-                .condition,
-        }),
+        "wait" => serde_json::from_value::<WaitArgs>(rest)
+            .map_err(args)?
+            .verb(),
         "launch" => serde_json::from_value::<LaunchArgs>(rest)
             .map_err(args)?
             .verb()
@@ -1243,6 +1276,18 @@ impl Mcp {
     }
 
     #[tool(
+        description = "The device's networks: Wi-Fi, cellular, VPN (its app and the user ids it carries), which is the default, DNS, always-on VPN and lockdown. Fields the platform did not give are named. Android.",
+        annotations(
+            title = "Read the networks",
+            read_only_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn network(&self, Parameters(a): Parameters<NetworkArgs>) -> CallToolResult {
+        self.run(a.device, Verb::Network, None).await
+    }
+
+    #[tool(
         description = "An app's last log lines and its last crash (Android). `app` defaults to the one in front; `grep` keeps lines with these words (`a|b`).",
         annotations(
             title = "Read an app's logs",
@@ -1600,14 +1645,16 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Wait for `settled`, a text (`A|B` for either) or @ref to appear, or `gone:<text>`.",
+        description = "Wait for `settled`, a text (`A|B` for either) or @ref to appear, or `gone:<text>`; or `vpn` up or down; or a `log` line (of `app`) written from now on.",
         annotations(title = "Wait", read_only_hint = true, open_world_hint = true)
     )]
     async fn wait(&self, Parameters(a): Parameters<WaitArgs>) -> CallToolResult {
-        let mut globals = self.globals(a.device);
-        globals.timeout = a.timeout_ms;
-        let verb = Verb::Wait {
-            condition: a.condition,
+        let (device, timeout_ms) = (a.device.clone(), a.timeout_ms);
+        let mut globals = self.globals(device);
+        globals.timeout = timeout_ms;
+        let verb = match a.verb() {
+            Ok(verb) => verb,
+            Err(why) => return bad(&why),
         };
         self.run_with(globals, verb, None).await
     }

@@ -279,6 +279,33 @@ hint: `phonedriver logs dev.phonedriver.testbed` prints its last log lines
 
 iOS devices and the Simulator answer that logs cannot be read. Decision D58.
 
+### Networks, VPNs and waiting on a log line
+
+On Android, `phonedriver network` prints what the device is connected to, read-only and with no approval:
+
+```
+100 cellular on eth0 · dns 10.0.2.3
+101 wifi (default) on wlan0 · dns 10.0.2.3
+102 wifi+vpn of dev.example.vpn on tun0 for uids 0-99999 over 101 · dns 10.77.0.1
+always-on vpn none
+lockdown off
+not given: private DNS
+```
+
+Each line is a network the platform lists as connected: its id, transports (`wifi`, `cellular`, `vpn`, ...), the system default, and its interface and DNS servers. A VPN names the package that owns it, the user id ranges whose traffic it carries and the network it runs over. Below them come the always-on VPN app and its lockdown setting and the private DNS mode, from the secure and global settings. A field the platform did not give is listed after `not given:` and is not guessed; an emulator with `private_dns_mode` never set says so. The default is the system's default network: with a VPN up it stays the Wi-Fi or cellular network under it, and the VPN's `uids` say whose traffic goes through the VPN. `phonedriver --json network` and the `network` tool return the same as fields (decision D99). The read works the same on a physical Android phone; it was only run on an emulator.
+
+`wait` also waits on the VPN and on the log:
+
+```
+phonedriver wait vpn:up                          # a VPN network is connected
+phonedriver wait vpn:down
+phonedriver wait log:"tunnel up|handshake" --app "My VPN"   # a log line written from now on, of that app
+```
+
+`vpn:up` and `vpn:down` read the network state once a second. `log:` follows the log from the moment the wait begins (a line that was already written does not count) and returns the first line that holds one of the `|`-separated words, ignoring case; `--app` (the MCP `app`) keeps only that app's lines. The reply quotes the line: `ok log line: I/pd016   ( 5750): pd-016-check`. Lines can hold secrets, so the reply is masked like every other (decision D70). On a timeout the error says what was last seen: `timed out after 3189 ms waiting for the VPN to be up; last seen: cellular, wifi (default)`, or `waiting for a log line with "x" (164 lines arrived, none matched)`. Matching is on the whole line, so a pattern that also appears in a command line `adbd` logs (the `shell` that wrote the line) matches that first. Android follows `logcat`; the iOS Simulator follows `log stream` at debug level, run the way `shell` runs programs, with `--app` scoped to the app's process; a physical iPhone or iPad answers that its log cannot be followed. On iOS `network` and `wait vpn:` answer that the device's networks cannot be read.
+
+A VPN app asks for consent the first time it starts a connection: a "Connection request" dialog from `com.android.vpndialogs`, which phonedriver reports like any system dialog (`alert com.android.vpndialogs: "Connection request"`) and `tap OK` answers. On an emulator you can skip it: `phonedriver shell "appops set <package> ACTIVATE_VPN allow"` pre-authorises the app, so the dialog never appears (checked on an API 37 emulator: with `default` the dialog came up, after `allow` the VPN connected with no dialog). `appops set <package> ACTIVATE_VPN default` takes it back.
+
 ### Screens with no element list
 
 A web view with accessibility off, a Flutter screen or a game gives no list of elements. phonedriver then reads the screenshot's text on the machine the daemon runs on and adds the lines it finds, marked `(ocr)`; `tap "Send"` taps one. `snapshot --pixels` asks for this on any screen. macOS and Windows use the text recognition the system ships. Linux uses Tesseract when the `tesseract` program is on the `PATH` (`apt install tesseract-ocr`); without it, `--pixels` answers that pixels cannot be read and names the package. Decisions D61, D64 and D65.

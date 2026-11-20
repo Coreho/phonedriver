@@ -242,8 +242,8 @@ impl Daemon {
                 Ok(json!({"same": last.as_deref() == Some(line.as_str())}))
             }
             "release" | "snapshot" | "screenshot" | "act" | "wait" | "batch" | "find" | "apps"
-            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "page" | "record"
-            | "journal" => {
+            | "app" | "clipboard" | "health" | "shell" | "setting" | "logs" | "network"
+            | "page" | "record" | "journal" => {
                 let common: Common = rpc::params(params)?;
                 if method == "release" && common.device.is_none() {
                     self.release_everywhere(session).await;
@@ -269,6 +269,7 @@ impl Daemon {
                         Call::Shell(p)
                     }
                     "logs" => Call::Logs(rpc::params(params)?),
+                    "network" => Call::Network,
                     "page" => Call::Page(rpc::params(params)?),
                     "record" => {
                         let p: RecordParams = rpc::params(params)?;
