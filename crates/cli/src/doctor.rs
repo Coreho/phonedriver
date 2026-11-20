@@ -799,6 +799,11 @@ pub fn ios_setup(home: &Path, download_ddi: bool, ddi: Option<&Path>) -> bool {
                     }
                 };
                 let mounted = match files {
+                    Ok(_) if phonedriver_ios::setup::mount_blocked(&status).is_some() => {
+                        println!("need  {name} developer disk image: it mounts once Developer Mode is on. Run this again after the restart");
+                        all_ok = false;
+                        continue;
+                    }
                     Ok(files) => {
                         println!("      {name} developer disk image: mounting (asks Apple's signing server for this device's ticket)");
                         phonedriver_ios::setup::mount_files(&device, &files).await

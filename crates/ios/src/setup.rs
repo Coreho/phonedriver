@@ -150,11 +150,21 @@ pub async fn mount_files(device: &Attached, files: &crate::ddi::Files) -> Result
         .map_err(lost)
 }
 
+/// What the person must do before the image can mount. iOS refuses a personalized image while Developer Mode is off
+/// and says only `ImageMountFailed` (iPhone17,5, iOS 26.5, 2026-11-20).
+pub fn mount_blocked(status: &Status) -> Option<UserAction> {
+    (!status.developer_mode).then_some(UserAction::EnableDeveloperMode)
+}
+
 /// On a computer without Xcode, mounts the image from the files `phonedriver ios setup` downloaded when it is not
 /// mounted: a restart of the device unmounts it.
 pub async fn mount_cached(device: &Attached, home: &std::path::Path) -> Result<(), Error> {
-    if status(device).await?.image_mounted {
+    let status = status(device).await?;
+    if status.image_mounted {
         return Ok(());
+    }
+    if let Some(action) = mount_blocked(&status) {
+        return Err(Error::NeedsUser { action });
     }
     match crate::ddi::cached(home) {
         Some(files) => mount_files(device, &files).await,
@@ -177,6 +187,20 @@ mod tests {
     #[test]
     fn turning_developer_mode_on_is_a_user_action_with_the_settings_path() {
         assert!(developer_mode_action().hint().contains("Developer Mode"));
+    }
+
+    #[test]
+    fn developer_mode_off_stops_the_mount_before_it_starts() {
+        let off = Status {
+            developer_mode: false,
+            image_mounted: false,
+        };
+        assert_eq!(mount_blocked(&off), Some(UserAction::EnableDeveloperMode));
+        let on = Status {
+            developer_mode: true,
+            image_mounted: false,
+        };
+        assert_eq!(mount_blocked(&on), None);
     }
 
     #[test]
