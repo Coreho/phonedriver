@@ -162,6 +162,6 @@ Not met, found on the way: (1) the stream is not turned by device orientation. W
 - Five more `hello` round trips through the tunnel: 99 and 107 ms each.
 - The runner's log shows the normal start (`Notifying test runner ready`, `_IDE_startExecutingTestPlanWithProtocolVersion:36`, test bundle loaded).
 
-**Result.** From Windows, after one pairing on the cable with nothing to approve on the phone, everything setup and the daemon need is reachable over Wi-Fi: Developer Mode state, image state (and so the image mounter), the app list, and the runner's start through testmanagerd. Built as decision D101 the same day, with `run_over_rsd` on the Coreho/idevice fork.
+**Result.** From Windows, after one pairing on the cable with nothing to approve on the phone, everything setup and the daemon need is reachable over Wi-Fi: Developer Mode state, image state (and so the image mounter), the app list, and the runner's start through testmanagerd. Built as decision D103 the same day, with `run_over_rsd` added to idevice (Coreho's commit `3bd5d45`, built from `hridaya423/idevice`).
 
 **Not measured.** Whether the record survives a phone restart or an iOS update; what happens when the phone sleeps (D47 saw both announcements withdrawn when the screen went off); a tap or snapshot through the daemon over this path; other phones or iOS versions; how long the record stays valid.

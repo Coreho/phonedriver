@@ -1,4 +1,4 @@
-//! The remote pairing a computer without Xcode keeps for a device on Wi-Fi (architecture 7.1, decision D101). Made
+//! The remote pairing a computer without Xcode keeps for a device on Wi-Fi (architecture 7.1, decision D103). Made
 //! once over the cable, it opens a tunnel to the developer services that lockdown closes over the network.
 
 use std::net::{IpAddr, SocketAddr, SocketAddrV6};

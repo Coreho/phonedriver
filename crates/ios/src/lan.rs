@@ -119,7 +119,7 @@ fn pairing(service: &ResolvedService) -> Option<Pairing> {
 }
 
 /// What the cable pairing left on this computer that tells its device apart on the network: usbmuxd's pair record
-/// and, off a Mac, the key in the remote pairing record (decision D101).
+/// and, off a Mac, the key in the remote pairing record (decision D103).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Known {
     udid: String,
@@ -219,7 +219,7 @@ fn follow<T: Send + 'static>(
 
 impl Lan {
     /// Off a Mac it also browses for remote pairing services, which the devices `phonedriver ios wifi on` paired
-    /// with announce (decision D101).
+    /// with announce (decision D103).
     pub fn watch(home: &Path, udids: Vec<String>) -> Result<Lan, Error> {
         let failed = |e: mdns_sd::Error| Error::Transport {
             detail: format!("cannot browse the local network for iOS devices: {e}"),

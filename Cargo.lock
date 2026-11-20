@@ -1120,7 +1120,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 [[package]]
 name = "idevice"
 version = "0.1.68"
-source = "git+https://github.com/Coreho/idevice?rev=3bd5d454ec9b14f1cf8ca45a2a72353c97684c6b#3bd5d454ec9b14f1cf8ca45a2a72353c97684c6b"
+source = "git+https://github.com/hridaya423/idevice?rev=3bd5d454ec9b14f1cf8ca45a2a72353c97684c6b#3bd5d454ec9b14f1cf8ca45a2a72353c97684c6b"
 dependencies = [
  "aes",
  "async-stream",

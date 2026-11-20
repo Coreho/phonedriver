@@ -55,7 +55,7 @@ fn done(device: &Attached, on: bool) -> String {
 }
 
 /// Off a Mac, turning Wi-Fi on over the cable also makes the remote pairing that reaches the device's services
-/// over Wi-Fi (decision D101). On a Mac, Xcode's own pairing does that.
+/// over Wi-Fi (decision D103). On a Mac, Xcode's own pairing does that.
 fn pairs(on: bool, link: Link, xcode: bool) -> bool {
     on && !xcode && matches!(link, Link::Usb { .. })
 }

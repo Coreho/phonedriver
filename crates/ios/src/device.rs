@@ -70,7 +70,7 @@ enum Host {
     /// Over the network the device closes every lockdown service after the TLS handshake (observed 2026-11-12,
     /// iOS 27.0.1: amfi, the image mounter, the installation proxy), so only the runner's own port is used.
     Network,
-    /// Off a Mac over Wi-Fi: the tunnel of the remote pairing reaches the services lockdown closes (decision D101).
+    /// Off a Mac over Wi-Fi: the tunnel of the remote pairing reaches the services lockdown closes (decision D103).
     Tunnel(Tunnel),
 }
 
@@ -230,7 +230,7 @@ impl IosDevice {
     }
 
     /// A device whose runner the person installed, started without Xcode (architecture 7.3): on the cable, or over
-    /// Wi-Fi through the remote pairing `phonedriver ios wifi on` made (decision D101).
+    /// Wi-Fi through the remote pairing `phonedriver ios wifi on` made (decision D103).
     pub async fn connect_installed(
         device: &crate::transport::Attached,
         model: &str,

@@ -33,7 +33,7 @@ pub enum Link {
         addr: IpAddr,
         scope: Option<u32>,
         /// Off a Mac, the port of the device's remote pairing service when this computer keeps a remote pairing for
-        /// it and the device announces the service (decision D101).
+        /// it and the device announces the service (decision D103).
         pairing: Option<u16>,
     },
 }
@@ -292,7 +292,7 @@ pub(crate) async fn answered_within<T>(
 }
 
 /// Where a device's developer services answer: lockdown on the cable, or off a Mac over Wi-Fi the tunnel of the
-/// remote pairing, because there the device closes lockdown's services after the TLS handshake (decision D101).
+/// remote pairing, because there the device closes lockdown's services after the TLS handshake (decision D103).
 pub enum Services {
     Lockdown(Arc<dyn IdeviceProvider>),
     Tunnel(Tunnel),
