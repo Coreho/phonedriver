@@ -852,7 +852,7 @@ async fn an_action_that_changed_the_screen_starts_the_count_of_unchanged_repeats
     assert!(r.get("unchanged_repeats").is_none(), "{r}");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_window_change_event_counts_as_the_first_change() {
     let (source, fake) = FakeSource::with(vec![tree(&["One"]), tree(&["Other"])]);
     let (d, _home) = daemon(source);
@@ -867,7 +867,7 @@ async fn a_window_change_event_counts_as_the_first_change() {
     assert_eq!(r["observation"]["kind"], "full");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_new_screen_after_an_action_leaves_the_settle_time_to_the_action_line() {
     let (source, fake) = FakeSource::with(vec![tree(&["One"]), tree(&["Other"])]);
     let (d, _home) = daemon(source);
@@ -4963,17 +4963,26 @@ async fn a_closed_mcp_connection_drops_its_sessions_state_and_a_closed_cli_conne
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        let saved = ok(&d, "s", "journal", json!({})).await;
+        let traces_of_s = || {
+            std::fs::read_dir(home.path().join("traces"))
+                .unwrap()
+                .filter(|f| {
+                    std::fs::read_to_string(f.as_ref().unwrap().path())
+                        .unwrap()
+                        .contains("\"session\":\"s\"")
+                })
+                .count()
+        };
+        let mut saved = ok(&d, "s", "journal", json!({})).await;
+        for _ in 0..200 {
+            if saved["steps"].as_array().unwrap().len() == usize::from(kept) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            saved = ok(&d, "s", "journal", json!({})).await;
+        }
         assert_eq!(saved["steps"].as_array().unwrap().len(), usize::from(kept));
-        let traces = std::fs::read_dir(home.path().join("traces"))
-            .unwrap()
-            .filter(|f| {
-                std::fs::read_to_string(f.as_ref().unwrap().path())
-                    .unwrap()
-                    .contains("\"session\":\"s\"")
-            })
-            .count();
+        let traces = traces_of_s();
         assert_eq!(traces, if kept { 1 } else { 2 }, "{client}");
     }
 }
