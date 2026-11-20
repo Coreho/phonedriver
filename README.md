@@ -172,7 +172,7 @@ phonedriver replay signup.steps
 phonedriver replay signup.steps --screens screens/signup
 ```
 
-Replay needs no model. It stops at the first step that misses and shows the screen, so the agent can do that one step. With `--screens`, the first replay keeps a screenshot after each step, and later replays stop at the first step whose screen shows different text. The status bar is left out. A step that typed a secret is not saved with its text, so the replay stops there.
+Replay needs no model. It stops at the first step that misses and shows the screen, so the agent can do that one step. With `--screens`, the first replay keeps a screenshot after each step, and later replays stop at the first step whose screen shows different text. The status bar is left out. A step that typed a secret is saved with the name of an environment variable (`PHONEDRIVER_SECRET_1`), not its text, and a replay types what that variable holds, so a login replays in CI. `{{name}}` in a step is filled from `--var name=value`, and `{{run}}` is a new id for each replay.
 
 The repository is also a GitHub Action that boots an emulator or a Simulator, installs your app and replays these files on every commit ([Saving and replaying a run](docs/reference.md#saving-and-replaying-a-run), [in CI](docs/reference.md#replaying-runs-in-github-actions)).
 

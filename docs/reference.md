@@ -372,7 +372,31 @@ $ phonedriver replay run.steps --from 4
 
 A `shell` step expects exit 0, and a command that runs past its time limit fails the step. `save` keeps `"expect_exit": 3` in the step of a command that exited 3 when it was saved, so a replay of the same run passes; add `"expect_exit": 1` by hand to a step that checks for a failure, or `"expect_exit": null` to a step that is only run for its effect and whose exit status does not matter. A step is saved without `--force`, so a replay on a physical phone is refused again at a command that needs it.
 
-Text typed with `--secret` is never in the file; a replay stops at that step for you to type it. Other typed text is in the file. In MCP, `replay` takes `file`, `from` and `save: true`. Decision D60.
+Text typed with `--secret` is never in the file. `save` writes the step with the name of an environment variable instead, numbered in order, and says which to set:
+
+```
+$ phonedriver save login.steps
+saved 3 steps to login.steps
+1. tap "Sign in"
+2. type secret $PHONEDRIVER_SECRET_1 into "Password"
+3. tap "Continue"
+the secret text is not in the file: set PHONEDRIVER_SECRET_1 before replaying (rename a variable in the file if you like)
+$ PHONEDRIVER_SECRET_1=hunter2-test phonedriver replay login.steps
+```
+
+The line in the file is `{"method":"act","params":{"action":{"kind":"type","secret":true,"secret_env":"PHONEDRIVER_SECRET_1","into":{...}}}}`. `replay` reads the variable from the environment of the process that runs it (the `phonedriver` command, or for MCP the MCP server, so set it in the server's `env`, never in a tool argument), and types it as a secret: masked in replies and traces, never in an error, a log or a file (D70). The name may be changed in the file, but it must begin `PHONEDRIVER_SECRET_`, so an edited file cannot make a replay type another variable of the process. When the variable is not set (or is empty) the replay stops at that step as before, and the hint names it. A file saved by an earlier version, whose secret step has no variable, still stops there for you to type it. Other typed text is in the file.
+
+#### Variables in a saved run
+
+`{{name}}` in a step's text (what is typed, an `open` URL, a `shell` command, a target's text) is filled in when the file is replayed. `save` never writes one; edit them into the file:
+
+```
+$ phonedriver replay signup.steps --var plan=pro
+replayed 6 steps in 14.2 s (run 3fa91c07)
+1. typed into @e4
+```
+
+`--var name=value` is repeatable (MCP: `vars: {"name": "value"}`). `{{run}}` is built in: a short id, new in every replay and the same in all its steps, for data that must be fresh, such as `test+{{run}}@example.com`; the reply names the run when the file uses it. A name used in the steps that run but not given is refused before the first step, naming every one missing. A name is letters, digits, `_`, `-` and `.`; anything else between braces is typed as it is, and a value is not read for names again, so `--var x='{{x}}'` types the braces. Variables are not secrets: they are in replies and failure messages. Use the environment variable above for a secret. In MCP, `replay` takes `file`, `from`, `vars` and `save: true`. Decisions D60 and D98.
 
 `--screens <dir>` checks what each step left on the screen. The first replay keeps a screenshot after every step in the folder (`01.png`, `02.png`, ...); later replays compare each step's screen with its screenshot, as `compare` does, and stop at the first step whose text changed:
 
@@ -410,7 +434,7 @@ jobs:
           record: true
 ```
 
-Inputs: `runs` (paths or globs, one a line), `platform` (`android` or `ios`), `app`, `api-level` (default 35), `device` (a Simulator name; default the first iPhone), `record`, `screens` (a folder with a subfolder of kept screens for each run, named as its steps file; a run with no subfolder keeps its screens in the artifact under `screens/`), `version` (default `latest`), `binary` (a phonedriver already on the runner) and `artifact` (the artifact's name). Outputs: `passed` and `failed`. Write the steps files with `phonedriver save` after a session on your own machine; a step that typed a secret stops the replay there, so keep secrets out of runs meant for CI.
+Inputs: `runs` (paths or globs, one a line), `platform` (`android` or `ios`), `app`, `api-level` (default 35), `device` (a Simulator name; default the first iPhone), `record`, `vars`, `screens` (a folder with a subfolder of kept screens for each run, named as its steps file; a run with no subfolder keeps its screens in the artifact under `screens/`), `version` (default `latest`), `binary` (a phonedriver already on the runner) and `artifact` (the artifact's name). Outputs: `passed` and `failed`. Write the steps files with `phonedriver save` after a session on your own machine. A step that typed a secret names an environment variable (`PHONEDRIVER_SECRET_1`); give it to the Action step with `env:`, for example `PHONEDRIVER_SECRET_1: ${{ secrets.APP_PASSWORD }}`, and the replay types it. `vars` fills `{{name}}` in the files, one `name=value` a line; `{{run}}` needs no input.
 
 ### Fingerprint and Face ID on an emulator or Simulator
 

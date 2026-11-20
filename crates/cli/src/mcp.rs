@@ -145,6 +145,9 @@ struct ReplayArgs {
     save: Option<bool>,
     /// Start at this step.
     from: Option<u32>,
+    /// Values for `{{name}}` in the file's text. Not secrets: a secret step reads the environment variable its
+    /// line names, from the MCP server's environment.
+    vars: Option<std::collections::BTreeMap<String, String>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -1261,7 +1264,7 @@ impl Mcp {
     }
 
     #[tool(
-        description = "Run a saved steps file again in one call; it stops at the first step that fails and shows the screen. `save: true` writes the file from this session's actions: do it when a task that worked will be asked again.",
+        description = "Run a saved steps file again in one call; it stops at the first step that fails and shows the screen. `vars` fills `{{name}}` in it. `save: true` writes the file from this session's actions.",
         annotations(
             title = "Replay saved steps",
             read_only_hint = false,
@@ -1279,6 +1282,7 @@ impl Mcp {
                 file,
                 from: a.from.map_or(1, |n| n as usize),
                 screens: None,
+                vars: a.vars.unwrap_or_default().into_iter().collect(),
             }
         };
         self.run(a.device, verb, None).await

@@ -23,6 +23,9 @@ inputs:
   record:
     description: "`true` records a video of every run."
     default: "false"
+  vars:
+    description: Values for `{{name}}` in the steps files, one `name=value` a line. `{{run}}` needs none. They are not secrets and show in the job log; a secret goes in the `env` of this step as `PHONEDRIVER_SECRET_1` and the like.
+    default: ""
   screens:
     description: A folder of screenshots kept by `phonedriver replay --screens`, with a subfolder for each run named as its steps file. Each step's screen is compared with its screenshot, and a run stops at the first whose text changed. A run with no subfolder keeps its screens in the artifact, under `screens/`, to commit.
     default: ""
@@ -163,6 +166,7 @@ runs:
         RUNS: ${{ inputs.runs }}
         RECORD: ${{ inputs.record }}
         SCREENS: ${{ inputs.screens }}
+        VARS: ${{ inputs.vars }}
       run: |
         set +e -uo pipefail
         shopt -s nullglob
@@ -187,6 +191,10 @@ runs:
           echo "| Run | Result |"
           echo "|---|---|"
         } >> "$GITHUB_STEP_SUMMARY"
+        vars=()
+        while IFS= read -r v; do
+          [ -n "$v" ] && vars+=(--var "$v")
+        done <<< "$VARS"
         for f in "${files[@]}"; do
           name=$(basename "$f" .steps)
           args=()
@@ -196,7 +204,7 @@ runs:
             args=(--screens "$kept")
           fi
           [ "$RECORD" = true ] && phonedriver record start -o "$out/$name.mp4" > /dev/null
-          if phonedriver replay "$f" ${args[@]+"${args[@]}"} > "$out/$name.txt" 2>&1; then
+          if phonedriver replay "$f" ${args[@]+"${args[@]}"} ${vars[@]+"${vars[@]}"} > "$out/$name.txt" 2>&1; then
             passed=$((passed + 1))
             result=$(head -1 "$out/$name.txt")
           else
