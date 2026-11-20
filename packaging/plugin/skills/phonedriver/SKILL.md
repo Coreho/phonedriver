@@ -70,7 +70,7 @@ Unlocking the phone, a USB debugging prompt, a biometric prompt and a trust-this
 
 Each error has a hint that names the next step; follow it.
 
-- No device: when the error says `can be started`, start one with `boot <name>` (MCP: `devices` with `boot`) and go on. Otherwise `phonedriver doctor` says what is missing (adb, USB debugging, a dropped tunnel); with only the MCP tools, ask the user to run it. More than one device: MCP `devices` with `use` set to an id from the list sends the other tools there (CLI: `--device`).
+- No device: when the error says `can be started`, start one with `boot <name>` (MCP: `devices` with `boot`) and go on. Otherwise `phonedriver doctor` says what is missing (adb, USB debugging, a dropped tunnel); with only the MCP tools, ask the user to run it. A phone that is plugged in but never listed may be kept out by the user's device list: do not look for a way round it, tell the user. More than one device: MCP `devices` with `use` set to an id from the list sends the other tools there (CLI: `--device`).
 - Another session holds the device: wait or use another device; the error says how long it has been idle. On Android 13 and later you can also work beside it on a lane: pass `device` as that id with `+` and a short name of yours (`android:emulator-5554+b`). A lane is a hidden screen of its own that starts on a home screen; launch a different app than the other session uses, because an app runs in one place at a time.
 - `driven by another phonedriver daemon`: another program on that computer runs the device. Tell the user the pid the error names. Do not stop that program yourself.
 - Text not found: the error lists similar text; scroll or fix the spelling.

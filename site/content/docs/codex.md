@@ -30,6 +30,8 @@ codex mcp add phonedriver --env PHONEDRIVER_DEVICE=android:emulator-5554 -- npx 
 
 To let the agent clear, remove or change the permissions of an app you are developing on a physical Android phone (the apps Gradle installed, not phonedriver), add `--env PHONEDRIVER_APPS_UNDER_TEST=com.example.app` the same way, and run `phonedriver daemon stop` once if a daemon is running.
 
+To keep a phone out of the agent's reach on a shared adb server, add `--env PHONEDRIVER_DENY_DEVICES=android:<id>` the same way, or write `deny android:<id>` in `~/.phonedriver/devices`, which every agent on the machine obeys. A denied device is not listed, not probed by `doctor` and never gets the agent.
+
 ## Or edit config.toml
 
 Codex keeps its MCP servers in `~/.codex/config.toml`, or in `.codex/config.toml` inside a trusted project. The same server as a table:

@@ -11,6 +11,7 @@ pub mod guard;
 pub mod ios;
 pub mod journal;
 pub mod ledger;
+pub mod policy;
 pub mod progress;
 pub mod rpc;
 pub mod secret_field;
@@ -110,6 +111,13 @@ pub trait DeviceSource: Send + Sync {
     fn blocker(&self, _id: &str) -> Option<&'static str> {
         None
     }
+
+    /// The phone's own serial number (Android's `ro.serialno`), the same over USB and Wi-Fi, which the device list
+    /// matches. `None` for a device that has no such serial.
+    async fn hardware_serial(&self, id: &str) -> Result<Option<String>, Error> {
+        let _ = id;
+        Ok(None)
+    }
 }
 
 /// What `boot` started, or found on.
@@ -129,7 +137,7 @@ pub(crate) fn names(id: &str, requested: &str) -> bool {
 }
 
 pub struct Daemon {
-    source: Arc<dyn DeviceSource>,
+    source: Arc<policy::Gated>,
     home: PathBuf,
     actors: Mutex<HashMap<String, mpsc::Sender<Job>>>,
     traces: Traces,
@@ -152,7 +160,7 @@ impl Daemon {
         config: Config,
         trace: TraceOptions,
     ) -> Arc<Daemon> {
-        Self::start(source, config, trace, Vec::new())
+        Self::start(source, config, trace, Vec::new(), policy::Policy::default())
     }
 
     /// `apps_under_test` are packages the person named outside the tools; on a physical device they count as theirs
@@ -162,11 +170,12 @@ impl Daemon {
         config: Config,
         trace: TraceOptions,
         apps_under_test: Vec<String>,
+        policy: policy::Policy,
     ) -> Arc<Daemon> {
         trace::clean_older_than(&config.home.join("tmp"), TMP_MAX_AGE);
         trace::clean_older_than(&config.home.join("traces"), TRACE_MAX_AGE);
         Arc::new(Daemon {
-            source,
+            source: Arc::new(policy::Gated::new(source, policy)),
             traces: Traces::new(config.home.join("traces"), trace),
             ledger: Arc::new(
                 ledger::Ledger::new(&config.home).with_apps_under_test(apps_under_test),
@@ -244,6 +253,18 @@ impl Daemon {
                 Ok(json!({"pid": std::process::id()}))
             }
             "devices" => Ok(self.devices().await?),
+            "hidden" => {
+                let extra: Vec<String> = params["ids"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let hidden = self.source.hidden(&extra).await?;
+                Ok(json!({"count": hidden.count, "ids": hidden.ids}))
+            }
             "boot" => Ok(self.boot(params["name"].as_str()).await?),
             "told" => {
                 let line = params["line"].as_str().unwrap_or_default().to_string();
@@ -566,6 +587,7 @@ impl Daemon {
                     capabilities: l.capabilities,
                     leased_by: lease["session"].as_str().map(str::to_string),
                     lease_idle_s: lease["idle_s"].as_u64(),
+                    lease_live: lease["live"].as_bool().unwrap_or(false),
                     hidden_display,
                 });
             }

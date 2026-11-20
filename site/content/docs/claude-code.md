@@ -35,6 +35,8 @@ On a physical Android phone, `apps clear`, `uninstall`, `grant` and `revoke` tou
 claude mcp add --env PHONEDRIVER_APPS_UNDER_TEST=com.example.app,com.example.other phonedriver -- npx -y phonedriver mcp
 ```
 
+To keep a phone out of the agent's reach on a shared adb server, add `--env PHONEDRIVER_DENY_DEVICES=android:<id>` the same way (or write `deny android:<id>` in `~/.phonedriver/devices`, which every agent on the machine obeys). A denied device is not listed, not probed by `doctor` and never gets the agent.
+
 The daemon reads the list when it starts, so run `phonedriver daemon stop` once if one is already running. Emulators and Simulators need none of this.
 
 ## Or install the plugin
