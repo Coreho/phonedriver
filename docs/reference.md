@@ -64,7 +64,7 @@ That binary has no Android support (`phonedriver doctor` skips the Android check
 
 ```console
 $ target/release/phonedriver version
-phonedriver 0.1.5
+phonedriver 0.1.6
 ```
 
 Until the package is published, register the built binary with your client by its full path: `claude mcp add phonedriver -- "$PWD/target/release/phonedriver" mcp`.
@@ -455,7 +455,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./gradlew assembleDebug
-      - uses: hridaya423/phonedriver@v0.1.5
+      - uses: hridaya423/phonedriver@v0.1.6
         with:
           app: app/build/outputs/apk/debug/app-debug.apk
           runs: e2e/*.steps

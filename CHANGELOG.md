@@ -2,6 +2,24 @@
 
 Every release of phonedriver, newest first. Binaries and checksums for each version are on [GitHub Releases](https://github.com/hridaya423/phonedriver/releases).
 
+## 0.1.6
+
+Released 20 November 2026.
+
+- **An iPhone from Windows**: with Apple Devices installed, phonedriver drives an iPhone or iPad on iOS 17 to 26 over the cable with no Mac. You sign and install the runner from this release (`PhonedriverRunner.ipa`) with Sideloadly, and `phonedriver ios setup --download-ddi` mounts the developer disk image itself. Contributed by Coreho (#23).
+- **Logins in CI**: a saved run replays a `--secret` step from an environment variable (`PHONEDRIVER_SECRET_1`, `_2`, ...), so a run that signs in replays unattended in the GitHub Action with `env: PHONEDRIVER_SECRET_1: ${{ secrets.APP_PASSWORD }}`. The secret is masked like any other.
+- **Variables in saved runs**: `{{name}}` in a step is filled by `replay --var name=value` (the Action's `vars` input), and `{{run}}` is a short id new for each replay, for fresh data such as `test+{{run}}@example.com`.
+- **`phonedriver network`** shows an Android device's networks, which one is the default, a VPN's owning app and the users it covers, DNS per network, and the always-on VPN and lockdown settings.
+- **`wait vpn:up`, `wait vpn:down` and `wait log:<text>`** (with `--app`) wait for a VPN to come up or go down, or for a line in the device's log. A timeout says what was last seen. The VPN connection request counts as a system dialog. Asked for in #17.
+- **`apps notify <app> '<json>'`** sends an app a push notification on the iOS Simulator, to test how the app handles one.
+- **Your own app on a physical phone**: `PHONEDRIVER_APPS_UNDER_TEST=com.example.app` in the server's environment lets `apps clear`, `uninstall`, `grant` and `revoke` work on an app Android Studio installed.
+- **`devices {use: "<id>"}`** sets the MCP server's default device for the rest of the session.
+- **Video on Samsung phones**: on a Galaxy A53 (One UI 8) no frame ever arrived, so screenshots timed out. The video now goes through an OpenGL relay on Samsung phones and wherever the encoder gives nothing. Found and fixed by DrogaBox (#22).
+- **A tap under a web page's fixed bottom bar** (a tab bar on instagram.com in Chrome) goes to the part of the tile that shows, and `scroll --until` keeps going until the tile clears the bar (#16).
+- **`shell` on an iOS 26 Simulator** works: its runtime has no `/bin/sh`, so each command now runs as one program (#15).
+- **Replay fails on a failed check**: a `shell` step that exits non-zero fails the replay, unless the step expects that status (#13).
+- **Fixes from an outside review** (#15, #16, #18, by giulioc84): `save` keeps the steps when the file cannot be written; an empty Compose field no longer reads as `"Empty"`; the install record on physical phones names only the app that was installed; an MCP session's state ends with its connection; `doctor` names the devices it will start the agent on; shell time limits, tap counts and holds are bounded; Simulator `apps clear` reports what it could not remove; the GitHub Action uses the Simulator it booted (#21); the MCP server's calls get the agent lease (#19); and the daemon's startup cleanup no longer follows a link to a folder (#20).
+
 ## 0.1.5
 
 Released 17 November 2026.
