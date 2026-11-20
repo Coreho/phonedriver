@@ -507,13 +507,23 @@ pub struct Runner {
     pub hello: Hello,
     pub port: u16,
     child: Option<Child>,
+    session: Option<XctestSession>,
     _claim: Option<PortClaim>,
+}
+
+/// The XCTest session idevice holds with testmanagerd for a runner the person installed; dropping it ends the runner.
+struct XctestSession(tokio::task::JoinHandle<std::result::Result<(), idevice::IdeviceError>>);
+
+impl Drop for XctestSession {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 impl Runner {
     /// True when the runner was already running (started by an earlier daemon) and this process only connected.
     pub fn reused(&self) -> bool {
-        self.child.is_none()
+        self.child.is_none() && self.session.is_none()
     }
 
     /// Connects to this simulator's runner if one with the same version and build already answers on a runner port;
@@ -541,6 +551,7 @@ impl Runner {
                             hello,
                             port,
                             child: None,
+                            session: None,
                             _claim: Some(claim),
                         });
                     }
@@ -591,6 +602,7 @@ impl Runner {
                     hello,
                     port,
                     child: Some(child),
+                    session: None,
                     _claim: Some(claim),
                 });
             }
@@ -681,6 +693,7 @@ impl Runner {
                 hello,
                 port: DEVICE_PORT,
                 child: None,
+                session: None,
                 _claim: None,
             });
         }
@@ -713,6 +726,7 @@ impl Runner {
                     hello,
                     port: DEVICE_PORT,
                     child: Some(child),
+                    session: None,
                     _claim: None,
                 });
             }
@@ -738,9 +752,214 @@ impl Runner {
     }
 }
 
+/// The unsigned runner for devices, built from this version's sources by the `runner-ipa` job of the release workflow on a macOS
+/// machine, for a person without a Mac to sign and install (architecture 7.3).
+pub const RUNNER_IPA: &str = concat!(
+    "https://github.com/hridaya423/phonedriver/releases/download/v",
+    env!("CARGO_PKG_VERSION"),
+    "/PhonedriverRunner.ipa"
+);
+
+/// The executable of the runner app, `<scheme>-Runner`. A signing tool may give the app another bundle id (a free
+/// Apple ID cannot register an id another team holds), so the installed runner is found by its executable.
+pub const RUNNER_EXECUTABLE: &str = "PhonedriverRunner-Runner";
+
+/// The bundle id of the runner among installation_proxy's apps, if one is installed.
+pub fn installed_runner<'a>(
+    apps: impl IntoIterator<Item = (&'a String, &'a plist::Value)>,
+) -> Option<String> {
+    apps.into_iter()
+        .find(|(_, info)| {
+            info.as_dictionary()
+                .and_then(|d| d.get("CFBundleExecutable"))
+                .and_then(plist::Value::as_string)
+                == Some(RUNNER_EXECUTABLE)
+        })
+        .map(|(id, _)| id.clone())
+}
+
+/// The runner's bundle id on the device, if the person installed it.
+pub async fn find_installed(
+    provider: &dyn idevice::provider::IdeviceProvider,
+) -> std::result::Result<Option<String>, idevice::IdeviceError> {
+    let socket = crate::transport::lockdown_service(
+        provider,
+        <idevice::services::installation_proxy::InstallationProxyClient as idevice::IdeviceService>::service_name(),
+    )
+    .await?;
+    let apps = idevice::services::installation_proxy::InstallationProxyClient::new(socket)
+        .get_apps(Some("User"), None)
+        .await?;
+    Ok(installed_runner(&apps))
+}
+
+/// Writes the runner's XCTest log lines, as xcodebuild's output does on a Mac. Typed text never reaches them
+/// (section 7.3, `type`).
+struct RunnerLog(std::fs::File);
+
+impl idevice::services::dvt::xctest::listener::XCUITestListener for RunnerLog {
+    async fn log_message(
+        &mut self,
+        message: &str,
+    ) -> std::result::Result<(), idevice::IdeviceError> {
+        use std::io::Write;
+        let _ = writeln!(self.0, "{message}");
+        Ok(())
+    }
+
+    async fn log_debug_message(
+        &mut self,
+        message: &str,
+    ) -> std::result::Result<(), idevice::IdeviceError> {
+        self.log_message(message).await
+    }
+}
+
+impl Runner {
+    /// Starts the runner the person installed (signed with their own Apple ID by a tool such as Sideloadly) through
+    /// testmanagerd with idevice's XCTest client, so no Xcode is needed; or reuses one that answers `hello` with
+    /// this udid and build. The developer disk image must be mounted.
+    pub async fn start_installed(
+        provider: std::sync::Arc<dyn idevice::provider::IdeviceProvider>,
+        udid: &str,
+        home: &Path,
+    ) -> Result<Runner> {
+        use idevice::services::dvt::xctest::{TestConfig, XCUITestService};
+        use idevice::services::installation_proxy::InstallationProxyClient;
+        let device = format!("ios:{udid}");
+        let hash = build_hash();
+        let gone = |e: idevice::IdeviceError| crate::transport::classify(&device, &e);
+        let connect = || async {
+            let socket = provider
+                .connect(DEVICE_PORT)
+                .await
+                .ok()
+                .and_then(idevice::Idevice::get_socket)?;
+            let client = Client::over(socket, &device);
+            let hello = timeout(HELLO_WAIT, client.hello()).await.ok()?.ok()?;
+            Some((client, hello))
+        };
+        if let Some((client, hello)) = connect().await
+            && hello.udid.as_deref() == Some(udid)
+            && hello.build.as_deref() == Some(hash.as_str())
+        {
+            return Ok(Runner {
+                client,
+                hello,
+                port: DEVICE_PORT,
+                child: None,
+                session: None,
+                _claim: None,
+            });
+        }
+        let bundle = find_installed(provider.as_ref())
+            .await
+            .map_err(gone)?
+            .ok_or(Error::NeedsUser {
+                action: UserAction::InstallRunner,
+            })?;
+        let socket = crate::transport::lockdown_service(
+            provider.as_ref(),
+            <InstallationProxyClient as idevice::IdeviceService>::service_name(),
+        )
+        .await
+        .map_err(gone)?;
+        let mut proxy = InstallationProxyClient::new(socket);
+        let mut config = TestConfig::from_installation_proxy(&mut proxy, &bundle, None)
+            .await
+            .map_err(gone)?;
+        let mut env = plist::Dictionary::new();
+        env.insert("PHONEDRIVER_PORT".into(), DEVICE_PORT.to_string().into());
+        env.insert("PHONEDRIVER_BUILD".into(), hash.clone().into());
+        env.insert("PHONEDRIVER_UDID".into(), udid.into());
+        config.runner_env = Some(env);
+        let dir = home.join("runner");
+        let log = dir.join(format!("{udid}.log"));
+        let io = |e: std::io::Error| Error::Transport {
+            detail: format!("cannot write {}: {e}", log.display()),
+        };
+        std::fs::create_dir_all(&dir).map_err(io)?;
+        let mut listener = RunnerLog(std::fs::File::create(&log).map_err(io)?);
+        let service = XCUITestService::new(provider.clone());
+        let mut session = XctestSession(tokio::spawn(async move {
+            service.run(config, &mut listener, None).await
+        }));
+        let deadline = Instant::now() + READY_WAIT;
+        loop {
+            if let Some((client, hello)) = connect().await
+                && hello.udid.as_deref() == Some(udid)
+            {
+                if hello.version != VERSION {
+                    return Err(Error::Transport {
+                        detail: format!(
+                            "the runner installed on {udid} speaks version {}, and this phonedriver speaks {VERSION}; install the PhonedriverRunner.ipa built from the same commit",
+                            hello.version
+                        ),
+                    });
+                }
+                return Ok(Runner {
+                    client,
+                    hello,
+                    port: DEVICE_PORT,
+                    child: None,
+                    session: Some(session),
+                    _claim: None,
+                });
+            }
+            if session.0.is_finished() {
+                let ended = (&mut session.0).await;
+                return Err(match ended {
+                    Ok(Err(e)) => match gone(e) {
+                        Error::Transport { detail } => Error::Transport {
+                            detail: format!(
+                                "the runner did not start: {detail}; see {}",
+                                log.display()
+                            ),
+                        },
+                        other => other,
+                    },
+                    _ => Error::Transport {
+                        detail: format!(
+                            "the runner's XCTest session ended before it answered; see {}",
+                            log.display()
+                        ),
+                    },
+                });
+            }
+            if Instant::now() >= deadline {
+                return Err(Error::Timeout {
+                    waited_ms: READY_WAIT.as_millis() as u32,
+                    condition: format!("the runner to answer on {udid}; see {}", log.display()),
+                });
+            }
+            tokio::time::sleep(POLL).await;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_installed_runner_is_found_by_its_executable_whatever_its_bundle_id() {
+        let app = |executable: &str| {
+            let mut info = plist::Dictionary::new();
+            info.insert("CFBundleExecutable".into(), executable.into());
+            plist::Value::Dictionary(info)
+        };
+        let mut apps = std::collections::HashMap::new();
+        apps.insert("com.example.notes".to_string(), app("Notes"));
+        assert_eq!(installed_runner(&apps), None);
+        apps.insert(
+            "dev.phonedriver.runner.xctrunner.ABCDE12345".to_string(),
+            app("PhonedriverRunner-Runner"),
+        );
+        assert_eq!(
+            installed_runner(&apps),
+            Some("dev.phonedriver.runner.xctrunner.ABCDE12345".to_string())
+        );
+    }
 
     #[test]
     fn the_project_builds_every_source_file_the_binary_carries() {

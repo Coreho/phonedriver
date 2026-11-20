@@ -139,6 +139,16 @@ async fn session(provider: &dyn IdeviceProvider) -> Result<LockdownClient, Idevi
     Ok(lockdown)
 }
 
+/// The device's ECID, which Apple's signing server needs to personalize the developer disk image.
+pub async fn unique_chip_id(provider: &dyn IdeviceProvider) -> Result<u64, IdeviceError> {
+    session(provider)
+        .await?
+        .get_value(Some("UniqueChipID"), None)
+        .await?
+        .as_unsigned_integer()
+        .ok_or_else(|| IdeviceError::UnexpectedResponse("lockdown gave no UniqueChipID".into()))
+}
+
 /// What lockdown says about a device before any session: these keys need no pairing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identity {

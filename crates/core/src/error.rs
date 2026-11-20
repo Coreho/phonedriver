@@ -233,6 +233,7 @@ pub enum UserAction {
     SetSigningTeam,
     ChooseSigningTeam { teams: Vec<String> },
     RegisterDevice,
+    InstallRunner,
     ApproveSystemPrompt { text: String },
 }
 
@@ -269,6 +270,10 @@ impl UserAction {
                 "This iPhone or iPad is not registered with the Apple developer team that signs the runner, so the runner cannot be installed on it."
                     .into()
             }
+            UserAction::InstallRunner => {
+                "The PhonedriverRunner app is not installed on the device. Without Xcode, phonedriver cannot build and sign it, so it starts the copy you install."
+                    .into()
+            }
             UserAction::ApproveSystemPrompt { text } => {
                 format!("The device shows a prompt only a person may answer: \"{text}\".")
             }
@@ -298,6 +303,9 @@ impl UserAction {
             }
             UserAction::RegisterDevice => {
                 "Run `phonedriver ios register` with the device connected and unlocked. It adds the device to your Apple developer account, then retry the command."
+            }
+            UserAction::InstallRunner => {
+                "Run `phonedriver ios setup`: it says where PhonedriverRunner.ipa is. Install that on the device with Sideloadly, signed with your Apple ID, turn on Developer Mode if the device asks, then retry."
             }
             UserAction::ApproveSystemPrompt { .. } => {
                 "Answer the prompt on the device, then retry."
@@ -790,6 +798,7 @@ mod tests {
                 teams: vec!["TEAMONE".into(), "TEAMTWO".into()],
             },
             UserAction::RegisterDevice,
+            UserAction::InstallRunner,
             UserAction::ApproveSystemPrompt {
                 text: "Use Face ID?".into(),
             },
