@@ -305,8 +305,10 @@ impl Services {
         let mut record = crate::remote::read(home, &device.udid);
         match tunnel_to(device, record.is_some(), crate::setup::XCODE)? {
             Some(addr) => match record.as_mut() {
+                // In a debug build this future is 169 KB. Held inline by `setup::status` and the rest, it overflowed
+                // the 1 MB main thread stack of `doctor` on Windows (CI, 2026-11-20).
                 Some(record) => Ok(Services::Tunnel(
-                    crate::remote::open(&device.udid, addr, record).await?,
+                    Box::pin(crate::remote::open(&device.udid, addr, record)).await?,
                 )),
                 None => Err(Error::NeedsUser {
                     action: UserAction::PairForWifi,
