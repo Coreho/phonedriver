@@ -752,10 +752,10 @@ impl Runner {
     }
 }
 
-/// The unsigned runner for devices, built from this fork's sources by `.github/workflows/runner-ipa.yml` on a macOS
+/// The unsigned runner for devices, built from this repository's sources by `.github/workflows/runner-ipa.yml` on a macOS
 /// machine, for a person without a Mac to sign and install (architecture 7.3).
 pub const RUNNER_IPA: &str =
-    "https://github.com/Coreho/phonedriver/releases/download/runner/PhonedriverRunner.ipa";
+    "https://github.com/hridaya423/phonedriver/releases/download/runner/PhonedriverRunner.ipa";
 
 /// The executable of the runner app, `<scheme>-Runner`. A signing tool may give the app another bundle id (a free
 /// Apple ID cannot register an id another team holds), so the installed runner is found by its executable.

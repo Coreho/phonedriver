@@ -215,7 +215,7 @@ The model can't type plain text into a password field or a one-time code field. 
 | Android phone or tablet | adb and USB debugging |
 | iOS Simulator | a Mac with Xcode |
 | iPhone or iPad | a Mac with Xcode and an Apple Development certificate ([setup](docs/reference.md#iphone-or-ipad)) |
-| iPhone or iPad from Windows (this fork) | Apple Devices, Sideloadly and a free Apple ID ([below](#iphone-from-windows)) |
+| iPhone or iPad from Windows | Apple Devices, Sideloadly and a free Apple ID ([below](#iphone-from-windows)) |
 
 On Android there is no app to install. phonedriver pushes its helper over adb when it connects. On iOS it builds a small XCTest runner on your Mac. For a real iPhone, plug it in and run `phonedriver ios setup`. It reads the signing team from your certificate, checks the phone, and builds, installs and starts the runner, so there is no team ID to look up. A free Apple ID works; its signature lasts 7 days, and the next command after that signs the runner again by itself.
 
@@ -225,10 +225,10 @@ On Android 13 and later, the agent can work on a hidden second screen, so your o
 
 ### iPhone from Windows
 
-This fork ([Coreho/phonedriver](https://github.com/Coreho/phonedriver)) drives an iPhone or iPad on iOS 17 or later from Windows, with no Mac. On a Mac, Xcode builds and signs phonedriver's XCTest runner. On Windows:
+phonedriver drives an iPhone or iPad on iOS 17 or later from Windows, with no Mac. On a Mac, Xcode builds and signs phonedriver's XCTest runner. On Windows:
 
 1. Install **Apple Devices** from the Microsoft Store (or iTunes). Its Apple Mobile Device Service is how Windows reaches the phone on the cable. Plug the phone in, unlock it and tap Trust.
-2. Download [`PhonedriverRunner.ipa`](https://github.com/Coreho/phonedriver/releases/download/runner/PhonedriverRunner.ipa). GitHub's macOS machines build it unsigned from this repository (`.github/workflows/runner-ipa.yml`).
+2. Download [`PhonedriverRunner.ipa`](https://github.com/hridaya423/phonedriver/releases/download/runner/PhonedriverRunner.ipa). GitHub's macOS machines build it unsigned from this repository (`.github/workflows/runner-ipa.yml`).
 3. Install it with [Sideloadly](https://sideloadly.io), signed with your Apple ID. A free Apple ID's signature lasts 7 days, and Sideloadly can sign it again for you. phonedriver never sees your Apple ID. Then trust it on the phone: Settings > General > VPN & Device Management, your Apple ID under Developer App, Trust.
 4. Turn on Settings > Privacy & Security > Developer Mode, restart the phone, and confirm Turn On after you unlock it. The disk image in step 6 does not mount while Developer Mode is off.
 5. Build phonedriver: `cargo build --release -p phonedriver --no-default-features`. The Android helper needs the Android build tools, so leave it out unless you have them.
@@ -250,7 +250,7 @@ Tested on an iPhone 16e (iPhone17,5) on iOS 26.5 from Windows 11: setup, `snapsh
 
 **Does it work with an iPhone?** Yes, from a Mac with Xcode, on the Simulator or on an iPhone or iPad. `phonedriver ios setup` signs the runner with your Apple developer team, and `phonedriver ios wifi on` lets you unplug the cable.
 
-**Can I control an iPhone from Windows?** In this fork, yes: see [iPhone from Windows](#iphone-from-windows). The runner is built on GitHub's macOS machines and you sign it with Sideloadly.
+**Can I control an iPhone from Windows?** Yes: see [iPhone from Windows](#iphone-from-windows). The runner is built on GitHub's macOS machines and you sign it with Sideloadly.
 
 **Why does an iPhone need a Mac, and why does the signing expire?** Apple lets a computer drive an iPhone only through its developer tools: a small test app (the runner) that Xcode builds and signs with your Apple ID. A free Apple ID's signature lasts 7 days and a paid developer account's a year; when it has run out, the next phonedriver command signs the runner again by itself, with the phone attached and unlocked. The Simulator needs no signing. phonedriver never enters a passcode and can't pass Face ID on a real phone, on purpose: unlock it yourself, and it stays awake while the agent works.
 
