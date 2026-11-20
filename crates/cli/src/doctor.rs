@@ -151,6 +151,7 @@ impl Scope {
     }
 
     /// Devices that are not ready (unauthorized, offline) cannot be read for a serial, so the daemon judges them by id.
+    #[cfg(feature = "android")]
     async fn also_ask_about(&mut self, ids: &[String]) {
         if ids.is_empty() || self.daemon.is_some() {
             return;
@@ -224,13 +225,13 @@ pub fn run(home: &Path, only: Option<&str>, all_devices: bool) -> bool {
         return false;
     };
     let checks = rt.block_on(async {
-        let mut scope = Scope::ask(only, all_devices).await;
+        let scope = &mut Scope::ask(only, all_devices).await;
         #[cfg(feature = "android")]
-        let mut checks = android(&Adb::from_env(), only, &mut scope).await;
+        let mut checks = android(&Adb::from_env(), only, scope).await;
         #[cfg(not(feature = "android"))]
         let mut checks = Vec::new();
-        checks.extend(ios(home, only, &scope).await);
-        checks.extend(physical(home, only, &scope).await);
+        checks.extend(ios(home, only, scope).await);
+        checks.extend(physical(home, only, scope).await);
         checks.extend(socket_permissions(&socket::socket_path()));
         if let Some(why) = &scope.daemon {
             checks.push(Check::bad(
