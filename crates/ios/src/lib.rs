@@ -1,6 +1,7 @@
 //! iOS devices: simulators through `simctl` and the PhonedriverRunner.
 
 pub mod coredevice;
+pub mod ddi;
 pub mod device;
 pub mod discovery;
 pub mod lan;

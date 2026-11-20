@@ -225,6 +225,30 @@ impl IosDevice {
         IosDevice::with_runner(host, id, &device.udid, model, runner, None, None)
     }
 
+    /// A device on the cable whose runner the person installed, started without Xcode (architecture 7.3). Over
+    /// Wi-Fi the device closes the lockdown services that find and start the runner, so this needs the cable.
+    pub async fn connect_installed(
+        device: &crate::transport::Attached,
+        model: &str,
+        home: &Path,
+    ) -> Result<IosDevice> {
+        let id = format!("ios:{}", device.udid);
+        let provider = device
+            .provider()
+            .await
+            .map_err(|e| crate::transport::classify(&id, &e))?;
+        let runner = Runner::start_installed(provider.clone(), &device.udid, home).await?;
+        IosDevice::with_runner(
+            Host::Cable(provider),
+            id,
+            &device.udid,
+            model,
+            runner,
+            None,
+            None,
+        )
+    }
+
     fn with_runner(
         host: Host,
         id: String,

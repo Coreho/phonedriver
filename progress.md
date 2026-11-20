@@ -3176,3 +3176,13 @@ The README on main described `then`, but 0.1.1 did not have it. Version 0.1.2 ev
 - `gemini-extension.json` at the repository root, so the Gemini CLI gallery can index phonedriver and `gemini extensions install https://github.com/hridaya423/phonedriver` works. It starts the same pinned server as the plugin (`npx -y phonedriver@0.1.5 mcp`), so a release has one more place to bump.
 - The gallery finds repositories by the `gemini-cli-extension` topic and crawls daily. The repository was at GitHub's limit of 20 topics, so `agentic-ai` made way for it.
 - Checked: `python3 -m json.tool gemini-extension.json` parses. Not checked: an install in Gemini CLI, which is not on these machines.
+
+## 2026-11-20: Windows drives an iPhone on iOS 17 to 26 through a runner the person installs (D96)
+
+- New: `crates/ios/src/ddi.rs` (the pinned image, its download with `curl` and its hash check), `setup::mount_files` and `setup::mount_cached` (idevice `mount_personalized`, feature `tss` added), `transport::unique_chip_id`, `runner::find_installed` and `Runner::start_installed` (idevice `XCUITestService`), `IosDevice::connect_installed`, `UserAction::InstallRunner`. The daemon takes this path when `setup::XCODE` is false. `phonedriver ios setup` gained `--download-ddi` and `--ddi <folder>`; `doctor` reports usbmuxd and the installed runner off a Mac. `.github/workflows/runner-ipa.yml` builds `PhonedriverRunner.ipa` unsigned on macOS.
+- Fix: `commands::command` called clap's `mut_subcommand` for `pair` and `untether` in a build without the `android` feature, which panicked at start (`Command \`pair\` is undefined`). It now skips commands that do not exist.
+- `cargo build --release -p phonedriver --no-default-features -j 4` (Windows 11): `Finished`. The default build stops in `android-agent/build.sh`, which needs the Android build tools this PC does not have.
+- `cargo clippy --release -p phonedriver-ios -p phonedriver-core --all-targets -- -D warnings` and `cargo clippy --release -p phonedriver --no-default-features -- -D warnings`: clean.
+- `cargo test --release -p phonedriver-ios -p phonedriver-core --lib`: `test result: ok. 226 passed` and `test result: ok. 83 passed`.
+- `phonedriver ios setup` with nothing attached: `need  a device: plug in an iPhone or iPad, unlock it and tap Trust, then run this again`. `phonedriver doctor`: `ok    ios usbmuxd  answers; 0 iPhone or iPad attached`. `phonedriver devices`: `no devices`.
+- Open: the run on the user's iPhone (iOS 26.5), which proves the mount, the launch and the runner.
