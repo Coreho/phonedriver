@@ -138,6 +138,7 @@ JSON-RPC `error` with `code` from the table, `message`, and `data: {code_name, h
 | -32008 | ambiguous |
 | -32009 | off_screen (`data.behind_keyboard` is true when the keyboard covers the element; `data.covered_by` names a floating toolbar that covers it) |
 | -32010 | version_mismatch |
+| -32039 | scope_mismatch (`hello` asks for an app scope the daemon was not started with; run `phonedriver daemon stop`; decision D102) |
 | -32011 | unsupported |
 | -32012 | not_settled |
 | -32013 | timeout |
