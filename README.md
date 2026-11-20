@@ -229,13 +229,13 @@ This fork ([Coreho/phonedriver](https://github.com/Coreho/phonedriver)) drives a
 
 1. Install **Apple Devices** from the Microsoft Store (or iTunes). Its Apple Mobile Device Service is how Windows reaches the phone on the cable. Plug the phone in, unlock it and tap Trust.
 2. Download [`PhonedriverRunner.ipa`](https://github.com/Coreho/phonedriver/releases/download/runner/PhonedriverRunner.ipa). GitHub's macOS machines build it unsigned from this repository (`.github/workflows/runner-ipa.yml`).
-3. Install it with [Sideloadly](https://sideloadly.io), signed with your Apple ID. A free Apple ID's signature lasts 7 days, and Sideloadly can sign it again for you. phonedriver never sees your Apple ID.
-4. Turn on Settings > Privacy & Security > Developer Mode when the phone asks, and restart it.
+3. Install it with [Sideloadly](https://sideloadly.io), signed with your Apple ID. A free Apple ID's signature lasts 7 days, and Sideloadly can sign it again for you. phonedriver never sees your Apple ID. Then trust it on the phone: Settings > General > VPN & Device Management, your Apple ID under Developer App, Trust.
+4. Turn on Settings > Privacy & Security > Developer Mode, restart the phone, and confirm Turn On after you unlock it. The disk image in step 6 does not mount while Developer Mode is off.
 5. Build phonedriver: `cargo build --release -p phonedriver --no-default-features`. The Android helper needs the Android build tools, so leave it out unless you have them.
 6. Run `phonedriver ios setup --download-ddi`. It downloads Xcode 27.2's developer disk image once from [doronz88/DeveloperDiskImage](https://github.com/doronz88/DeveloperDiskImage) at a pinned commit, checks each file's SHA-256, and mounts it. Mounting asks Apple's signing server for your phone's ticket, as Xcode does. With files from a Mac, use `--ddi <folder>` instead. Then it finds the installed runner and starts it.
 7. `claude mcp add phonedriver -- <path>\phonedriver.exe mcp`, then ask Claude to use the phone.
 
-After the phone restarts, the next command mounts the image again from the downloaded files. `phonedriver doctor` shows what is missing. Over Wi-Fi or without the cable this path does not work yet; an iPhone on iOS 27 can also use the no-install CoreDevice tier with `PHONEDRIVER_IOS_TIER=coredevice`.
+Tested on an iPhone 16e (iPhone17,5) on iOS 26.5 from Windows 11: setup, `snapshot`, `screenshot`, `tap` and `press back` all work. After the phone restarts, the next command mounts the image again from the downloaded files. `phonedriver doctor` shows what is missing. Over Wi-Fi or without the cable this path does not work yet; an iPhone on iOS 27 can also use the no-install CoreDevice tier with `PHONEDRIVER_IOS_TIER=coredevice`.
 
 ## Limits
 
