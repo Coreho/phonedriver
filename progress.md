@@ -3282,3 +3282,31 @@ ok log line: I/DisplayManager( 5578): Choreographer implicitly registered for th
 - The consent dialog: `am start` of the VPN app with `appops get ... ACTIVATE_VPN` at `default` gave `alert com.android.vpndialogs: "Connection request"` in `snapshot`, `tap Cancel` closed it; after `shell "appops set dev.pd016.vpnprobe ACTIVATE_VPN allow"` the same start connected the VPN with no dialog. Documented in `docs/reference.md` and `site/content/docs/android-emulator.md`.
 - Things seen and fixed on the way: with the pattern `pd-016-check` the wait returned on `adbd`'s own log of the command line (`adbd service requested 'shell,v2,raw:log -t pd016 pd-016-check'`), which is a true match; the reference says so. `dumpsys connectivity` answered in 6 to 10 s for about a minute after a VPN app was force-stopped, and the first version read an empty answer as "no network"; the read now allows 20 s and an empty or timed-out answer is an error. `Settings` runs as uid 1000, so `--app Settings` includes `system_server`'s lines.
 - Not done: the iOS Simulator log wait was not run through phonedriver. On my own Simulator (created, booted and deleted) the same `simctl spawn <runtime root>/usr/bin/log stream --style compact --level debug --predicate 'processImagePath CONTAINS "/MobileSafari.app/"'` that `shell_args` builds printed lines at once through a pipe, with a stderr warning (`getpwuid_r ...`, discarded) and two header lines (skipped until the first line that starts with a date). No physical Android phone or iPhone was touched. The earlier existing `crates/cli/tests/network.rs` (the no-outbound sandbox) was overwritten by mistake once and restored from git before anything was committed; the new daemon tests are in `netview.rs`.
+
+## 2026-11-20: a device list the daemon enforces (#26, D101)
+
+- `PHONEDRIVER_ALLOW_DEVICES`, `PHONEDRIVER_DENY_DEVICES` and the file `<home>/devices` (`allow <id>` / `deny <id>`, `#` comments). One wrapper around the daemon's device source (`Gated`, `crates/cli/src/daemon/policy.rs`) filters `list` and `list_for` and refuses `connect`, `connect_on` and `boot`, so every path resolves through it. A new `DeviceSource::hardware_serial` (Android: one read-only `getprop ro.serialno`, kept per connection) lets a serial entry name the same phone over USB and Wi-Fi; it is read only when a rule could name a serial and the id did not settle it. A new daemon method `hidden` says what is hidden; `phonedriver devices` ends with `N device(s) hidden by the device list`, the MCP reply does not; `doctor` does not show or probe a hidden device. Rules and limits are in D101 and `docs/reference.md` ("Devices an agent must not touch").
+- Tests first. `crates/cli/tests/device_list.rs` (14 tests, a fake source that records every `connect` and every serial read). With `permits` stubbed to `true`: `10 failed; 4 passed` (`left: ["android:emulator-5554", "android:emulator-5558"] right: ["android:emulator-5554"]`, `expected an error: Object {"exit": 0, ...}` for `shell --force` on a hidden device, and so on). With the check in: `13 passed` in that file at this commit, and the 136 library tests pass, among them the file parser and the entry matching. They cover: an allow list hides the others; a deny hides one; deny wins over allow; the environment's allow list and the file's both bind; a hardware-serial entry hides one phone under two adb ids (`android:ZZ1` and `android:192.168.1.20:5555`) and admits both; a device the id settles is never asked for its serial; `shell --force` on a hidden device is `-32001` and the fake saw no call; no `connect` ever reaches a hidden device; a hidden emulator is not booted; the file is read again when it changes; a typo in the file fails every call with the line number; devices that are not ready are judged by id for `doctor`.
+- Live, two emulators up (`emulator-5554` API 37 phone, `emulator-5558` API 37 tablet), `phonedriver` built on the mini, own `PHONEDRIVER_HOME`, both emulators' `phonedriver-agent-*.jar` and `phonedriver-owner` removed from `/data/local/tmp` before the run (`rm`, then `ls | grep -c phonedriver` gave 0 on the tablet):
+
+```
+$ PHONEDRIVER_DENY_DEVICES=android:emulator-5558 phonedriver devices
+ID                     MODEL                OS                   TIER   LEASE
+android:emulator-5554  sdk_gphone64_x86_64  Android 17 (API 37)  agent  -
+1 device hidden by the device list
+$ phonedriver snapshot --device android:emulator-5558
+error: no device "android:emulator-5558"; connected: android:emulator-5554 (sdk_gphone64_x86_64)
+hint: Pass `--device <id>` (or set PHONEDRIVER_DEVICE) to one of: android:emulator-5554.
+exit=4
+$ phonedriver --device android:emulator-5558 shell --force "ls /sdcard"
+error: no device "android:emulator-5558"; connected: android:emulator-5554 (sdk_gphone64_x86_64)
+exit=4
+$ adb -s emulator-5558 shell ls /data/local/tmp
+dalvik-cache
+mobilecli.dex
+mobilecli.so
+```
+
+  No `phonedriver-agent-*.jar` and no `phonedriver-owner` on the tablet after the daemon had listed it, been asked for it by id and been asked to `shell --force` on it. With the list in the file instead (`deny EMULATOR37X2X13X0`, the value `getprop ro.serialno` gives) both emulators were hidden (`no devices` and `2 devices hidden by the device list`): the two emulators report the same `ro.serialno`, so a serial entry cannot tell emulators apart and D101 says to name them by id. A typo (`deney x`) in the file made `devices` fail with `line 1 is `deney x`, not `allow <id>` or `deny <id>`` and exit 1; removing the file brought both back on the same daemon.
+- Found while testing live: my first version reused the one-per-phone helper, which takes any adb name without a colon as its own serial, so an emulator's `ro.serialno` was never read and the serial entry did nothing. The list now always reads the property (separate cache in `AdbSource`).
+- Not covered, and said in D101: `pair`, `untether`, `ios setup`, `ios wifi` and `ios register` (run by a person on a device they name, outside the daemon); a running daemon keeps the environment it started with.

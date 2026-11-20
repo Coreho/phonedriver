@@ -158,6 +158,8 @@ Tested on an iPhone 13 Pro Max (iOS 27.0.1) on one network. An iPhone 14 Plus (i
 | `PHONEDRIVER_IOS_TIER` | `runner` | `coredevice` selects the CoreDevice tier on iOS 27 devices. Experimental. |
 | `PHONEDRIVER_GUARD` | on | `off` stops phonedriver asking the human before a tap that spends money or cannot be undone (`Place order`, `Pay`, `Delete account`). Set it for `phonedriver mcp` or the CLI only when you grant the agent full autonomy. |
 | `PHONEDRIVER_ASK` | none | A comma list of more kinds of tap to ask the human about, besides payments and account deletion: `send` (Send, Reply, Post, Share), `delete` (Delete, Remove, Erase, Clear all) and `install` (Install, Uninstall). For example `PHONEDRIVER_ASK=send,delete`. Read by `phonedriver mcp` and the CLI; a name that is not one of these stops the command with exit code 2. `PHONEDRIVER_GUARD=off` and `autonomous: true` skip these questions too. |
+| `PHONEDRIVER_ALLOW_DEVICES` | none | A comma list of devices the daemon may use, for example `android:emulator-5554,android:R5CT123`. Every other device behaves as if it were not connected. See [Devices an agent must not touch](#devices-an-agent-must-not-touch). The daemon reads it when it starts: run `phonedriver daemon stop` first if one is running. |
+| `PHONEDRIVER_DENY_DEVICES` | none | A comma list of devices the daemon never lists, connects to or pushes the agent to, even with `--force`. Same entries and same rules as the allow list; a device named here is hidden even when the allow list names it too. |
 | `PHONEDRIVER_APPS_UNDER_TEST` | none | A comma list of package names, such as `com.example.app,com.example.other`: apps of yours that Gradle or Android Studio installed, not phonedriver. On a physical Android phone `apps clear`, `uninstall`, `grant`, `revoke` and `launch --grant` touch only apps phonedriver installed; the packages listed here count as installed by you. The daemon reads it when it starts, so set it in the environment of the command that starts it (for an MCP client, the server's `env`; see [Claude Code](/docs/claude-code/#an-app-you-are-developing)) and run `phonedriver daemon stop` first if a daemon is running. It is the person's setting and there is no tool argument for it, so an agent cannot add an app to the list. |
 | `PHONEDRIVER_SECRET` | none | The text for `type --secret`, instead of stdin. The daemon shows it as `•••` wherever it later appears on a screen it reads or in a command's output, until the daemon stops; a screenshot still shows what the phone shows. |
 | `PHONEDRIVER_TRACE_FULL` | off | `1` keeps observation text and the text of text targets in the traced requests (the daemon reads it at start). Replies are traced as returned either way: a summary or an error can name an element, as in `tapped @e6 "Busy"` or `no element matches "Pay"`. |
@@ -167,6 +169,28 @@ Tested on an iPhone 13 Pro Max (iOS 27.0.1) on one network. An iPhone 14 Plus (i
 | `PHONEDRIVER_TEST_DEVICE`, `PHONEDRIVER_TEST_IOS_UDID`, `PHONEDRIVER_BENCH`, `PHONEDRIVER_BIN` | none | Tests and benchmarks only. |
 
 The runner's own `PHONEDRIVER_PORT`, `PHONEDRIVER_BUILD` and `PHONEDRIVER_UDID` are set by phonedriver for the iOS runner and are not for you.
+
+### Devices an agent must not touch
+
+On a shared adb server (a rack of test phones, a staff phone left charging) the fence is a device list the daemon enforces. A device the list does not allow, or denies, behaves as if it were not connected: `devices` does not list it, `doctor` does not probe it, every call that names it (`--device`, `PHONEDRIVER_DEVICE`, `devices {use}`, a replay or the GitHub Action) gets the same "no device" error as for a typo, `--force` does not change that, and the agent is never pushed to it.
+
+Entries are the ids `phonedriver devices` shows (`android:emulator-5554`, `android:192.168.1.20:5555`, `ios:<udid>`, `sim:<udid>`), with or without the prefix, or an Android phone's hardware serial (`ro.serialno`, the number in `adb devices` over USB), so one rule hits the same phone over USB and over Wi-Fi. (Emulators from one system image share a serial: name an emulator by its id.) The serial is read from the phone only when an entry could name it and the id did not already settle the question: one read-only `getprop`, and nothing is pushed.
+
+Three places set the list, and they combine as follows: a device is hidden when any deny entry from any place names it, and, for each place that has an allow list, when that list does not name it. So a machine-wide file's allow list cannot be widened by an MCP client's `env`.
+
+- `PHONEDRIVER_ALLOW_DEVICES` and `PHONEDRIVER_DENY_DEVICES` in the environment that starts the daemon (for an MCP client, the server's `env`).
+- The file `devices` in the phonedriver home (`~/.phonedriver/devices`, or under `PHONEDRIVER_HOME`), for a setting that holds for every agent on the machine. It is read again whenever it changes, so adding a `deny` line takes effect on the next call.
+
+```
+# the lab rack
+allow android:emulator-5554
+allow android:R5CT123
+deny  android:0123456789ABCDEF   # Maria's phone
+```
+
+A line that is not `allow <id>` or `deny <id>` makes every device unavailable and the error names the file and the line: a list that cannot be read must not leave a phone open. `phonedriver devices` on a terminal ends with `1 device hidden by the device list`; the MCP `devices` reply says nothing about hidden devices.
+
+The list covers what goes through the daemon. `pair`, `untether` and `ios setup`, `ios wifi` and `ios register` are commands a person runs on a device by name, and they talk to the device without it. The list is the person's setting, as with `PHONEDRIVER_APPS_UNDER_TEST` (D100): an agent with a shell on the computer can start its own daemon without it.
 
 ## Debugging
 
