@@ -1868,6 +1868,7 @@ impl Actor {
                 line: None,
                 under_keyboard: false,
                 covered: None,
+                beside_bar: false,
             });
         }
         let now = self.fresh(s).await?;
@@ -2174,6 +2175,7 @@ impl Actor {
                     element: found,
                     under_keyboard,
                     covered,
+                    beside_bar,
                 } = {
                     let t = Instant::now();
                     let r = self.resolve_target(s, &target).await;
@@ -2188,7 +2190,7 @@ impl Actor {
                     return Err(Error::Disabled { r#ref: e.r#ref });
                 }
                 let mut hid = false;
-                let (at, element, found, covered) = match (under_keyboard, &found) {
+                let (at, element, found, covered, beside_bar) = match (under_keyboard, &found) {
                     (true, Some(e)) => {
                         let behind = Error::OffScreen {
                             r#ref: e.r#ref,
@@ -2215,11 +2217,11 @@ impl Actor {
                             return Err(behind);
                         }
                         hid = true;
-                        (r.at, r.line, r.element, r.covered)
+                        (r.at, r.line, r.element, r.covered, r.beside_bar)
                     }
-                    _ => (at, element, found, covered),
+                    _ => (at, element, found, covered, beside_bar),
                 };
-                if let (Some((bar, scroll_hint)), Some(e)) = (covered, &found) {
+                if let (Some((bar, scroll_hint)), Some(e), false) = (covered, &found, beside_bar) {
                     return Err(Error::OffScreen {
                         r#ref: e.r#ref,
                         scroll_hint,

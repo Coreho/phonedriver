@@ -4539,6 +4539,72 @@ async fn scroll_until_keeps_going_while_the_target_is_under_the_toolbar() {
     assert_eq!(fake.calls().len(), 1);
 }
 
+/// Chrome on the API 37 emulator showing a page with a fixed bottom bar (`position: fixed`, like Instagram's tab bar),
+/// scrolled by `scroll` CSS pixels: 0 leaves the sixth row of tiles under the bar, 17 shows a 15 pt strip of it above
+/// the bar, 68 shows its upper half.
+fn chrome_fixed_bar(scroll: u32) -> RawTree {
+    let json = match scroll {
+        0 => include_str!("../../core/tests/fixtures/android/chrome_fixed_bar.json"),
+        17 => include_str!("../../core/tests/fixtures/android/chrome_fixed_bar_strip.json"),
+        _ => include_str!("../../core/tests/fixtures/android/chrome_fixed_bar_half.json"),
+    };
+    RawTree::from_android_json(json, Scale { density: 2.625 }).unwrap()
+}
+
+fn tapped_y(call: &Call) -> f32 {
+    match call {
+        Call::Gesture(g) => g.fingers[0][0].at.y,
+        other => panic!("not a tap: {other:?}"),
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_tile_under_a_pages_fixed_bar_is_tapped_where_it_shows_or_scrolled_clear() {
+    let (source, fake) = FakeSource::with(vec![chrome_fixed_bar(17)]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    ok(&d, "default", "act", tap_text("Post 16")).await;
+    let y = tapped_y(&fake.calls()[0]);
+    assert!(
+        (2171.0 / 2.625..2210.0 / 2.625).contains(&y),
+        "the tap is in the strip above the bar: {y}"
+    );
+
+    let (source, fake) = FakeSource::with(vec![chrome_fixed_bar(0)]);
+    let (d, _home) = daemon(source);
+    ok(&d, "default", "snapshot", json!({})).await;
+    let e = err(&d, "default", "act", tap_text("Post 16")).await;
+    assert_eq!(e.code, -32009, "{e:?}");
+    assert!(e.message.contains("under the page's bar"), "{}", e.message);
+    assert!(
+        e.data["hint"].as_str().unwrap().contains("scroll down"),
+        "{}",
+        e.data["hint"]
+    );
+    assert!(fake.calls().is_empty(), "{:?}", fake.calls());
+    ok(&d, "default", "act", tap_text("Profile")).await;
+    assert_eq!(fake.calls().len(), 1, "the bar's own links are tappable");
+}
+
+#[tokio::test(start_paused = true)]
+async fn scroll_until_keeps_going_while_a_pages_fixed_bar_covers_the_target() {
+    let (source, fake) = FakeSource::with(vec![chrome_fixed_bar(17), chrome_fixed_bar(68)]);
+    let (d, _home) = daemon(source);
+    let r = ok(
+        &d,
+        "default",
+        "act",
+        scroll(json!({"until": {"text": "Post 16"}})),
+    )
+    .await;
+    assert!(
+        r["summary"].as_str().unwrap().contains("down 1 time to"),
+        "{}",
+        r["summary"]
+    );
+    assert_eq!(fake.calls().len(), 1);
+}
+
 fn tap_text(text: &str) -> Value {
     json!({"action": {"kind": "tap", "target": {"text": text}}})
 }

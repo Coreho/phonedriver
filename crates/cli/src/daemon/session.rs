@@ -48,8 +48,10 @@ pub struct Resolved {
     pub line: Option<String>,
     /// The keyboard covers the element's bounds.
     pub under_keyboard: bool,
-    /// A floating toolbar covers the element's center: its label and the way to scroll the element clear.
+    /// A bar covers the element's center: its name and the way to scroll the element clear.
     pub covered: Option<(String, Direction)>,
+    /// `at` is in the part of a covered element that the bar leaves showing, which is tall enough to tap.
+    pub beside_bar: bool,
 }
 
 impl Session {
@@ -216,6 +218,7 @@ impl Session {
                 line: None,
                 under_keyboard: false,
                 covered: None,
+                beside_bar: false,
             }),
             Target::Ref { r#ref } => match now.index_of(*r#ref) {
                 Some(i) => Ok(element_at(now, i)),
@@ -332,16 +335,32 @@ fn element_at(now: &Rendered, i: usize) -> Resolved {
     {
         at.y = (e.bounds.y + k.y) / 2.0;
     }
-    Resolved {
+    let mut resolved = Resolved {
         at,
         element: Some(e.clone()),
         line: Some(now.line(e)),
         under_keyboard: now.under_keyboard(e)
             || (e.role != Role::Keyboard && now.header.keyboard.is_some_and(|k| at.y >= k.y)),
-        covered: now
-            .covered_by(i)
-            .map(|(bar, toward)| (bar.label.clone().unwrap_or_default(), toward)),
+        covered: None,
+        beside_bar: false,
+    };
+    let Some((bar, toward)) = now.covered_by(i) else {
+        return resolved;
+    };
+    let (b, e) = (bar.bounds, e.bounds);
+    let (top, bottom) = match toward {
+        Direction::Down => (e.y, e.y.max(b.y).min(e.y + e.h)),
+        _ => (e.y.max(b.y + b.h).min(e.y + e.h), e.y + e.h),
+    };
+    if bottom - top >= MIN_BAND {
+        resolved.at.y = (top + bottom) / 2.0;
+        resolved.beside_bar = true;
     }
+    resolved.covered = Some((
+        bar.label.clone().unwrap_or_else(|| "page's bar".into()),
+        toward,
+    ));
+    resolved
 }
 
 /// How far in from the screen's left edge a web element that starts there is tapped.
